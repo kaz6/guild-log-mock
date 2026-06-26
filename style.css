@@ -493,6 +493,67 @@ textarea {
   list-style-position: inside;
 }
 
+.assign-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assign-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.assign-row:last-child {
+  border-bottom: 0;
+}
+
+.assign-name {
+  min-width: 72px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  padding-top: 5px;
+  flex-shrink: 0;
+}
+
+.assign-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.item-assign-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.item-assign-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.item-assign-btn.selected {
+  border-color: var(--accent-2);
+  background: rgba(201, 150, 74, 0.18);
+  color: var(--text);
+}
+
+.item-assign-btn.taken,
+.item-assign-btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
 .obs-notes-grid {
   display: grid;
   gap: 10px;

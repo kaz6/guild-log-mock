@@ -141,7 +141,7 @@ let state = loadState();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
-let selectedItemIds = state.selectedItemIds ?? [];
+let selectedAdventurerItems = state.selectedAdventurerItems ?? {};
 let editingAdventurerId = null;
 
 function createInitialState() {
@@ -163,7 +163,7 @@ function createInitialState() {
     },
     selectedQuestId: null,
     selectedAdventurerIds: [],
-    selectedItemIds: [],
+    selectedAdventurerItems: {},
     lastObservationUpdate: null
   };
 }
@@ -193,7 +193,7 @@ function mergeMasterList(masterList, savedList = []) {
 function saveState() {
   state.selectedQuestId = selectedQuestId;
   state.selectedAdventurerIds = selectedAdventurerIds;
-  state.selectedItemIds = selectedItemIds;
+  state.selectedAdventurerItems = selectedAdventurerItems;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -393,13 +393,13 @@ function renderQuests() {
           <div class="card-title">
             <div>
               <p class="eyebrow">Supplies</p>
-              <h3>支給品選択</h3>
+              <h3>支給品割り当て</h3>
             </div>
-            <span class="status-pill">${selectedItemIds.length}/2個</span>
+            <span class="status-pill">${Object.values(selectedAdventurerItems).filter(Boolean).length}個</span>
           </div>
-          <div class="content">
-            ${state.items.map(selectableItemHtml).join("")}
-          </div>
+          ${selectedAdventurerIds.length === 0
+            ? `<div class="empty">冒険者を選択してください。</div>`
+            : `<div class="assign-list">${selectedAdventurerIds.map(adventurerItemAssignHtml).join("")}</div>`}
         </div>
       </section>
     </div>
@@ -459,9 +459,8 @@ function selectableAdventurerHtml(adventurer) {
 }
 
 function selectableItemHtml(item) {
-  const selected = selectedItemIds.includes(item.id);
   return `
-    <article class="item-card ${selected ? "selected" : ""}" onclick="toggleItem('${item.id}')">
+    <article class="item-card">
       <h3>${escapeHtml(item.name)}</h3>
       <p class="muted">${escapeHtml(item.note)}</p>
       <div class="tags">${item.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
@@ -469,15 +468,39 @@ function selectableItemHtml(item) {
   `;
 }
 
+function adventurerItemAssignHtml(advId) {
+  const adv = getAdventurer(advId);
+  if (!adv) return "";
+  const assignedId = selectedAdventurerItems[advId] ?? null;
+  return `
+    <div class="assign-row">
+      <span class="assign-name">${escapeHtml(getDisplayName(adv))}</span>
+      <div class="assign-items">
+        ${state.items.map((item) => {
+          const isAssigned = assignedId === item.id;
+          const takenByOther = !isAssigned && Object.values(selectedAdventurerItems).includes(item.id);
+          return `<button class="item-assign-btn${isAssigned ? " selected" : ""}${takenByOther ? " taken" : ""}"
+                    onclick="assignItem('${advId}', '${item.id}')"
+                    ${takenByOther ? "disabled" : ""}
+                    title="${escapeHtml(item.note)}">${escapeHtml(item.name)}</button>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function dispatchSummaryHtml(quest) {
   const party = selectedAdventurerIds.map(getAdventurer).filter(Boolean);
-  const items = selectedItemIds.map(getItem).filter(Boolean);
+  const itemsText = party.map((adv) => {
+    const item = getItem(selectedAdventurerItems[adv.id]);
+    return item ? `${escapeHtml(getDisplayName(adv))}：${escapeHtml(item.name)}` : null;
+  }).filter(Boolean).join(" / ") || "なし";
   return `
     <div class="kv">
       <span>依頼</span><strong>${escapeHtml(quest.title)}</strong>
       <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
       <span>編成</span><strong>${party.length ? party.map(getDisplayName).map(escapeHtml).join(" / ") : "未選択"}</strong>
-      <span>支給品</span><strong>${items.length ? items.map((item) => escapeHtml(item.name)).join(" / ") : "なし"}</strong>
+      <span>支給品</span><strong>${itemsText}</strong>
       <span>所要時間</span><strong>Mockでは約10秒</strong>
     </div>
   `;
@@ -652,7 +675,14 @@ function renderReportDetail(reportId) {
   }
   const quest = getQuest(report.questId);
   const party = report.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
-  const items = report.itemIds.map(getItem).filter(Boolean).map((item) => item.name).join(" / ") || "なし";
+  const raidItems = report.adventurerItemIds;
+  const items = raidItems && Object.keys(raidItems).length > 0
+    ? report.adventurerIds.map((advId) => {
+        const adv = getAdventurer(advId);
+        const item = getItem(raidItems[advId]);
+        return adv && item ? `${getDisplayName(adv)}：${item.name}` : null;
+      }).filter(Boolean).join(" / ") || "なし"
+    : report.itemIds?.map(getItem).filter(Boolean).map((i) => i.name).join(" / ") || "なし";
 
   app.innerHTML = `
     <section class="card">
@@ -703,6 +733,7 @@ function toggleAdventurer(id) {
   if (!adv || adv.status !== "待機中") return;
   if (selectedAdventurerIds.includes(id)) {
     selectedAdventurerIds = selectedAdventurerIds.filter((advId) => advId !== id);
+    delete selectedAdventurerItems[id];
   } else {
     if (selectedAdventurerIds.length >= 3) return;
     selectedAdventurerIds = [...selectedAdventurerIds, id];
@@ -711,12 +742,13 @@ function toggleAdventurer(id) {
   render();
 }
 
-function toggleItem(id) {
-  if (selectedItemIds.includes(id)) {
-    selectedItemIds = selectedItemIds.filter((itemId) => itemId !== id);
+function assignItem(advId, itemId) {
+  if (selectedAdventurerItems[advId] === itemId) {
+    delete selectedAdventurerItems[advId];
   } else {
-    if (selectedItemIds.length >= 2) return;
-    selectedItemIds = [...selectedItemIds, id];
+    const prev = Object.entries(selectedAdventurerItems).find(([, iId]) => iId === itemId);
+    if (prev) delete selectedAdventurerItems[prev[0]];
+    selectedAdventurerItems[advId] = itemId;
   }
   saveState();
   render();
@@ -725,7 +757,7 @@ function toggleItem(id) {
 function clearSelections() {
   selectedQuestId = null;
   selectedAdventurerIds = [];
-  selectedItemIds = [];
+  selectedAdventurerItems = {};
   saveState();
   render();
 }
@@ -741,14 +773,15 @@ function startExpedition() {
     id: `exp_${Date.now()}`,
     questId: selectedQuestId,
     adventurerIds: [...selectedAdventurerIds],
-    itemIds: [...selectedItemIds],
+    adventurerItemIds: { ...selectedAdventurerItems },
+    itemIds: Object.values(selectedAdventurerItems).filter(Boolean),
     startTime: Date.now(),
     durationMs: DEMO_DURATION_MS,
     seed: Math.floor(Math.random() * 1000000)
   };
   selectedQuestId = null;
   selectedAdventurerIds = [];
-  selectedItemIds = [];
+  selectedAdventurerItems = {};
   saveState();
   setRoute("home");
 }
@@ -875,10 +908,37 @@ function formatNames(party) {
 }
 
 function generateWeatherLog(quest, party, weather, rng) {
+  const solo = party.length === 1;
   const leader = getDisplayName(pickOne(party, rng));
   const careful = findByTrait(party, "personality", "慎重");
   const caregiver = findByTrait(party, "personality", "世話焼き");
   const brave = findByTrait(party, "personality", "豪胆");
+
+  if (solo) {
+    const table = {
+      晴れ: [
+        `朝の光が差す中、${leader}は${quest.area}へひとりで向かった。出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`,
+        `空はよく晴れていた。視界が広く、${leader}は遠くの道標まで確認しながら一人で進んだ。`
+      ],
+      小雨: [
+        `小雨の中、${leader}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、何度も手元を確認した。`,
+        `出発からしばらくして細い雨が降り始めた。${leader}は濡れやすいものを荷物の内側へ移し直した。`
+      ],
+      霧: [
+        `街道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
+        `霧で視界が悪い。${leader}は立ち止まって耳を澄ませ、足元を確かめてから歩き続けた。`
+      ],
+      強風: [
+        `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、風を避けるように低い道を選んだ。`,
+        `古い街道には乾いた葉が舞っていた。${leader}は顔を伏せながら、黙って歩き続けた。`
+      ],
+      雨上がり: [
+        `雨上がりの道はぬかるんでいた。${leader}は泥の深さを見て、遠回りでも固い道を選んだ。`,
+        `森の入口には湿った匂いが残っていた。${leader}は「こういう日は足元から冷える」と呟きながら進んだ。`
+      ]
+    };
+    return pickOne(table[weather] ?? table["晴れ"], rng);
+  }
 
   const table = {
     晴れ: [
@@ -935,6 +995,7 @@ const lifeQuestEventPools = {
 };
 
 function roadEventText(quest, eventName, party, itemIds, rng) {
+  const solo = party.length === 1;
   const scout = findByTrait(party, "job", "斥候");
   const herbalist = findByTrait(party, "job", "薬草師");
   const warrior = findByTrait(party, "job", "戦士");
@@ -957,22 +1018,28 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     ],
     封蝋の確認: [
       `${name(post)}は封蝋に触れず、光にかざして割れがないことだけを確認した。昔の癖が出たらしい。`,
-      `封蝋は古いが、まだ保たれていた。${name(warrior)}は不用意に触ろうとして、${name(scout)}に止められた。`
+      solo
+        ? `${name(warrior)}は封蝋を確認しようとして、思いとどまった。光にかざして状態を見るだけにした。`
+        : `封蝋は古いが、まだ保たれていた。${name(warrior)}は不用意に触ろうとして、${name(scout)}に止められた。`
     ],
     宛先の聞き込み: [
       `宛先の家はすぐには見つからなかった。${name(scout)}は井戸端で聞き込みを行い、古い表札の場所を聞き出した。`,
       `${name(post)}は家の並びを見て、表通りより裏道に残っている家だと判断した。`
     ],
     犬の遠吠え: [
-      `遠くで犬が吠えた。危険はなかったが、一行は少し歩く速度を上げた。`,
+      `遠くで犬が吠えた。危険はなかったが、${solo ? name(party[0]) : "一行"}は少し歩く速度を上げた。`,
       `${name(warrior)}は剣の柄に手を置いたが、吠え声はすぐに遠ざかった。`
     ],
     湿った足跡: [
-      `${name(scout)}は湿った足跡を見つけ、荷物を一か所にまとめるよう合図した。小型の獣が近くを通った可能性がある。`,
+      solo
+        ? `${name(scout)}は湿った足跡を見つけ、荷物を手元に引き寄せて周囲を確認した。小型の獣が近くを通った可能性がある。`
+        : `${name(scout)}は湿った足跡を見つけ、荷物を一か所にまとめるよう合図した。小型の獣が近くを通った可能性がある。`,
       `泥の上に小さな足跡が残っていた。${name(herbalist)}は薬草袋の口を固く結び直した。`
     ],
     倒木: [
-      `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${name(scout)}が安全な迂回路を探した。`,
+      solo
+        ? `倒木が道をふさいでいた。${name(warrior)}が枝を払い、自分で安全な迂回路を確かめた。`
+        : `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${name(scout)}が安全な迂回路を探した。`,
       `古い倒木の裏側に、泥被り茸がいくつか生えていた。${name(herbalist)}は無理に引き抜かず、根元の土ごと採取した。`
     ],
     森喰い兎: [
@@ -992,19 +1059,25 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
       `休憩中、${name(scout)}は森の音が途切れる場所を記録した。採集路としては使えそうだ。`
     ],
     道標の傾き: [
-      `道標は片側へ傾いていた。${name(warrior)}が支え、${name(scout)}が根元の土を確認した。`,
+      solo
+        ? `道標は片側へ傾いていた。${name(warrior)}は支えながら、反対の手で根元の土を確認した。`
+        : `道標は片側へ傾いていた。${name(warrior)}が支え、${name(scout)}が根元の土を確認した。`,
       `傾いた道標は、近づいてみるとまだ読めた。文字の向きだけが少し怪しい。`
     ],
     苔に隠れた文字: [
       `苔に隠れた文字を、${name(scout)}が小刀の背で慎重に落とした。地名はかろうじて読めた。`,
-      `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうだったため止められた。`
+      solo
+        ? `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうなため思いとどまった。`
+        : `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうだったため止められた。`
     ],
     旧道の分岐: [
       `${has("item_map") ? `古地図には、現在使われていない旧道の線が残っていた。一行は分岐を確認し、報告書に照合結果を残した。` : `旧道らしき分岐があったが、手元の記録だけでは照合しきれなかった。次回は古地図が必要。`}`,
       `分岐の先は草に覆われていた。通行量は少ないが、完全に途絶えているわけではない。`
     ],
     壊れた橋: [
-      `小さな橋の板が一枚抜けていた。${name(warrior)}が先に渡り、他の者の足場を確かめた。`,
+      solo
+        ? `小さな橋の板が一枚抜けていた。${name(warrior)}は端を踏みしめ、安全に渡れることを確かめてから渡った。`
+        : `小さな橋の板が一枚抜けていた。${name(warrior)}が先に渡り、他の者の足場を確かめた。`,
       `橋は渡れたが、荷車には危ない。報告書には「徒歩なら可、荷運びは不可」と記録された。`
     ],
     通行人の証言: [
@@ -1095,19 +1168,20 @@ function workEventText(quest, eventName, party, itemIds, rng) {
 }
 
 function personalEventText(quest, party, rng) {
+  const solo = party.length === 1;
   const candidates = [];
   party.forEach((adv) => {
     const name = getDisplayName(adv);
     if (adv.personality === "慎重") {
-      candidates.push(`${name}はすぐには判断せず、報告書に残せる形で状況を整理してから仲間に伝えた。`);
+      candidates.push(`${name}はすぐには判断せず、報告書に残せる形で状況を整理してから${solo ? "動いた" : "仲間に伝えた"}。`);
       candidates.push(`${name}は「急がなくていい場面です」と言い、確認を一つ増やした。結果的に、その一手で見落としが減った。`);
     }
     if (adv.personality === "豪胆") {
-      candidates.push(`${name}は先頭に立ち、面倒な道を笑って進んだ。乱暴に見えるが、危ない場所では意外と仲間を待っている。`);
-      candidates.push(`${name}は「帰ったら飯だな」と言って、重い荷物を半分持った。本人は親切のつもりではなさそうだ。`);
+      candidates.push(`${name}は面倒な道を笑って進んだ。乱暴に見えるが、危ない場所では意外と慎重に足を置く。`);
+      candidates.push(`${name}は「帰ったら飯だな」と言って、重い荷物を背負い直した。疲れているのに気にしない。`);
     }
     if (adv.personality === "世話焼き") {
-      candidates.push(`${name}は休憩のたびに仲間の顔色を見ていた。報告書には書きにくいが、こういう気配りは遠征を安定させる。`);
+      if (!solo) candidates.push(`${name}は休憩のたびに仲間の顔色を見ていた。報告書には書きにくいが、こういう気配りは遠征を安定させる。`);
       candidates.push(`${name}は汚れた道具をその場で拭き、帰還後の整理が楽になるようにしていた。`);
     }
     if (adv.background === "郵便配達人") {
@@ -1167,31 +1241,48 @@ function lifeQuestPersonalEventText(quest, party, rng) {
   return pickOne(candidates, rng);
 }
 
-function supplyEventText(quest, party, itemIds, rng) {
-  const has = (id) => itemIds.includes(id);
-  const scout = findByTrait(party, "job", "斥候");
-  const herbalist = findByTrait(party, "job", "薬草師");
-  const warrior = findByTrait(party, "job", "戦士");
+function supplyEventText(quest, party, adventurerItemIds, rng) {
+  const solo = party.length === 1;
+  const has = (id) => Object.values(adventurerItemIds).includes(id);
+  const holder = (itemId) => {
+    const entry = Object.entries(adventurerItemIds).find(([, iId]) => iId === itemId);
+    return entry ? (getAdventurer(entry[0]) ?? party[0]) : party[0];
+  };
+  const hName = (itemId) => getDisplayName(holder(itemId));
   const lines = [];
+
   if (has("item_bandage")) {
-    lines.push(`包帯は怪我のためではなく、荷紐の補修に使われた。${getDisplayName(warrior)}は「便利だな」と雑に褒めた。`);
-    lines.push(`小さな擦り傷が出たが、包帯で処置して行動を継続できた。報告書には負傷軽微とある。`);
+    const h = hName("item_bandage");
+    lines.push(`${h}が持っていた包帯を荷紐の補修に使った。怪我のためではなかったが、役に立った。`);
+    lines.push(`小さな擦り傷が出たが、${h}が包帯で処置して行動を継続できた。報告書には負傷軽微とある。`);
   }
   if (has("item_map")) {
-    lines.push(`${getDisplayName(scout)}は古地図を広げ、今の道と昔の道のズレを照合した。迷う前に違和感へ気づけたのが大きい。`);
-    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。一行はその線を目印に進んだ。`);
+    const h = hName("item_map");
+    lines.push(`${h}は古地図を広げ、今の道と昔の道のズレを照合した。迷う前に違和感へ気づけたのが大きい。`);
+    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h}はその線を目印に進んだ。`);
   }
   if (has("item_whistle")) {
-    lines.push(`視界が悪くなった時、笛の短い音で全員が集まった。大きな活躍ではないが、報告書には合流手段として記録された。`);
-    lines.push(`${getDisplayName(warrior)}が試しに笛を吹き、思ったより大きな音に全員が少し黙った。以後、合図は短く一回に決まった。`);
+    const h = hName("item_whistle");
+    if (solo) {
+      lines.push(`視界が悪くなった時、${h}は笛を短く吹いて自分の位置を確かめた。音の響き方で周囲の地形が分かる。`);
+    } else {
+      lines.push(`視界が悪くなった時、${h}が笛を短く吹いた。音を聞いて全員が集まった。合流手段として報告書に記録された。`);
+      lines.push(`${h}が試しに笛を吹き、思ったより大きな音に場が静まった。以後、合図は短く一回に決まった。`);
+    }
   }
   if (has("item_pot")) {
-    lines.push(`${getDisplayName(herbalist)}は携帯鍋で湯を沸かし、採集物の泥を落とした。休憩の短い時間が、そのまま確認作業になった。`);
-    lines.push(`携帯鍋で作った薄いスープは評判が分かれた。だが、帰り道の足取りは少し軽くなった。`);
+    const h = hName("item_pot");
+    lines.push(`${h}は携帯鍋で湯を沸かし、採集物の泥を落とした。休憩の短い時間が、そのまま確認作業になった。`);
+    lines.push(`${h}が携帯鍋でスープを作った。${solo ? "帰り道の足取りが少し軽くなった。" : "評判は分かれたが、帰り道の足取りは少し軽くなった。"}`);
   }
   if (has("item_oilcase")) {
-    lines.push(`油紙の手紙入れにより、紙の依頼書とメモは濡れずに済んだ。地味だが、記録係にはありがたい成果だ。`);
-    lines.push(`${getDisplayName(scout)}は濡れた手で依頼書に触れないよう、油紙の上から内容を確認した。`);
+    const h = hName("item_oilcase");
+    lines.push(`${h}が持っていた油紙の手紙入れにより、紙の依頼書とメモは濡れずに済んだ。地味だが大事な仕事だ。`);
+    lines.push(`${h}は濡れた手で依頼書に触れないよう、油紙の上から内容を確認した。`);
+  }
+  if (has("item_obs_sheet")) {
+    const h = hName("item_obs_sheet");
+    lines.push(`${h}は観察記録票を上着の内側にしまっていた。帰還後に報告書へ転記するためだ。`);
   }
   if (lines.length === 0) return null;
   return pickOne(lines, rng);
@@ -1491,7 +1582,10 @@ function generateObservationNotes(quest, party, itemIds, rng) {
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
-  const itemIds = expedition.itemIds;
+  // adventurerItemIds: 新形式。旧形式（itemIds配列）はアドベンチャラー順に割り当てて互換。
+  const adventurerItemIds = expedition.adventurerItemIds ??
+    Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]));
+  const itemIds = Object.values(adventurerItemIds).filter(Boolean);
   const items = itemIds.map(getItem).filter(Boolean);
   const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
   const logs = [];
@@ -1508,7 +1602,7 @@ function generateReport(expedition) {
 
     const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
     const personal = lifeQuestPersonalEventText(quest, party, rng);
-    const supply = supplyEventText(quest, party, itemIds, rng);
+    const supply = supplyEventText(quest, party, adventurerItemIds, rng);
     const observationNotes = generateObservationNotes(quest, party, itemIds, rng);
 
     const arrivalLines = {
@@ -1542,7 +1636,8 @@ function generateReport(expedition) {
       id: `report_${Date.now()}`,
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
-      itemIds: expedition.itemIds,
+      adventurerItemIds,
+      itemIds,
       opened: false,
       applied: false,
       result: outcomeInfo.result,
@@ -1575,7 +1670,7 @@ function generateReport(expedition) {
   const observationUpdates = observationUpdateFor(quest, outcome, roadEvents);
   const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
-  const supply = supplyEventText(quest, party, itemIds, rng);
+  const supply = supplyEventText(quest, party, adventurerItemIds, rng);
   const observationNotes = generateObservationNotes(quest, party, itemIds, rng);
 
   add("", `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
@@ -1606,6 +1701,7 @@ function generateReport(expedition) {
     historyLine: outcomeInfo.history,
     adventurerHistoryLines,
     logs,
+    adventurerItemIds,
     observationUpdates,
     observationText,
     observationNotes,
@@ -1630,7 +1726,7 @@ resetButton.addEventListener("click", () => {
   state = createInitialState();
   selectedQuestId = null;
   selectedAdventurerIds = [];
-  selectedItemIds = [];
+  selectedAdventurerItems = {};
   editingAdventurerId = null;
   route = "home";
   render();
