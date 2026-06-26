@@ -165,7 +165,8 @@ function createInitialState() {
     selectedAdventurerIds: [],
     selectedAdventurerItems: {},
     lastObservationUpdate: null,
-    beastLog: {}
+    beastLog: {},
+    reportMemos: []
   };
 }
 
@@ -636,23 +637,62 @@ function adventurerEditorHtml(adventurer) {
 }
 
 function renderObservations() {
+  const memos = state.reportMemos ?? [];
   app.innerHTML = `
     <section class="card">
       <div class="card-body">
         <div class="card-title">
           <div>
-            <p class="eyebrow">Field Notes</p>
+            <p class="eyebrow">Field Notes Archive</p>
             <h3>報告メモ</h3>
           </div>
-          <span class="status-pill">${state.observations.length}件</span>
+          <span class="status-pill">${memos.length}件</span>
         </div>
-        <p class="muted">遠征から持ち帰った証言・確認された事実・推定・次に調べることの断片をまとめた素材置き場です。いきもの図鑑に転記する際の参考として使ってください。</p>
-        <div class="grid-2" style="margin-top: 16px;">
-          ${state.observations.map(observationHtml).join("")}
-        </div>
+        <p class="muted" style="margin-bottom: 16px;">観察記録票を持った冒険者が依頼から持ち帰った一次記録です。いきもの図鑑を書くための素材置き場として使ってください。</p>
+        ${memos.length === 0
+          ? `<div class="empty">観察対象のある依頼に観察記録票を持たせて完了すると、冒険者ごとの記録がここに蓄積されます。</div>`
+          : `<div class="memo-list">${memos.map(reportMemoCardHtml).join("")}</div>`}
       </div>
     </section>
   `;
+}
+
+function reportMemoCardHtml(memo) {
+  let dateStr = "---";
+  if (memo.createdAt) {
+    try {
+      dateStr = new Date(memo.createdAt).toLocaleString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit"
+      });
+    } catch (_) { dateStr = memo.createdAt.slice(0, 16).replace("T", " "); }
+  }
+  return `
+    <article class="memo-card">
+      <div class="memo-card-header">
+        <div class="memo-card-meta">
+          <span class="memo-target-badge">${escapeHtml(memo.targetName ?? "")}</span>
+          <span class="memo-quest muted">${escapeHtml(memo.questTitle ?? "")}</span>
+        </div>
+        <div class="memo-card-actions">
+          <button class="small-button" onclick="openBeastLogFromMemo('${memo.reportId}', '${escapeHtml(memo.targetName ?? "")}')">図鑑を編集</button>
+        </div>
+      </div>
+      <p class="memo-author muted">${escapeHtml(memo.adventurerName ?? "")} ／ ${dateStr}</p>
+      <p class="memo-text">「${escapeHtml(memo.text ?? "")}」</p>
+    </article>
+  `;
+}
+
+function openBeastLogFromMemo(reportId, targetName) {
+  const report = state.reports.find((r) => r.id === reportId);
+  if (report && report.observationNotes) {
+    openBeastLogFromReport(reportId);
+  } else {
+    const existing = state.beastLog[targetName];
+    openBeastLogEditor(targetName, existing?.area ?? "", null);
+  }
 }
 
 function isNewObservationLine(obsId, key, line) {
@@ -1033,6 +1073,28 @@ function applyReport(report) {
 
   if (newHighlightItems.length > 0) {
     state.lastObservationUpdate = { reportId: report.id, items: newHighlightItems };
+  }
+
+  // 観察記録票メモを時系列アーカイブに保存（1報告書につき1回のみ）
+  if (report.observationNotes && report.observationNotes.notes && report.observationNotes.notes.length > 0) {
+    if (!state.reportMemos) state.reportMemos = [];
+    const alreadyAdded = state.reportMemos.some((m) => m.reportId === report.id);
+    if (!alreadyAdded) {
+      const quest = getQuest(report.questId);
+      report.observationNotes.notes.forEach((note) => {
+        state.reportMemos.push({
+          id: `memo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          reportId: report.id,
+          createdAt: report.createdAt ?? new Date().toISOString(),
+          questId: report.questId,
+          questTitle: quest?.title ?? report.questId,
+          targetName: report.observationNotes.target,
+          adventurerId: note.adventurerId,
+          adventurerName: note.name,
+          text: note.text
+        });
+      });
+    }
   }
 }
 
@@ -1813,7 +1875,8 @@ function generateReport(expedition) {
   // adventurerItemIds: 新形式。旧形式（itemIds配列）はアドベンチャラー順に割り当てて互換。
   const adventurerItemIds = expedition.adventurerItemIds ??
     Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]));
-  const itemIds = Object.values(adventurerItemIds).filter(Boolean);
+  // 新形式 [id1, id2] と旧形式 "id" の両方に対応して平坦化
+  const itemIds = getAllItemIds(adventurerItemIds);
   const items = itemIds.map(getItem).filter(Boolean);
   const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
   const logs = [];
@@ -1904,7 +1967,11 @@ function generateReport(expedition) {
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
   add("", `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
-  add("", `編成：${formatNames(party)}。支給品：${items.length ? items.map((item) => item.name).join("、") : "なし"}。`);
+  const supplyDesc = party.map((adv) => {
+    const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+    return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+  }).filter(Boolean);
+  add("", `編成：${formatNames(party)}。支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
   add("", generateWeatherLog(quest, party, weather, rng));
   roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng)));
   if (personal) add("drama", personal);
