@@ -1,6 +1,6 @@
 const STORAGE_KEY = "expeditionGuildLogMockV011";
 const DEMO_DURATION_MS = 10000;
-const MOCK_VERSION = "v0.1.1";
+const MOCK_VERSION = "v0.1.2";
 
 const masterAdventurers = [
   {
@@ -45,29 +45,57 @@ const masterQuests = [
   {
     id: "quest_herb",
     title: "森の薬草採集",
+    category: "探索",
     danger: "低",
     area: "薄明の森",
     recommended: ["斥候", "薬草師"],
+    tags: ["探索", "採集", "観察"],
     observationTarget: "森喰い兎",
     summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。"
   },
   {
     id: "quest_signpost",
     title: "古い道標の確認",
+    category: "探索",
     danger: "低",
     area: "古い街道",
     recommended: ["斥候"],
+    tags: ["探索", "街道", "記録"],
     observationTarget: "なし",
     summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。"
   },
   {
     id: "quest_letter",
     title: "届けられなかった手紙",
+    category: "生活",
     danger: "低",
     area: "雨待ちの街道",
     recommended: ["慎重", "郵便配達人"],
+    tags: ["生活", "配達", "記録"],
     observationTarget: "なし",
     summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。"
+  },
+  {
+    id: "quest_wedding_support",
+    title: "結婚式の裏方",
+    category: "生活",
+    danger: "低",
+    area: "町の小さな祝宴会場",
+    recommended: ["世話焼き", "郵便配達人", "豪胆"],
+    tags: ["生活", "祝宴", "運搬", "案内", "地域"],
+    observationTarget: "なし",
+    summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。"
+  },
+  {
+    id: "quest_old_house_cleanup",
+    title: "廃屋の片付け",
+    category: "生活",
+    danger: "低",
+    area: "町外れの古い家屋",
+    recommended: ["慎重", "豪胆", "記録"],
+    tags: ["生活", "片付け", "記録", "荷運び", "古物"],
+    observationTarget: "なし",
+    summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。"
   }
 ];
 
@@ -141,11 +169,19 @@ function loadState() {
     if (!raw) return createInitialState();
     const base = createInitialState();
     const parsed = JSON.parse(raw);
-    return { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };
+    const merged = { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };
+    merged.quests = mergeMasterList(masterQuests, parsed.quests);
+    merged.items = mergeMasterList(masterItems, parsed.items);
+    return merged;
   } catch (error) {
     console.warn("保存データの読み込みに失敗したため初期化します", error);
     return createInitialState();
   }
+}
+
+function mergeMasterList(masterList, savedList = []) {
+  const savedById = new Map(savedList.map((item) => [item.id, item]));
+  return masterList.map((masterItem) => ({ ...masterItem, ...(savedById.get(masterItem.id) ?? {}) }));
 }
 
 function saveState() {
@@ -382,16 +418,19 @@ function renderQuests() {
 
 function questCardHtml(quest) {
   const selected = selectedQuestId === quest.id;
+  const tags = quest.tags ?? quest.recommended ?? [];
+  const isLifeQuest = quest.category === "生活";
   return `
     <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${quest.id}')">
       <h3>${escapeHtml(quest.title)}</h3>
       <p class="muted">${escapeHtml(quest.summary)}</p>
       <div class="kv">
-        <span>危険度</span><strong>${escapeHtml(quest.danger)}</strong>
+        <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
+        <span>${isLifeQuest ? "作業負荷" : "危険度"}</span><strong class="${isLifeQuest ? "subtle-danger" : ""}">${escapeHtml(quest.danger)}</strong>
         <span>地域</span><strong>${escapeHtml(quest.area)}</strong>
         <span>観察対象</span><strong>${escapeHtml(quest.observationTarget)}</strong>
       </div>
-      <div class="tags">${quest.recommended.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
+      <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
     </article>
   `;
 }
@@ -430,6 +469,7 @@ function dispatchSummaryHtml(quest) {
   return `
     <div class="kv">
       <span>依頼</span><strong>${escapeHtml(quest.title)}</strong>
+      <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
       <span>編成</span><strong>${party.length ? party.map(getDisplayName).map(escapeHtml).join(" / ") : "未選択"}</strong>
       <span>支給品</span><strong>${items.length ? items.map((item) => escapeHtml(item.name)).join(" / ") : "なし"}</strong>
       <span>所要時間</span><strong>Mockでは約10秒</strong>
@@ -594,12 +634,13 @@ function renderReportDetail(reportId) {
         </div>
         <div class="kv">
           <span>地域</span><strong>${escapeHtml(quest?.area)}</strong>
+          <span>分類</span><strong>${escapeHtml(quest?.category ?? "遠征")}</strong>
           <span>編成</span><strong>${escapeHtml(party)}</strong>
           <span>支給品</span><strong>${escapeHtml(items)}</strong>
-          <span>結果</span><strong>${escapeHtml(report.result)}</strong>
+          <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>
         </div>
         <hr class="soft" />
-        <p class="meta-label">遠征ログ</p>
+        <p class="meta-label">${quest?.category === "生活" ? "作業報告" : "遠征ログ"}</p>
         <div class="log-list">
           ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}
         </div>
@@ -837,6 +878,17 @@ const questEventPools = {
   }
 };
 
+const lifeQuestEventPools = {
+  quest_wedding_support: {
+    workEvents: ["長椅子の設営", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り", "飾り紐の受け渡し"],
+    outcomes: ["成功", "小さな失敗", "感謝"]
+  },
+  quest_old_house_cleanup: {
+    workEvents: ["壊れた家具の撤去", "床板の確認", "古い手紙の整理", "生活用品の確認", "近所の聞き取り", "茶器の梱包", "部屋割りの確認"],
+    outcomes: ["成功", "整理完了", "一部保留"]
+  }
+};
+
 function roadEventText(quest, eventName, party, itemIds, rng) {
   const scout = findByTrait(party, "job", "斥候");
   const herbalist = findByTrait(party, "job", "薬草師");
@@ -922,6 +974,81 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
   return pickOne(generic[eventName] ?? [`${eventName}について、短い確認を行った。`], rng);
 }
 
+function workEventText(quest, eventName, party, itemIds, rng) {
+  const caregiver = findByTrait(party, "personality", "世話焼き");
+  const brave = findByTrait(party, "personality", "豪胆");
+  const careful = findByTrait(party, "personality", "慎重");
+  const post = findByTrait(party, "background", "郵便配達人");
+  const guard = findByTrait(party, "background", "宿場の用心棒");
+  const herbalist = findByTrait(party, "job", "薬草師");
+  const name = (adv) => getDisplayName(adv);
+
+  const weddingEvents = {
+    長椅子の設営: [
+      `${name(brave)}が長椅子を担いで会場へ運んだ。「何脚いる」と確かめながら、黙って運び続けた。`,
+      `${name(caregiver)}は長椅子の向きを細かく調整した。招待客が座りやすいよう、通路の幅も確かめていた。`
+    ],
+    厨房の手伝い: [
+      `${name(caregiver)}は厨房で皿洗いと盛り付けを手伝った。料理人の邪魔をしない動き方を、自然と心得ていた。`,
+      `${name(herbalist)}は厨房の薬草束を見て、料理人に使い方を伝えた。「そこの葉は香り付けです」と言うと、礼を言われた。`
+    ],
+    酒樽の運搬: [
+      `${name(brave)}が重い酒樽を肩に担いだ。転がすより早いと判断したらしく、他の者より先に着いた。`,
+      `酒樽の運搬は手分けした。${name(careful)}は段差を確かめながら、樽が傾かないように進んだ。`
+    ],
+    招待客の案内: [
+      `${name(post)}は席割りを一度見ただけで覚え、招待客を迷わず席まで案内した。配達の仕事が活きていた。`,
+      `${name(caregiver)}は年配の客に丁寧に声をかけた。迷いそうな細い廊下を一緒に歩き、席まで送り届けた。`
+    ],
+    迷子対応: [
+      `子どもが一人、席を離れて迷子になった。${name(caregiver)}がすぐに気づき、泣き出す前に保護した。`,
+      `${name(post)}は迷子の子どもが言った「大きな木のそば」という手がかりをもとに、親を見つけた。昔の道案内の癖だ。`
+    ],
+    夜間の見回り: [
+      `${name(guard)}は会場の裏口と入口を交互に確認しながら見回りを続けた。宿場仕事そのままの動き方だった。`,
+      `夜間の見回り中、${name(brave)}は外で休んでいた遠方の客を見つけた。声をかけ、中へ案内した。`
+    ],
+    飾り紐の受け渡し: [
+      `飾り紐を花嫁の控え室まで届けた。${name(caregiver)}は袋の結び目をほどかず、そっと渡した。`,
+      `${name(careful)}は飾り紐を折れないよう平らにして運んだ。渡した時、受け取った人がほっとした顔をした。`
+    ]
+  };
+
+  const cleanupEvents = {
+    壊れた家具の撤去: [
+      `${name(brave)}が壊れた椅子と棚を中庭へ出した。まだ使えるものだけ脇に寄せ、あとは積み上げた。`,
+      `古い戸棚は思ったより重かった。${name(careful)}が引き出しを抜いてから動かすよう提案し、作業が楽になった。`
+    ],
+    床板の確認: [
+      `${name(careful)}は床板を一枚ずつ踏んで、軋む場所を報告書に記録した。危険な箇所には印をつけた。`,
+      `床板の下が空洞になっている場所があった。${name(brave)}が先に踏んで確かめ、他の者を安全な位置から歩かせた。`
+    ],
+    古い手紙の整理: [
+      `${name(post)}は古い手紙の束を見て、受取人の名前と差出地の記録を丁寧に写し取った。処分前に記録を残す習慣だ。`,
+      `古い手紙の中に宛先不明のものがあった。${name(careful)}は捨てずに封筒ごとギルドへ持ち帰ることを提案した。`
+    ],
+    生活用品の確認: [
+      `棚の奥から古い生活用品が出てきた。${name(caregiver)}は使えるものと傷んでいるものを分け、分かりやすく積み直した。`,
+      `${name(herbalist)}は薬瓶らしきものを見つけ、中身の匂いを確かめた。「もう使えないが、瓶は洗えば使える」と言った。`
+    ],
+    近所の聞き取り: [
+      `近所の住民が話しかけてきた。${name(post)}は丁寧に応じ、家の元の住人について聞き取った。記録として残す価値があった。`,
+      `${name(caregiver)}は聞き取りの最後に「何か困っていることがあれば」と添えた。住民は少し表情を緩めた。`
+    ],
+    茶器の梱包: [
+      `茶器の梱包は${name(careful)}が担当した。割れないよう布を間に挟み、重いものを下に積んだ。`,
+      `${name(caregiver)}は茶器を一つずつ確かめながら包んだ。「これは随分古い」と一言言って、丁寧に扱った。`
+    ],
+    部屋割りの確認: [
+      `間取りを確認しながら、どの部屋から片付けるかを${name(careful)}が決めた。窓のある部屋から進めることで、埃を外へ出しやすくした。`,
+      `${name(guard)}は各部屋の出入口と窓の位置を確認した。宿場仕事の癖で、荷物の動線を先に把握する。`
+    ]
+  };
+
+  const allEvents = { ...weddingEvents, ...cleanupEvents };
+  return pickOne(allEvents[eventName] ?? [`${eventName}について、作業を行った。`], rng);
+}
+
 function personalEventText(quest, party, rng) {
   const candidates = [];
   party.forEach((adv) => {
@@ -946,6 +1073,50 @@ function personalEventText(quest, party, rng) {
     }
     if (adv.background === "村の調合係") {
       candidates.push(`${name}は匂いと湿り気だけで、使える草と避ける草をより分けた。手つきに迷いがない。`);
+    }
+  });
+  return pickOne(candidates, rng);
+}
+
+function lifeQuestPersonalEventText(quest, party, rng) {
+  const candidates = [];
+  party.forEach((adv) => {
+    const name = getDisplayName(adv);
+    if (adv.personality === "慎重") {
+      if (quest.id === "quest_wedding_support") {
+        candidates.push(`${name}は依頼書の段取りを確認し、手順に抜けがないかを一つずつ確かめた。焦らず動く姿勢が、小さなミスを防いでいた。`);
+        candidates.push(`${name}は「急いで雑にするより、ゆっくり丁寧にやった方が後が楽です」と言って、作業の順番を整えた。`);
+      } else {
+        candidates.push(`${name}は片付けた場所に何があったかを逐一メモした。捨てる前の記録が、依頼人の確認作業を助けた。`);
+        candidates.push(`${name}は判断に迷うものを勝手に捨てず、「確認が必要なものは別にしておきます」と積み分けた。`);
+      }
+    }
+    if (adv.personality === "豪胆") {
+      if (quest.id === "quest_wedding_support") {
+        candidates.push(`${name}は重い荷物を率先して引き受けた。こういう場所での控え方を、どこかで覚えてきたらしい。`);
+        candidates.push(`${name}は段取りに口を出さず、言われたことを黙ってやり続けた。派手さはないが、確実だった。`);
+      } else {
+        candidates.push(`${name}は重い家具を次々と外へ運んだ。仲間が確認を終えるまで、ちゃんと待っていた。`);
+        candidates.push(`${name}は埃だらけの部屋でも文句を言わなかった。顔を袖で覆い、黙々と続けた。`);
+      }
+    }
+    if (adv.personality === "世話焼き") {
+      if (quest.id === "quest_wedding_support") {
+        candidates.push(`${name}は会場全体を見渡し、困っている人がいないかを常に気にしていた。依頼書に書かれた仕事の外まで、自然と手が伸びていた。`);
+        candidates.push(`${name}は仲間が一息ついた時、「少し飲んでいいですよ」と水を渡した。自分が飲んだのは全員の後だった。`);
+      } else {
+        candidates.push(`${name}は作業中も住民の話に耳を傾けた。報告書に書くほどのことではないが、依頼人が安心できる言葉をかけていた。`);
+        candidates.push(`${name}は片付けを進めながら、仲間の疲れ具合を見ていた。休憩のタイミングをうまく提案して、作業が安定した。`);
+      }
+    }
+    if (adv.background === "郵便配達人") {
+      candidates.push(`${name}は依頼人から受け取った書類の順番を崩さないよう気にしていた。紙を扱う仕事の癖が、こういう場所でも出る。`);
+    }
+    if (adv.background === "宿場の用心棒") {
+      candidates.push(`${name}は作業の合間に自然と人の動きを見渡していた。誰がどこにいるかを常に把握しようとする癖は宿場仕事から来ている。`);
+    }
+    if (adv.background === "村の調合係") {
+      candidates.push(`${name}は古い薬草束や瓶を見て、素材かどうかを確かめた。「これは使えます」という一言が、いくつかのものを廃棄から救った。`);
     }
   });
   return pickOne(candidates, rng);
@@ -1088,6 +1259,73 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
   return variants[outcome] ?? variants.成功;
 }
 
+function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
+  const caregiver = findByTrait(party, "personality", "世話焼き");
+  const careful = findByTrait(party, "personality", "慎重");
+
+  if (quest.id === "quest_wedding_support") {
+    const variants = {
+      成功: {
+        result: "成功",
+        summary: "式の裏方を最後まで務めた。大きな問題はなく、当日は無事に終わった。",
+        line: `一行は担当した作業をすべて終えた。式は滞りなく進み、見送りの時、依頼人から「来てくれてよかった」と言われた。`,
+        after: `帰り道、${getDisplayName(caregiver)}は「いい式でしたね」と言った。報告書には書かれないことを、覚えている人間がいる。`,
+        history: "結婚式の裏方で、設営から見回りまでを担当。式は無事終了。"
+      },
+      小さな失敗: {
+        result: "小さな失敗",
+        summary: "軽微なミスはあったが、式の進行に支障はなかった。",
+        line: `飾り紐の受け渡しが少し遅れた。${getDisplayName(careful)}はすぐに気づいて補ったが、あの一瞬は報告書に残した。`,
+        after: `依頼人は「気にしないで」と言った。そう言ってもらえるうちは、次の機会に活かせる失敗だ。`,
+        history: "結婚式の裏方。軽微なミスあり、式は無事終了。"
+      },
+      感謝: {
+        result: "感謝",
+        summary: "依頼の範囲を超えた対応が、依頼人から感謝された。",
+        line: `${getDisplayName(caregiver)}が迷子の子どもを保護したことで、式の雰囲気が崩れずに済んだ。依頼人から改めて礼を言われた。`,
+        after: `式が終わった後、依頼人は一行に小さな菓子折りを持たせた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`,
+        history: "結婚式の裏方。迷子対応など依頼範囲外にも対応し、感謝を受けた。"
+      }
+    };
+    return variants[outcome] ?? variants["成功"];
+  }
+
+  if (quest.id === "quest_old_house_cleanup") {
+    const variants = {
+      成功: {
+        result: "成功",
+        summary: "廃屋の片付けを完了した。整理品と要確認品を分けて引き渡した。",
+        line: `一行は部屋を順番に片付け、処分品・保管品・要確認品を分けて依頼人へ報告した。古い手紙は別に包んで渡した。`,
+        after: `${getDisplayName(careful)}の記録メモが、依頼人の確認作業を大きく助けた。几帳面な仕事だったと思う。`,
+        history: "廃屋の片付けを完了。古い手紙と生活用品を整理して引き渡した。"
+      },
+      整理完了: {
+        result: "整理完了",
+        summary: "廃屋の整理は完了。残置物の確認は依頼人とともに行った。",
+        line: `${getDisplayName(careful)}は依頼人を呼んで、残置物の判断を一緒に行った。捨てるかどうかは一行が決めることではない。`,
+        after: `依頼人は「ひとつひとつ見せてくれてよかった」と言った。気の長い作業だったが、後悔のない片付けになった。`,
+        history: "廃屋の整理完了。残置物の判断を依頼人と確認しながら進めた。"
+      },
+      一部保留: {
+        result: "一部保留",
+        summary: "大半の片付けは完了。古い手紙など一部は依頼人の再確認が必要。",
+        line: `古い手紙の処分については、依頼人が直接確認したいとのことで保留とした。${getDisplayName(careful)}は保留品をまとめ、場所を書き記した。`,
+        after: `完全な終わりではないが、これは丁寧な仕事の証でもある。保留にする判断は、軽くない。`,
+        history: "廃屋の片付けで一部保留。依頼人確認待ちの荷物を整理して残した。"
+      }
+    };
+    return variants[outcome] ?? variants["成功"];
+  }
+
+  return {
+    result: "成功",
+    summary: "生活依頼を完了した。",
+    line: `一行は依頼を無事に終えた。`,
+    after: `報告書は受付へ提出された。`,
+    history: `${quest.title}：完了。`
+  };
+}
+
 function observationUpdateFor(quest, outcome, roadEvents) {
   if (quest.id === "quest_herb") {
     const addFacts = [];
@@ -1138,9 +1376,70 @@ function generateReport(expedition) {
   const itemIds = expedition.itemIds;
   const items = itemIds.map(getItem).filter(Boolean);
   const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
-  const pool = questEventPools[quest.id];
   const logs = [];
   const add = (kind, text) => logs.push({ kind, text });
+
+  // 生活依頼（lifeQuestEventPools に登録されているもの）は専用フローで生成
+  if (lifeQuestEventPools[quest.id]) {
+    const pool = lifeQuestEventPools[quest.id];
+    const workEvents = pickMany(pool.workEvents, 3 + Math.floor(rng() * 2), rng);
+    let outcome = pickOne(pool.outcomes, rng);
+
+    if (quest.id === "quest_wedding_support" && hasPartyTrait(party, "personality", "世話焼き") && rng() < 0.5) outcome = pickOne(["感謝", "成功"], rng);
+    if (quest.id === "quest_old_house_cleanup" && hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["成功", "整理完了"], rng);
+
+    const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
+    const personal = lifeQuestPersonalEventText(quest, party, rng);
+    const supply = supplyEventText(quest, party, itemIds, rng);
+
+    const arrivalLines = {
+      quest_wedding_support: [
+        `会場に着くと、すでに準備の真っ最中だった。依頼人の顔に安堵が浮かんだ。`,
+        `町の小さな祝宴会場に着いた。外はにぎやかで、中はまだ落ち着きがなかった。`
+      ],
+      quest_old_house_cleanup: [
+        `町外れの家屋に着いた。戸は開いたまま、中は物が積み重なっていた。`,
+        `古い家屋の前に立った。${formatNames(party)}は外から中を見渡し、どこから手をつけるかを相談した。`
+      ]
+    };
+
+    add("", `${formatNames(party)}が「${quest.title}」のため、${quest.area}へ向かった。`);
+    add("", `支給品：${items.length ? items.map((item) => item.name).join("、") : "なし"}。`);
+    add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
+    workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
+    if (personal) add("drama", personal);
+    if (supply) add("drama", supply);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.personality === "世話焼き" ? "気配りと補助で" : adv.personality === "慎重" ? "丁寧な確認で" : adv.personality === "豪胆" ? "力仕事で" : "一員として";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return {
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      itemIds: expedition.itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      hiddenTags: { workEvents, outcome, recordDensityGain: 1 + logs.length },
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  // 遠征依頼フロー
+  const pool = questEventPools[quest.id];
 
   const weather = pickOne(pool.weather, rng);
   const roadEvents = pickMany(pool.roadEvents, 2 + Math.floor(rng() * 2), rng);

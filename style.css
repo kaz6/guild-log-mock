@@ -481,6 +481,10 @@ textarea {
   color: var(--text);
 }
 
+.subtle-danger {
+  color: var(--accent);
+}
+
 hr.soft {
   border: 0;
   border-top: 1px solid var(--line);

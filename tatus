@@ -1,0 +1,158 @@
+warning: in the working copy of 'app.js', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app.js b/app.js[m
+[1mindex 566b176..aac47c3 100644[m
+[1m--- a/app.js[m
+[1m+++ b/app.js[m
+[36m@@ -1,6 +1,6 @@[m
+ const STORAGE_KEY = "expeditionGuildLogMockV011";[m
+ const DEMO_DURATION_MS = 10000;[m
+[31m-const MOCK_VERSION = "v0.1.1";[m
+[32m+[m[32mconst MOCK_VERSION = "v0.1.2";[m
+ [m
+ const masterAdventurers = [[m
+   {[m
+[36m@@ -45,29 +45,57 @@[m [mconst masterQuests = [[m
+   {[m
+     id: "quest_herb",[m
+     title: "森の薬草採集",[m
+[32m+[m[32m    category: "探索",[m
+     danger: "低",[m
+     area: "薄明の森",[m
+     recommended: ["斥候", "薬草師"],[m
+[32m+[m[32m    tags: ["探索", "採集", "観察"],[m
+     observationTarget: "森喰い兎",[m
+     summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。"[m
+   },[m
+   {[m
+     id: "quest_signpost",[m
+     title: "古い道標の確認",[m
+[32m+[m[32m    category: "探索",[m
+     danger: "低",[m
+     area: "古い街道",[m
+     recommended: ["斥候"],[m
+[32m+[m[32m    tags: ["探索", "街道", "記録"],[m
+     observationTarget: "なし",[m
+     summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。"[m
+   },[m
+   {[m
+     id: "quest_letter",[m
+     title: "届けられなかった手紙",[m
+[32m+[m[32m    category: "生活",[m
+     danger: "低",[m
+     area: "雨待ちの街道",[m
+     recommended: ["慎重", "郵便配達人"],[m
+[32m+[m[32m    tags: ["生活", "配達", "記録"],[m
+     observationTarget: "なし",[m
+     summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。"[m
+[32m+[m[32m  },[m
+[32m+[m[32m  {[m
+[32m+[m[32m    id: "quest_wedding_support",[m
+[32m+[m[32m    title: "結婚式の裏方",[m
+[32m+[m[32m    category: "生活",[m
+[32m+[m[32m    danger: "低",[m
+[32m+[m[32m    area: "町の小さな祝宴会場",[m
+[32m+[m[32m    recommended: ["世話焼き", "郵便配達人", "豪胆"],[m
+[32m+[m[32m    tags: ["生活", "祝宴", "運搬", "案内", "地域"],[m
+[32m+[m[32m    observationTarget: "なし",[m
+[32m+[m[32m    summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。"[m
+[32m+[m[32m  },[m
+[32m+[m[32m  {[m
+[32m+[m[32m    id: "quest_old_house_cleanup",[m
+[32m+[m[32m    title: "廃屋の片付け",[m
+[32m+[m[32m    category: "生活",[m
+[32m+[m[32m    danger: "低",[m
+[32m+[m[32m    area: "町外れの古い家屋",[m
+[32m+[m[32m    recommended: ["慎重", "豪胆", "記録"],[m
+[32m+[m[32m    tags: ["生活", "片付け", "記録", "荷運び", "古物"],[m
+[32m+[m[32m    observationTarget: "なし",[m
+[32m+[m[32m    summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。"[m
+   }[m
+ ];[m
+ [m
+[36m@@ -141,13 +169,21 @@[m [mfunction loadState() {[m
+     if (!raw) return createInitialState();[m
+     const base = createInitialState();[m
+     const parsed = JSON.parse(raw);[m
+[31m-    return { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };[m
+[32m+[m[32m    const merged = { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };[m
+[32m+[m[32m    merged.quests = mergeMasterList(masterQuests, parsed.quests);[m
+[32m+[m[32m    merged.items = mergeMasterList(masterItems, parsed.items);[m
+[32m+[m[32m    return merged;[m
+   } catch (error) {[m
+     console.warn("保存データの読み込みに失敗したため初期化します", error);[m
+     return createInitialState();[m
+   }[m
+ }[m
+ [m
+[32m+[m[32mfunction mergeMasterList(masterList, savedList = []) {[m
+[32m+[m[32m  const savedById = new Map(savedList.map((item) => [item.id, item]));[m
+[32m+[m[32m  return masterList.map((masterItem) => ({ ...masterItem, ...(savedById.get(masterItem.id) ?? {}) }));[m
+[32m+[m[32m}[m
+[32m+[m
+ function saveState() {[m
+   state.selectedQuestId = selectedQuestId;[m
+   state.selectedAdventurerIds = selectedAdventurerIds;[m
+[36m@@ -382,16 +418,19 @@[m [mfunction renderQuests() {[m
+ [m
+ function questCardHtml(quest) {[m
+   const selected = selectedQuestId === quest.id;[m
+[32m+[m[32m  const tags = quest.tags ?? quest.recommended ?? [];[m
+[32m+[m[32m  const isLifeQuest = quest.category === "生活";[m
+   return `[m
+     <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${quest.id}')">[m
+       <h3>${escapeHtml(quest.title)}</h3>[m
+       <p class="muted">${escapeHtml(quest.summary)}</p>[m
+       <div class="kv">[m
+[31m-        <span>危険度</span><strong>${escapeHtml(quest.danger)}</strong>[m
+[32m+[m[32m        <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>[m
+[32m+[m[32m        <span>${isLifeQuest ? "作業負荷" : "危険度"}</span><strong class="${isLifeQuest ? "subtle-danger" : ""}">${escapeHtml(quest.danger)}</strong>[m
+         <span>地域</span><strong>${escapeHtml(quest.area)}</strong>[m
+         <span>観察対象</span><strong>${escapeHtml(quest.observationTarget)}</strong>[m
+       </div>[m
+[31m-      <div class="tags">${quest.recommended.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>[m
+[32m+[m[32m      <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>[m
+     </article>[m
+   `;[m
+ }[m
+[36m@@ -430,6 +469,7 @@[m [mfunction dispatchSummaryHtml(quest) {[m
+   return `[m
+     <div class="kv">[m
+       <span>依頼</span><strong>${escapeHtml(quest.title)}</strong>[m
+[32m+[m[32m      <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>[m
+       <span>編成</span><strong>${party.length ? party.map(getDisplayName).map(escapeHtml).join(" / ") : "未選択"}</strong>[m
+       <span>支給品</span><strong>${items.length ? items.map((item) => escapeHtml(item.name)).join(" / ") : "なし"}</strong>[m
+       <span>所要時間</span><strong>Mockでは約10秒</strong>[m
+[36m@@ -594,12 +634,13 @@[m [mfunction renderReportDetail(reportId) {[m
+         </div>[m
+         <div class="kv">[m
+           <span>地域</span><strong>${escapeHtml(quest?.area)}</strong>[m
+[32m+[m[32m          <span>分類</span><strong>${escapeHtml(quest?.category ?? "遠征")}</strong>[m
+           <span>編成</span><strong>${escapeHtml(party)}</strong>[m
+           <span>支給品</span><strong>${escapeHtml(items)}</strong>[m
+[31m-          <span>結果</span><strong>${escapeHtml(report.result)}</strong>[m
+[32m+[m[32m          <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>[m
+         </div>[m
+         <hr class="soft" />[m
+[31m-        <p class="meta-label">遠征ログ</p>[m
+[32m+[m[32m        <p class="meta-label">${quest?.category === "生活" ? "作業報告" : "遠征ログ"}</p>[m
+         <div class="log-list">[m
+           ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}[m
+         </div>[m
+[36m@@ -837,6 +878,17 @@[m [mconst questEventPools = {[m
+   }[m
+ };[m
+ [m
+[32m+[m[32mconst lifeQuestEventPools = {[m
+[32m+[m[32m  quest_wedding_support: {[m
+[32m+[m[32m    workEvents: ["長椅子の設営", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り", "飾り紐の受け渡し"],[m
+[32m+[m[32m    outcomes: ["成功", "小さな失敗", "感謝"][m
+[32m+[m[32m  },[m
+[32m+[m[32m  quest_old_house_cleanup: {[m
+[32m+[m[32m    workEvents: ["壊れた家具の撤去", "床板の確認", "古い手紙の整理", "生活用品の確認", "近所の聞き取り", "茶器の梱包", "部屋割りの確認"],[m
+[32m+[m[32m    outcomes: ["成功", "整理完了", "一部保留"][m
+[32m+[m[32m  }[m
+[32m+[m[32m};[m
+[32m+[m
+ function roadEventText(quest, eventName, party, itemIds, rng) {[m
+   const scout = findByTrait(party, "job", "斥候");[m
+   const herbalist = findByTrait(party, "job", "薬草師");[m
