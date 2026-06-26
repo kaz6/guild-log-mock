@@ -169,6 +169,30 @@ function createInitialState() {
   };
 }
 
+// ── アイテムスロットヘルパー ──────────────────────────────────────────────────
+// adventurerItemIds の値は新形式 [id1, id2] または旧形式 "id" の両方に対応する
+
+function getAdvItemIds(adventurerItemIds, advId) {
+  const val = adventurerItemIds[advId];
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(Boolean);
+  return [val];
+}
+
+function getAllItemIds(adventurerItemIds) {
+  return Object.values(adventurerItemIds).flatMap((v) => Array.isArray(v) ? v : (v ? [v] : [])).filter(Boolean);
+}
+
+function normalizeItemMap(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw).map(([advId, val]) => [
+      advId,
+      Array.isArray(val) ? val : (val ? [val, null] : [null, null])
+    ])
+  );
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -179,6 +203,8 @@ function loadState() {
     merged.quests = mergeMasterList(masterQuests, parsed.quests);
     merged.items = mergeMasterList(masterItems, parsed.items);
     merged.adventurers = mergeMasterList(masterAdventurers, parsed.adventurers);
+    // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
+    merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
     return merged;
   } catch (error) {
     console.warn("保存データの読み込みに失敗したため初期化します", error);
@@ -252,7 +278,7 @@ function render() {
     home: "ギルド",
     quests: "依頼掲示板",
     adventurers: "冒険者名簿",
-    observations: "観察記録",
+    observations: "報告メモ",
     beastlog: "いきもの図鑑",
     report: "報告書"
   };
@@ -398,7 +424,7 @@ function renderQuests() {
               <p class="eyebrow">Supplies</p>
               <h3>支給品割り当て</h3>
             </div>
-            <span class="status-pill">${Object.values(selectedAdventurerItems).filter(Boolean).length}個</span>
+            <span class="status-pill">${getAllItemIds(selectedAdventurerItems).length}個</span>
           </div>
           ${selectedAdventurerIds.length === 0
             ? `<div class="empty">冒険者を選択してください。</div>`
@@ -474,18 +500,29 @@ function selectableItemHtml(item) {
 function adventurerItemAssignHtml(advId) {
   const adv = getAdventurer(advId);
   if (!adv) return "";
-  const assignedId = selectedAdventurerItems[advId] ?? null;
+  const slots = selectedAdventurerItems[advId] ?? [null, null];
+  const slotLabels = ["スロット1", "スロット2"];
   return `
     <div class="assign-row">
       <span class="assign-name">${escapeHtml(getDisplayName(adv))}</span>
-      <div class="assign-items">
-        ${state.items.map((item) => {
-          const isAssigned = assignedId === item.id;
-          const takenByOther = !isAssigned && Object.values(selectedAdventurerItems).includes(item.id);
-          return `<button class="item-assign-btn${isAssigned ? " selected" : ""}${takenByOther ? " taken" : ""}"
-                    onclick="assignItem('${advId}', '${item.id}')"
-                    ${takenByOther ? "disabled" : ""}
+      <div class="assign-slots">
+        ${[0, 1].map((slot) => {
+          const currentItem = slots[slot];
+          const otherSlotItem = slots[slot === 0 ? 1 : 0];
+          return `
+            <div class="assign-slot">
+              <span class="slot-label">${slotLabels[slot]}${currentItem ? `：${escapeHtml(getItem(currentItem)?.name ?? "")}` : "（空）"}</span>
+              <div class="assign-items">
+                ${state.items.map((item) => {
+                  const isAssigned = currentItem === item.id;
+                  const sameAdvOtherSlot = otherSlotItem === item.id;
+                  return `<button class="item-assign-btn${isAssigned ? " selected" : ""}${sameAdvOtherSlot ? " taken" : ""}"
+                    onclick="${sameAdvOtherSlot ? "" : `assignItem('${advId}', ${slot}, '${item.id}')`}"
+                    ${sameAdvOtherSlot ? "disabled" : ""}
                     title="${escapeHtml(item.note)}">${escapeHtml(item.name)}</button>`;
+                }).join("")}
+              </div>
+            </div>`;
         }).join("")}
       </div>
     </div>
@@ -495,8 +532,8 @@ function adventurerItemAssignHtml(advId) {
 function dispatchSummaryHtml(quest) {
   const party = selectedAdventurerIds.map(getAdventurer).filter(Boolean);
   const itemsText = party.map((adv) => {
-    const item = getItem(selectedAdventurerItems[adv.id]);
-    return item ? `${escapeHtml(getDisplayName(adv))}：${escapeHtml(item.name)}` : null;
+    const names = getAdvItemIds(selectedAdventurerItems, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+    return names.length > 0 ? `${escapeHtml(getDisplayName(adv))}：${names.map(escapeHtml).join("・")}` : null;
   }).filter(Boolean).join(" / ") || "なし";
   return `
     <div class="kv">
@@ -604,12 +641,12 @@ function renderObservations() {
       <div class="card-body">
         <div class="card-title">
           <div>
-            <p class="eyebrow">Observation Notes</p>
-            <h3>観察記録</h3>
+            <p class="eyebrow">Field Notes</p>
+            <h3>報告メモ</h3>
           </div>
           <span class="status-pill">${state.observations.length}件</span>
         </div>
-        <p class="muted">遠征で確認された証言・事実・推定・次に調べることを記録します。</p>
+        <p class="muted">遠征から持ち帰った証言・確認された事実・推定・次に調べることの断片をまとめた素材置き場です。いきもの図鑑に転記する際の参考として使ってください。</p>
         <div class="grid-2" style="margin-top: 16px;">
           ${state.observations.map(observationHtml).join("")}
         </div>
@@ -836,8 +873,8 @@ function renderReportDetail(reportId) {
   const items = raidItems && Object.keys(raidItems).length > 0
     ? report.adventurerIds.map((advId) => {
         const adv = getAdventurer(advId);
-        const item = getItem(raidItems[advId]);
-        return adv && item ? `${getDisplayName(adv)}：${item.name}` : null;
+        const names = getAdvItemIds(raidItems, advId).map((iId) => getItem(iId)?.name).filter(Boolean);
+        return adv && names.length > 0 ? `${getDisplayName(adv)}：${names.join("・")}` : null;
       }).filter(Boolean).join(" / ") || "なし"
     : report.itemIds?.map(getItem).filter(Boolean).map((i) => i.name).join(" / ") || "なし";
 
@@ -864,14 +901,9 @@ function renderReportDetail(reportId) {
           ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}
         </div>
         ${report.observationNotes ? observationNotesHtml(report.observationNotes) : ""}
-        <hr class="soft" />
-        <p class="meta-label">観察記録更新</p>
-        ${report.observationText.length === 0
-          ? `<div class="empty">この報告書で更新された観察記録はありません。</div>`
-          : `<div class="log-list">${report.observationText.map((line) => `<div class="log-line afterglow">${escapeHtml(line)}</div>`).join("")}</div>`}
         <div class="button-row" style="margin-top: 18px;">
           <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
-          <button class="secondary-button" onclick="setRoute('observations')">観察記録を見る</button>
+          <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
           <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
           ${quest?.observationTarget && quest.observationTarget !== "なし"
             ? `<button class="secondary-button" onclick="openBeastLogFromReport('${report.id}')">図鑑を編集</button>`
@@ -902,13 +934,15 @@ function toggleAdventurer(id) {
   render();
 }
 
-function assignItem(advId, itemId) {
-  if (selectedAdventurerItems[advId] === itemId) {
-    delete selectedAdventurerItems[advId];
+function assignItem(advId, slot, itemId) {
+  if (!selectedAdventurerItems[advId]) selectedAdventurerItems[advId] = [null, null];
+  const slots = selectedAdventurerItems[advId];
+  if (slots[slot] === itemId) {
+    slots[slot] = null;
   } else {
-    const prev = Object.entries(selectedAdventurerItems).find(([, iId]) => iId === itemId);
-    if (prev) delete selectedAdventurerItems[prev[0]];
-    selectedAdventurerItems[advId] = itemId;
+    const otherSlot = slot === 0 ? 1 : 0;
+    if (slots[otherSlot] === itemId) return; // 同じ冒険者の別スロットに同じ支給品は不可
+    slots[slot] = itemId;
   }
   saveState();
   render();
@@ -933,8 +967,8 @@ function startExpedition() {
     id: `exp_${Date.now()}`,
     questId: selectedQuestId,
     adventurerIds: [...selectedAdventurerIds],
-    adventurerItemIds: { ...selectedAdventurerItems },
-    itemIds: Object.values(selectedAdventurerItems).filter(Boolean),
+    adventurerItemIds: JSON.parse(JSON.stringify(selectedAdventurerItems)),
+    itemIds: getAllItemIds(selectedAdventurerItems),
     startTime: Date.now(),
     durationMs: DEMO_DURATION_MS,
     seed: Math.floor(Math.random() * 1000000)
@@ -1403,10 +1437,14 @@ function lifeQuestPersonalEventText(quest, party, rng) {
 
 function supplyEventText(quest, party, adventurerItemIds, rng) {
   const solo = party.length === 1;
-  const has = (id) => Object.values(adventurerItemIds).includes(id);
+  const has = (id) => getAllItemIds(adventurerItemIds).includes(id);
   const holderAdv = (itemId) => {
-    const entry = Object.entries(adventurerItemIds).find(([, iId]) => iId === itemId);
-    return entry ? (getAdventurer(entry[0]) ?? party[0]) : party[0];
+    for (const advId of Object.keys(adventurerItemIds)) {
+      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
+        return getAdventurer(advId) ?? party[0];
+      }
+    }
+    return party[0];
   };
   const h = (itemId) => getDisplayName(holderAdv(itemId));
 
@@ -1756,10 +1794,12 @@ function generateAdventurerObservationNote(target, adv, rng) {
   return `${getDisplayName(adv)}は${target}の様子を確認した。短い観察だったため、詳細な記録はできなかった。`;
 }
 
-function generateObservationNotes(quest, party, itemIds, rng) {
-  if (!itemIds.includes("item_obs_sheet")) return null;
+function generateObservationNotes(quest, party, adventurerItemIds, rng) {
   if (!quest.observationTarget || quest.observationTarget === "なし") return null;
-  const notes = party.map((adv) => ({
+  // 観察記録票を所持している冒険者だけが記録を書ける
+  const holders = party.filter((adv) => getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet"));
+  if (holders.length === 0) return null;
+  const notes = holders.map((adv) => ({
     adventurerId: adv.id,
     name: getDisplayName(adv),
     text: generateAdventurerObservationNote(quest.observationTarget, adv, rng)
@@ -1791,7 +1831,7 @@ function generateReport(expedition) {
     const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
     const personal = lifeQuestPersonalEventText(quest, party, rng);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
-    const observationNotes = generateObservationNotes(quest, party, itemIds, rng);
+    const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
     const arrivalLines = {
       quest_wedding_support: [
@@ -1856,11 +1896,12 @@ function generateReport(expedition) {
 
   const outcomeInfo = outcomeText(quest, party, itemIds, outcome, rng);
   // 観察記録票を持っている場合のみ、観察記録本体を更新する
-  const observationUpdates = itemIds.includes("item_obs_sheet") ? observationUpdateFor(quest, outcome, roadEvents) : [];
+  const hasObsSheet = getAllItemIds(adventurerItemIds).includes("item_obs_sheet");
+  const observationUpdates = hasObsSheet ? observationUpdateFor(quest, outcome, roadEvents) : [];
   const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng);
-  const observationNotes = generateObservationNotes(quest, party, itemIds, rng);
+  const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
   add("", `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
   add("", `編成：${formatNames(party)}。支給品：${items.length ? items.map((item) => item.name).join("、") : "なし"}。`);
