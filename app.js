@@ -13,7 +13,8 @@ const masterAdventurers = [
     background: "郵便配達人",
     memo: "道をよく覚えている。無理をしない判断ができる。手紙配達系の依頼に向いていそう。",
     status: "待機中",
-    history: []
+    history: [],
+    stats: { memory: 5 }
   },
   {
     id: "adv_gadd",
@@ -25,7 +26,8 @@ const masterAdventurers = [
     background: "宿場の用心棒",
     memo: "前に出る癖がある。危険度が低い依頼でも、念のため包帯を持たせたい。",
     status: "待機中",
-    history: []
+    history: [],
+    stats: { memory: 2 }
   },
   {
     id: "adv_elne",
@@ -37,7 +39,8 @@ const masterAdventurers = [
     background: "村の調合係",
     memo: "採集依頼で頼りになる。休憩時の観察が細かい。",
     status: "待機中",
-    history: []
+    history: [],
+    stats: { memory: 4 }
   }
 ];
 
@@ -104,7 +107,8 @@ const masterItems = [
   { id: "item_map", name: "古地図", tags: ["道迷い", "街道照合"], note: "街道・森・古い道標の記録照合に使える。" },
   { id: "item_whistle", name: "笛", tags: ["合流", "撤退"], note: "視界が悪い場所での合流ログに影響する。" },
   { id: "item_pot", name: "携帯鍋", tags: ["休憩", "士気"], note: "休憩ログや関係性ログに影響する。" },
-  { id: "item_oilcase", name: "油紙の手紙入れ", tags: ["手紙", "雨", "記録保護"], note: "紙の依頼書や手紙を濡らさず運ぶ。" }
+  { id: "item_oilcase", name: "油紙の手紙入れ", tags: ["手紙", "雨", "記録保護"], note: "紙の依頼書や手紙を濡らさず運ぶ。" },
+  { id: "item_obs_sheet", name: "観察記録票", tags: ["観察", "記録", "生物", "図鑑"], note: "観察対象がいる依頼で持たせると、報告書に冒険者ごとの観察メモが追加される。" }
 ];
 
 const masterObservations = [
@@ -173,6 +177,7 @@ function loadState() {
     const merged = { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };
     merged.quests = mergeMasterList(masterQuests, parsed.quests);
     merged.items = mergeMasterList(masterItems, parsed.items);
+    merged.adventurers = mergeMasterList(masterAdventurers, parsed.adventurers);
     return merged;
   } catch (error) {
     console.warn("保存データの読み込みに失敗したため初期化します", error);
@@ -624,6 +629,21 @@ function observationSectionHtml(title, lines, obsId, key) {
   `;
 }
 
+function observationNotesHtml(obsNotes) {
+  return `
+    <hr class="soft" />
+    <p class="meta-label">観察記録票：${escapeHtml(obsNotes.target)}</p>
+    <div class="obs-notes-grid">
+      ${obsNotes.notes.map((n) => `
+        <div class="obs-note-card">
+          <p class="obs-note-author">${escapeHtml(n.name)}の記録</p>
+          <p class="obs-note-text muted">「${escapeHtml(n.text)}」</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderReportDetail(reportId) {
   const report = state.reports.find((item) => item.id === reportId);
   if (!report) {
@@ -656,6 +676,7 @@ function renderReportDetail(reportId) {
         <div class="log-list">
           ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}
         </div>
+        ${report.observationNotes ? observationNotesHtml(report.observationNotes) : ""}
         <hr class="soft" />
         <p class="meta-label">観察記録更新</p>
         ${report.observationText.length === 0
@@ -1394,6 +1415,79 @@ function observationTextFor(updates) {
   return texts;
 }
 
+function generateRabbitNote(adv, rng) {
+  const memory = adv.stats?.memory ?? 3;
+  const isCareful = adv.personality === "慎重";
+  const isBold = adv.personality === "豪胆";
+  const isCaregiver = adv.personality === "世話焼き";
+  const isPostman = adv.background === "郵便配達人";
+  const isGuard = adv.background === "宿場の用心棒";
+  const isCompounder = adv.background === "村の調合係";
+  const isScout = adv.job === "斥候";
+  const isHerbalist = adv.job === "薬草師";
+  const isWarrior = adv.job === "戦士";
+
+  if (memory >= 4) {
+    if (isScout || isCareful) return pickOne([
+      "耳の先が黒く、荷物袋の匂いに反応する。草むらへ逃げる際、後ろ脚で泥を跳ね上げた。こちらを追う様子はなかった。距離を保てば接触は避けられる。",
+      "雨の中でも匂いへの反応は鋭かった。逃走方向は一定で、草むらの奥へ消えた。荷物の位置を変えれば被害は防げると思う。"
+    ], rng);
+    if (isHerbalist || isCompounder) return pickOne([
+      "荷物袋を噛まれた冒険者がいたため、次回は袋の口を固く結ぶ必要がある。薬草の匂いに引き寄せられたかもしれない。",
+      "薬草袋に噛みついた。香りの強い草が外側に出ていたのが原因と思われる。袋の口は必ず閉じること。"
+    ], rng);
+    if (isCaregiver) return pickOne([
+      "仲間の袋を噛まれた。怪我はなかったが、次回は荷物の確認を出発前にしておきたい。追い払うのは容易だった。",
+      "荷物袋に飛びついた。仲間に怪我はなし。ただし食べ物や薬草は外側に置かないこと。"
+    ], rng);
+    if (isPostman) return pickOne([
+      "袋の匂いに反応して近づいてきた。宛先のある荷物は内側へ移した。追えば逃げるので危険度は低い。",
+      "荷物袋を狙った。大事な荷物はなるべく内側に。追えば逃げる。前もって対策できる。"
+    ], rng);
+    return pickOne([
+      "小型の獣。耳の先が黒い。荷物袋の匂いに反応して飛びついた。追えば逃げた。草むらの奥に消えた。",
+      "荷物袋を噛もうとした。素早いが、追い払うのは難しくなかった。次回は荷物の位置に注意する。"
+    ], rng);
+  }
+
+  if (memory === 3) {
+    if (isBold || isGuard || isWarrior) return pickOne([
+      "小さいが素早い。袋を狙う。追えば逃げる。大した危険はないが、荷物の管理には気をつけること。",
+      "荷物袋に飛びついた小型の獣。追い払ったら逃げた。次も同じ対応でいい。"
+    ], rng);
+    return pickOne([
+      "荷物袋に近づいてきた。追えば逃げた。草むらに隠れた。",
+      "匂いに引き寄せられたようだ。そこまで大きな危険ではなかった。"
+    ], rng);
+  }
+
+  if (isBold || isWarrior || isGuard) return pickOne([
+    "小さい。噛む。袋を狙う。追えば逃げる。腹を空かせていたんだろう。",
+    "弱い。追えば逃げる。荷物には注意。素手でも追い払える。"
+  ], rng);
+
+  return pickOne([
+    "小さい獣がいた。袋を噛もうとした。すぐ逃げた。",
+    "荷物をいたずらされた。危なくはなかった。"
+  ], rng);
+}
+
+function generateAdventurerObservationNote(target, adv, rng) {
+  if (target === "森喰い兎") return generateRabbitNote(adv, rng);
+  return `${getDisplayName(adv)}は${target}の様子を確認した。短い観察だったため、詳細な記録はできなかった。`;
+}
+
+function generateObservationNotes(quest, party, itemIds, rng) {
+  if (!itemIds.includes("item_obs_sheet")) return null;
+  if (!quest.observationTarget || quest.observationTarget === "なし") return null;
+  const notes = party.map((adv) => ({
+    adventurerId: adv.id,
+    name: getDisplayName(adv),
+    text: generateAdventurerObservationNote(quest.observationTarget, adv, rng)
+  }));
+  return { target: quest.observationTarget, notes };
+}
+
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -1415,6 +1509,7 @@ function generateReport(expedition) {
     const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
     const personal = lifeQuestPersonalEventText(quest, party, rng);
     const supply = supplyEventText(quest, party, itemIds, rng);
+    const observationNotes = generateObservationNotes(quest, party, itemIds, rng);
 
     const arrivalLines = {
       quest_wedding_support: [
@@ -1457,6 +1552,7 @@ function generateReport(expedition) {
       logs,
       observationUpdates: [],
       observationText: [],
+      observationNotes,
       hiddenTags: { workEvents, outcome, recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
@@ -1480,6 +1576,7 @@ function generateReport(expedition) {
   const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, itemIds, rng);
+  const observationNotes = generateObservationNotes(quest, party, itemIds, rng);
 
   add("", `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
   add("", `編成：${formatNames(party)}。支給品：${items.length ? items.map((item) => item.name).join("、") : "なし"}。`);
@@ -1511,6 +1608,7 @@ function generateReport(expedition) {
     logs,
     observationUpdates,
     observationText,
+    observationNotes,
     hiddenTags: {
       weather,
       roadEvents,

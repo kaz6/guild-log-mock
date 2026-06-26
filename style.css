@@ -493,6 +493,33 @@ textarea {
   list-style-position: inside;
 }
 
+.obs-notes-grid {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.obs-note-card {
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 238, 205, 0.04);
+}
+
+.obs-note-author {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--accent-2);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.obs-note-text {
+  margin: 0;
+  line-height: 1.85;
+  font-style: italic;
+}
+
 hr.soft {
   border: 0;
   border-top: 1px solid var(--line);
