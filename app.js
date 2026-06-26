@@ -164,7 +164,8 @@ function createInitialState() {
     selectedQuestId: null,
     selectedAdventurerIds: [],
     selectedAdventurerItems: {},
-    lastObservationUpdate: null
+    lastObservationUpdate: null,
+    beastLog: {}
   };
 }
 
@@ -252,6 +253,7 @@ function render() {
     quests: "依頼掲示板",
     adventurers: "冒険者名簿",
     observations: "観察記録",
+    beastlog: "いきもの図鑑",
     report: "報告書"
   };
   viewTitle.textContent = titles[route] ?? "ギルド";
@@ -260,6 +262,7 @@ function render() {
   if (route === "quests") renderQuests();
   if (route === "adventurers") renderAdventurers();
   if (route === "observations") renderObservations();
+  if (route === "beastlog") renderBeastLog();
   if (route === "report") renderReportDetail(state.activeReportId);
 }
 
@@ -667,6 +670,160 @@ function observationNotesHtml(obsNotes) {
   `;
 }
 
+// ── いきもの図鑑 ──────────────────────────────────────────────────────────────
+
+function renderBeastLog() {
+  const entries = Object.values(state.beastLog ?? {});
+  app.innerHTML = `
+    <section class="card">
+      <div class="card-body">
+        <div class="card-title">
+          <div>
+            <p class="eyebrow">Beast Log</p>
+            <h3>いきもの図鑑</h3>
+          </div>
+          <span class="status-pill">${entries.length}件</span>
+        </div>
+        <p class="muted" style="margin-bottom: 12px;">遠征で記録した生物のメモです。報告書の観察記録票を参照しながら自由に転記・編集できます。</p>
+        ${entries.length === 0
+          ? `<div class="empty">まだ記録はありません。<br>観察記録票を持たせた遠征の報告書から「図鑑を編集」ボタンで転記できます。</div>`
+          : `<div class="grid-2" style="margin-top: 4px;">${entries.map(beastLogCardHtml).join("")}</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function beastLogCardHtml(entry) {
+  const eName = escapeHtml(entry.target);
+  const eArea = escapeHtml(entry.area || "地域未記入");
+  const eCat  = escapeHtml(entry.category || "分類未記入");
+  return `
+    <article class="beast-log-card">
+      <div class="card-title">
+        <div>
+          <h3>${eName}</h3>
+          <p class="muted">${eCat} &middot; ${eArea}</p>
+        </div>
+        <button class="small-button" onclick="openBeastLogEditor('${eName}', '${eArea}', null)">編集</button>
+      </div>
+      ${entry.appearance ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
+      ${entry.behavior  ? `<p class="meta-label">行動</p><p class="muted">${escapeHtml(entry.behavior)}</p>` : ""}
+      ${entry.notes     ? `<p class="meta-label">観察メモ</p><p class="muted">${escapeHtml(entry.notes)}</p>` : ""}
+    </article>
+  `;
+}
+
+function openBeastLogFromReport(reportId) {
+  const report = state.reports.find((r) => r.id === reportId);
+  if (!report) return;
+  const quest = getQuest(report.questId);
+  if (!quest || !quest.observationTarget || quest.observationTarget === "なし") return;
+  const targetName = quest.observationTarget;
+  const existing = state.beastLog[targetName];
+  const area = existing?.area || quest.area || "";
+  openBeastLogEditor(targetName, area, report.observationNotes ?? null);
+}
+
+function openBeastLogEditor(targetName, area, obsNotes) {
+  const entry = state.beastLog[targetName] ?? {
+    target: targetName,
+    area: area || "",
+    category: "",
+    appearance: "",
+    behavior: "",
+    danger: "",
+    effectiveMeasures: "",
+    ineffectiveMeasures: "",
+    notes: "",
+    nextCheck: ""
+  };
+
+  let overlay = document.getElementById("beastLogOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "beastLogOverlay";
+    overlay.className = "beast-log-overlay";
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = beastLogEditorHtml(entry, obsNotes);
+  overlay.classList.add("open");
+}
+
+function closeBeastLogEditor() {
+  const overlay = document.getElementById("beastLogOverlay");
+  if (overlay) overlay.classList.remove("open");
+}
+
+function saveBeastLogEntry() {
+  const targetName = document.getElementById("bl_target").value.trim();
+  if (!targetName) return;
+  state.beastLog[targetName] = {
+    target: targetName,
+    area: document.getElementById("bl_area").value.trim(),
+    category: document.getElementById("bl_category").value.trim(),
+    appearance: document.getElementById("bl_appearance").value.trim(),
+    behavior: document.getElementById("bl_behavior").value.trim(),
+    danger: document.getElementById("bl_danger").value.trim(),
+    effectiveMeasures: document.getElementById("bl_effective").value.trim(),
+    ineffectiveMeasures: document.getElementById("bl_ineffective").value.trim(),
+    notes: document.getElementById("bl_notes").value.trim(),
+    nextCheck: document.getElementById("bl_nextcheck").value.trim()
+  };
+  saveState();
+  closeBeastLogEditor();
+  render();
+}
+
+function beastLogEditorHtml(entry, obsNotes) {
+  const refHtml = obsNotes && obsNotes.notes && obsNotes.notes.length > 0 ? `
+    <div class="bl-ref-section">
+      <p class="meta-label">観察記録票（転記の参考）</p>
+      <div class="obs-notes-grid">
+        ${obsNotes.notes.map((n) => `
+          <div class="obs-note-card">
+            <p class="obs-note-author">${escapeHtml(n.name)}の記録</p>
+            <p class="obs-note-text muted">「${escapeHtml(n.text)}」</p>
+          </div>
+        `).join("")}
+      </div>
+    </div>` : "";
+
+  const f = (id, label, val, ph, multiline = false) => {
+    const esc = escapeHtml(val || "");
+    return multiline
+      ? `<div class="bl-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${ph}">${esc}</textarea></div>`
+      : `<div class="bl-form-row"><label for="${id}">${label}</label><input id="${id}" value="${esc}" placeholder="${ph}" /></div>`;
+  };
+
+  return `
+    <div class="bl-modal-box">
+      <div class="bl-modal-header">
+        <h3>いきもの図鑑を編集</h3>
+        <button class="ghost-button" onclick="closeBeastLogEditor()">✕ 閉じる</button>
+      </div>
+      <div class="bl-modal-body">
+        ${refHtml}
+        <div class="bl-form">
+          ${f("bl_target",      "対象名",           entry.target,              "例：森喰い兎")}
+          ${f("bl_category",    "分類",              entry.category,            "例：小型獣、植物")}
+          ${f("bl_area",        "遭遇地域",          entry.area,                "例：薄明の森")}
+          ${f("bl_appearance",  "外見・特徴",        entry.appearance,          "体の大きさ、色、特徴的な部位など", true)}
+          ${f("bl_behavior",    "行動",              entry.behavior,            "どう動くか、何を狙うか、いつ活動するか", true)}
+          ${f("bl_danger",      "危険性",            entry.danger,              "直接の攻撃、荷物への被害、感染など", true)}
+          ${f("bl_effective",   "有効だった対処",    entry.effectiveMeasures,   "追い払えた方法、回避できた状況など", true)}
+          ${f("bl_ineffective", "効かなかった対処",  entry.ineffectiveMeasures, "試したが効果がなかったこと", true)}
+          ${f("bl_notes",       "観察メモ",          entry.notes,               "気になったこと、次回への引き継ぎ", true)}
+          ${f("bl_nextcheck",   "次に確認したいこと", entry.nextCheck,           "次回の観察で調べたいこと", true)}
+          <div class="button-row" style="margin-top: 18px;">
+            <button class="primary-button" onclick="saveBeastLogEntry()">図鑑に保存</button>
+            <button class="ghost-button" onclick="closeBeastLogEditor()">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderReportDetail(reportId) {
   const report = state.reports.find((item) => item.id === reportId);
   if (!report) {
@@ -716,6 +873,9 @@ function renderReportDetail(reportId) {
           <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
           <button class="secondary-button" onclick="setRoute('observations')">観察記録を見る</button>
           <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
+          ${quest?.observationTarget && quest.observationTarget !== "なし"
+            ? `<button class="secondary-button" onclick="openBeastLogFromReport('${report.id}')">図鑑を編集</button>`
+            : ""}
         </div>
       </div>
     </section>
@@ -1244,45 +1404,73 @@ function lifeQuestPersonalEventText(quest, party, rng) {
 function supplyEventText(quest, party, adventurerItemIds, rng) {
   const solo = party.length === 1;
   const has = (id) => Object.values(adventurerItemIds).includes(id);
-  const holder = (itemId) => {
+  const holderAdv = (itemId) => {
     const entry = Object.entries(adventurerItemIds).find(([, iId]) => iId === itemId);
     return entry ? (getAdventurer(entry[0]) ?? party[0]) : party[0];
   };
-  const hName = (itemId) => getDisplayName(holder(itemId));
+  const h = (itemId) => getDisplayName(holderAdv(itemId));
+
+  // 所持者以外に長けた冒険者がいれば表示名を返す。いなければ null
+  const expertFor = (itemId, checkers) => {
+    const hAdv = holderAdv(itemId);
+    for (const check of checkers) {
+      const cand = check(party);
+      if (cand && cand.id !== hAdv.id) return getDisplayName(cand);
+    }
+    return null;
+  };
+
   const lines = [];
 
   if (has("item_bandage")) {
-    const h = hName("item_bandage");
-    lines.push(`${h}が持っていた包帯を荷紐の補修に使った。怪我のためではなかったが、役に立った。`);
-    lines.push(`小さな擦り傷が出たが、${h}が包帯で処置して行動を継続できた。報告書には負傷軽微とある。`);
+    const expert = expertFor("item_bandage", [(p) => p.find((a) => a.job === "薬草師")]);
+    if (expert && !solo) {
+      lines.push(`${h("item_bandage")}は自分の荷から包帯を取り出した。手当ては${expert}が引き取り、素早く処置を終えた。`);
+    } else {
+      lines.push(`${h("item_bandage")}は自分の荷から包帯を取り出し、擦り傷に当てた。結び目は少し雑だったが、応急処置としては十分だった。`);
+    }
+    lines.push(`${h("item_bandage")}が持っていた包帯を荷紐の補修に使った。怪我のためではなかったが、役に立った。`);
   }
   if (has("item_map")) {
-    const h = hName("item_map");
-    lines.push(`${h}は古地図を広げ、今の道と昔の道のズレを照合した。迷う前に違和感へ気づけたのが大きい。`);
-    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h}はその線を目印に進んだ。`);
+    const expert = expertFor("item_map", [(p) => p.find((a) => a.job === "斥候")]);
+    if (expert && !solo) {
+      lines.push(`${h("item_map")}は自分に預けられた古地図を広げた。${expert}が横から覗き込み、今の道との照合を手伝った。`);
+    } else {
+      lines.push(`${h("item_map")}は自分に預けられた古地図を広げ、道標の位置を確認した。迷う前に違和感に気づけたのが大きい。`);
+    }
+    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
   }
   if (has("item_whistle")) {
-    const h = hName("item_whistle");
     if (solo) {
-      lines.push(`視界が悪くなった時、${h}は笛を短く吹いて自分の位置を確かめた。音の響き方で周囲の地形が分かる。`);
+      lines.push(`視界が悪くなった時、${h("item_whistle")}は笛を短く吹いて自分の位置を確かめた。音の響き方で周囲の地形が分かる。`);
     } else {
-      lines.push(`視界が悪くなった時、${h}が笛を短く吹いた。音を聞いて全員が集まった。合流手段として報告書に記録された。`);
-      lines.push(`${h}が試しに笛を吹き、思ったより大きな音に場が静まった。以後、合図は短く一回に決まった。`);
+      lines.push(`視界が悪くなった時、${h("item_whistle")}が笛を短く吹いた。音を聞いて全員が集まった。合流手段として報告書に記録された。`);
+      lines.push(`${h("item_whistle")}が試しに笛を吹いたら、思ったより大きな音が出た。以後、合図は短く一回に決まった。`);
     }
   }
   if (has("item_pot")) {
-    const h = hName("item_pot");
-    lines.push(`${h}は携帯鍋で湯を沸かし、採集物の泥を落とした。休憩の短い時間が、そのまま確認作業になった。`);
-    lines.push(`${h}が携帯鍋でスープを作った。${solo ? "帰り道の足取りが少し軽くなった。" : "評判は分かれたが、帰り道の足取りは少し軽くなった。"}`);
+    const expert = expertFor("item_pot", [
+      (p) => p.find((a) => a.background === "村の調合係"),
+      (p) => p.find((a) => a.job === "薬草師")
+    ]);
+    if (expert && !solo) {
+      lines.push(`${h("item_pot")}は自分に預けられていた携帯鍋を取り出した。火加減は${expert}が横から口を出し、簡単なスープができあがった。`);
+    } else {
+      lines.push(`${h("item_pot")}は携帯鍋で湯を沸かした。採集物の泥を落とすのに使い、休憩が確認作業を兼ねた。`);
+    }
+    lines.push(`${h("item_pot")}が携帯鍋でスープを作った。${solo ? "帰り道の足取りが少し軽くなった。" : "評判は分かれたが、帰り道の足取りは少し軽くなった。"}`);
   }
   if (has("item_oilcase")) {
-    const h = hName("item_oilcase");
-    lines.push(`${h}が持っていた油紙の手紙入れにより、紙の依頼書とメモは濡れずに済んだ。地味だが大事な仕事だ。`);
-    lines.push(`${h}は濡れた手で依頼書に触れないよう、油紙の上から内容を確認した。`);
+    const expert = expertFor("item_oilcase", [(p) => p.find((a) => a.background === "郵便配達人")]);
+    if (expert && !solo) {
+      lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れを、${expert}が依頼書の保護に使うよう提案した。紙は濡れずに済んだ。`);
+    } else {
+      lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れにより、紙の依頼書とメモは濡れずに済んだ。地味だが大事な仕事だ。`);
+    }
+    lines.push(`${h("item_oilcase")}は濡れた手で依頼書に触れないよう、油紙の上から内容を確認した。`);
   }
   if (has("item_obs_sheet")) {
-    const h = hName("item_obs_sheet");
-    lines.push(`${h}は観察記録票を上着の内側にしまっていた。帰還後に報告書へ転記するためだ。`);
+    lines.push(`${h("item_obs_sheet")}は観察記録票を上着の内側にしまっていた。帰還後に報告書へ転記するためだ。`);
   }
   if (lines.length === 0) return null;
   return pickOne(lines, rng);
@@ -1667,7 +1855,8 @@ function generateReport(expedition) {
   if (quest.id === "quest_signpost" && itemIds.includes("item_map") && rng() < 0.5) outcome = pickOne(["成功", "応急処置", "照合保留"], rng);
 
   const outcomeInfo = outcomeText(quest, party, itemIds, outcome, rng);
-  const observationUpdates = observationUpdateFor(quest, outcome, roadEvents);
+  // 観察記録票を持っている場合のみ、観察記録本体を更新する
+  const observationUpdates = itemIds.includes("item_obs_sheet") ? observationUpdateFor(quest, outcome, roadEvents) : [];
   const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng);
