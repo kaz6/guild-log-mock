@@ -159,7 +159,8 @@ function createInitialState() {
     },
     selectedQuestId: null,
     selectedAdventurerIds: [],
-    selectedItemIds: []
+    selectedItemIds: [],
+    lastObservationUpdate: null
   };
 }
 
@@ -586,6 +587,14 @@ function renderObservations() {
   `;
 }
 
+function isNewObservationLine(obsId, key, line) {
+  const luo = state.lastObservationUpdate;
+  if (!luo) return false;
+  const item = luo.items.find((i) => i.id === obsId);
+  if (!item) return false;
+  return (item.keys[key] ?? []).includes(line);
+}
+
 function observationHtml(obs) {
   return `
     <article class="observation-card">
@@ -595,19 +604,22 @@ function observationHtml(obs) {
           <p class="muted">分類：${escapeHtml(obs.category)}</p>
         </div>
       </div>
-      ${observationSectionHtml("証言", obs.testimony)}
-      ${observationSectionHtml("確認された事実", obs.facts)}
-      ${observationSectionHtml("推定", obs.inference)}
-      ${observationSectionHtml("次に調べること", obs.next)}
+      ${observationSectionHtml("証言", obs.testimony, obs.id, "testimony")}
+      ${observationSectionHtml("確認された事実", obs.facts, obs.id, "facts")}
+      ${observationSectionHtml("推定", obs.inference, obs.id, "inference")}
+      ${observationSectionHtml("次に調べること", obs.next, obs.id, "next")}
     </article>
   `;
 }
 
-function observationSectionHtml(title, lines) {
+function observationSectionHtml(title, lines, obsId, key) {
   return `
     <p class="meta-label">${escapeHtml(title)}</p>
     <ul>
-      ${lines.map((line) => `<li class="muted">${escapeHtml(line)}</li>`).join("")}
+      ${lines.map((line) => {
+        const isNew = obsId && key && isNewObservationLine(obsId, key, line);
+        return `<li class="muted${isNew ? " new-observation-highlight" : ""}">${escapeHtml(line)}</li>`;
+      }).join("")}
     </ul>
   `;
 }
@@ -753,15 +765,27 @@ function applyReport(report) {
   state.worldState.attachmentScore += report.adventurerIds.length;
   if (report.observationUpdates.length > 0) state.worldState.anomalyPressure += 0;
 
+  const newHighlightItems = [];
   report.observationUpdates.forEach((update) => {
     const obs = state.observations.find((item) => item.id === update.id);
     if (!obs) return;
+    const addedKeys = {};
     for (const [key, lines] of Object.entries(update.add)) {
+      const added = [];
       lines.forEach((line) => {
-        if (!obs[key].includes(line)) obs[key].push(line);
+        if (!obs[key].includes(line)) {
+          obs[key].push(line);
+          added.push(line);
+        }
       });
+      if (added.length > 0) addedKeys[key] = added;
     }
+    if (Object.keys(addedKeys).length > 0) newHighlightItems.push({ id: update.id, keys: addedKeys });
   });
+
+  if (newHighlightItems.length > 0) {
+    state.lastObservationUpdate = { reportId: report.id, items: newHighlightItems };
+  }
 }
 
 function editAdventurer(id) {
@@ -1024,16 +1048,16 @@ function workEventText(quest, eventName, party, itemIds, rng) {
       `床板の下が空洞になっている場所があった。${name(brave)}が先に踏んで確かめ、他の者を安全な位置から歩かせた。`
     ],
     古い手紙の整理: [
-      `${name(post)}は古い手紙の束を見て、受取人の名前と差出地の記録を丁寧に写し取った。処分前に記録を残す習慣だ。`,
-      `古い手紙の中に宛先不明のものがあった。${name(careful)}は捨てずに封筒ごとギルドへ持ち帰ることを提案した。`
+      `古い手紙が数通出てきた。宛名の部分は雨染みで読めなかった。${name(post)}はそのまま袋に入れ、依頼人へ渡すことにした。封は開けなかった。`,
+      `${name(careful)}は手紙を一枚ずつ確かめたが、差出人も宛名も判別できなかった。「誰かが大事にしていたものだと思います」と言い、別に包んだ。`
     ],
     生活用品の確認: [
-      `棚の奥から古い生活用品が出てきた。${name(caregiver)}は使えるものと傷んでいるものを分け、分かりやすく積み直した。`,
-      `${name(herbalist)}は薬瓶らしきものを見つけ、中身の匂いを確かめた。「もう使えないが、瓶は洗えば使える」と言った。`
+      `棚の奥から古い生活用品が出てきた。誰かが確かに暮らしていた跡だった。${name(caregiver)}は使えるものと傷んでいるものを分け、積み直した。`,
+      `割れた茶器や使い込まれた籠が出てきた。${name(herbalist)}は薬瓶らしきものも見つけたが、中身は空だった。`
     ],
     近所の聞き取り: [
-      `近所の住民が話しかけてきた。${name(post)}は丁寧に応じ、家の元の住人について聞き取った。記録として残す価値があった。`,
-      `${name(caregiver)}は聞き取りの最後に「何か困っていることがあれば」と添えた。住民は少し表情を緩めた。`
+      `近所の住民に話を聞いたが、この家に誰が住んでいたのかははっきり覚えていなかった。「ずいぶん前から人の出入りはなかった」とだけ言った。`,
+      `${name(caregiver)}が話しかけると、住民は少し考えてから「古い家だから」と言った。それ以上のことは、誰も知らないようだった。`
     ],
     茶器の梱包: [
       `茶器の梱包は${name(careful)}が担当した。割れないよう布を間に挟み、重いものを下に積んだ。`,
@@ -1295,23 +1319,23 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
       成功: {
         result: "成功",
         summary: "廃屋の片付けを完了した。整理品と要確認品を分けて引き渡した。",
-        line: `一行は部屋を順番に片付け、処分品・保管品・要確認品を分けて依頼人へ報告した。古い手紙は別に包んで渡した。`,
-        after: `${getDisplayName(careful)}の記録メモが、依頼人の確認作業を大きく助けた。几帳面な仕事だったと思う。`,
-        history: "廃屋の片付けを完了。古い手紙と生活用品を整理して引き渡した。"
+        line: `一行は部屋を順番に片付け、処分品・保管品・要確認品を分けて依頼人へ報告した。住人の名前は最後まで分からなかった。`,
+        after: `報告書には「住人名は不明。生活用品のみ整理」と記されている。${getDisplayName(careful)}の文字は丁寧だった。`,
+        history: "廃屋の片付けを完了。住人名は不明のまま、生活用品を整理して引き渡した。"
       },
       整理完了: {
         result: "整理完了",
         summary: "廃屋の整理は完了。残置物の確認は依頼人とともに行った。",
-        line: `${getDisplayName(careful)}は依頼人を呼んで、残置物の判断を一緒に行った。捨てるかどうかは一行が決めることではない。`,
-        after: `依頼人は「ひとつひとつ見せてくれてよかった」と言った。気の長い作業だったが、後悔のない片付けになった。`,
+        line: `${getDisplayName(careful)}は依頼人を呼んで、残置物の判断を一緒に行った。誰の持ち物かは分からなくとも、捨てるかどうかは依頼人が決めることだ。`,
+        after: `依頼人は「ひとつひとつ見せてくれてよかった」と言った。ただ、割れた茶器や古い帳面だけが、誰かの暮らしを静かに残していた。`,
         history: "廃屋の整理完了。残置物の判断を依頼人と確認しながら進めた。"
       },
       一部保留: {
         result: "一部保留",
-        summary: "大半の片付けは完了。古い手紙など一部は依頼人の再確認が必要。",
-        line: `古い手紙の処分については、依頼人が直接確認したいとのことで保留とした。${getDisplayName(careful)}は保留品をまとめ、場所を書き記した。`,
-        after: `完全な終わりではないが、これは丁寧な仕事の証でもある。保留にする判断は、軽くない。`,
-        history: "廃屋の片付けで一部保留。依頼人確認待ちの荷物を整理して残した。"
+        summary: "大半の片付けは完了。宛名の読めない古い手紙は依頼人の再確認待ち。",
+        line: `古い手紙は宛名の部分が雨染みで読めなかった。依頼人に見せたところ「自分でもう少し調べます」と言ったため、保留とした。`,
+        after: `封を開けなかったのは正しい判断だと思う。読めなかった文字の先に何があるかは、依頼人が知ることだ。`,
+        history: "廃屋の片付けで一部保留。宛名の読めない手紙を依頼人確認待ちで残した。"
       }
     };
     return variants[outcome] ?? variants["成功"];
