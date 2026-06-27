@@ -783,9 +783,13 @@ function beastLogCardHtml(entry) {
         </div>
         <button class="small-button" onclick="openBeastLogEditor('${eName}', '${eArea}', null)">編集</button>
       </div>
-      ${entry.appearance ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
-      ${entry.behavior  ? `<p class="meta-label">行動</p><p class="muted">${escapeHtml(entry.behavior)}</p>` : ""}
-      ${entry.notes     ? `<p class="meta-label">観察メモ</p><p class="muted">${escapeHtml(entry.notes)}</p>` : ""}
+      ${entry.appearance        ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
+      ${entry.behavior          ? `<p class="meta-label">行動</p><p class="muted">${escapeHtml(entry.behavior)}</p>` : ""}
+      ${entry.danger            ? `<p class="meta-label">危険性</p><p class="muted">${escapeHtml(entry.danger)}</p>` : ""}
+      ${entry.effectiveMeasures ? `<p class="meta-label">有効だった対処</p><p class="muted">${escapeHtml(entry.effectiveMeasures)}</p>` : ""}
+      ${entry.ineffectiveMeasures ? `<p class="meta-label">効かなかった対処</p><p class="muted">${escapeHtml(entry.ineffectiveMeasures)}</p>` : ""}
+      ${entry.notes             ? `<p class="meta-label">観察メモ</p><p class="muted">${escapeHtml(entry.notes)}</p>` : ""}
+      ${entry.nextCheck         ? `<p class="meta-label">次に確認したいこと</p><p class="muted">${escapeHtml(entry.nextCheck)}</p>` : ""}
     </article>
   `;
 }
