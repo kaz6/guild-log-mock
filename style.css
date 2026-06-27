@@ -756,6 +756,7 @@ hr.soft {
   text-transform: uppercase;
 }
 
+.bl-form-row select,
 .bl-form-row input,
 .bl-form-row textarea {
   background: var(--surface);
@@ -769,6 +770,7 @@ hr.soft {
   line-height: 1.7;
 }
 
+.bl-form-row select:focus,
 .bl-form-row input:focus,
 .bl-form-row textarea:focus {
   outline: none;

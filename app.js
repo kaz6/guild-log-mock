@@ -783,13 +783,8 @@ function beastLogCardHtml(entry) {
         </div>
         <button class="small-button" onclick="openBeastLogEditor('${eName}', '${eArea}', null)">編集</button>
       </div>
-      ${entry.appearance        ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
-      ${entry.behavior          ? `<p class="meta-label">行動</p><p class="muted">${escapeHtml(entry.behavior)}</p>` : ""}
-      ${entry.danger            ? `<p class="meta-label">危険性</p><p class="muted">${escapeHtml(entry.danger)}</p>` : ""}
-      ${entry.effectiveMeasures ? `<p class="meta-label">有効だった対処</p><p class="muted">${escapeHtml(entry.effectiveMeasures)}</p>` : ""}
-      ${entry.ineffectiveMeasures ? `<p class="meta-label">効かなかった対処</p><p class="muted">${escapeHtml(entry.ineffectiveMeasures)}</p>` : ""}
-      ${entry.notes             ? `<p class="meta-label">観察メモ</p><p class="muted">${escapeHtml(entry.notes)}</p>` : ""}
-      ${entry.nextCheck         ? `<p class="meta-label">次に確認したいこと</p><p class="muted">${escapeHtml(entry.nextCheck)}</p>` : ""}
+      ${entry.appearance ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
+      ${entry.notes     ? `<p class="meta-label">備考</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.notes)}</p>` : ""}
     </article>
   `;
 }
@@ -809,15 +804,20 @@ function openBeastLogEditor(targetName, area, obsNotes) {
   const entry = state.beastLog[targetName] ?? {
     target: targetName,
     area: area || "",
-    category: "",
+    category: "未分類",
     appearance: "",
-    behavior: "",
-    danger: "",
-    effectiveMeasures: "",
-    ineffectiveMeasures: "",
-    notes: "",
-    nextCheck: ""
+    notes: ""
   };
+  // 旧形式の個別フィールドが残っている場合、備考に統合して表示する
+  const oldParts = [
+    entry.behavior        ? `【行動】${entry.behavior}` : "",
+    entry.danger          ? `【危険性】${entry.danger}` : "",
+    entry.effectiveMeasures   ? `【有効な対処】${entry.effectiveMeasures}` : "",
+    entry.ineffectiveMeasures ? `【効かなかった対処】${entry.ineffectiveMeasures}` : "",
+    entry.nextCheck       ? `【次に確認したいこと】${entry.nextCheck}` : ""
+  ].filter(Boolean);
+  const mergedNotes = [entry.notes, ...oldParts].filter(Boolean).join("\n");
+  const editorEntry = { ...entry, notes: mergedNotes };
 
   let overlay = document.getElementById("beastLogOverlay");
   if (!overlay) {
@@ -826,7 +826,7 @@ function openBeastLogEditor(targetName, area, obsNotes) {
     overlay.className = "beast-log-overlay";
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = beastLogEditorHtml(entry, obsNotes);
+  overlay.innerHTML = beastLogEditorHtml(editorEntry, obsNotes);
   overlay.classList.add("open");
 }
 
@@ -841,14 +841,11 @@ function saveBeastLogEntry() {
   state.beastLog[targetName] = {
     target: targetName,
     area: document.getElementById("bl_area").value.trim(),
-    category: document.getElementById("bl_category").value.trim(),
+    category: document.getElementById("bl_category").value,
     appearance: document.getElementById("bl_appearance").value.trim(),
-    behavior: document.getElementById("bl_behavior").value.trim(),
-    danger: document.getElementById("bl_danger").value.trim(),
-    effectiveMeasures: document.getElementById("bl_effective").value.trim(),
-    ineffectiveMeasures: document.getElementById("bl_ineffective").value.trim(),
     notes: document.getElementById("bl_notes").value.trim(),
-    nextCheck: document.getElementById("bl_nextcheck").value.trim()
+    // 旧フィールドをクリア（備考統合済みのため）
+    behavior: "", danger: "", effectiveMeasures: "", ineffectiveMeasures: "", nextCheck: ""
   };
   saveState();
   closeBeastLogEditor();
@@ -869,11 +866,22 @@ function beastLogEditorHtml(entry, obsNotes) {
       </div>
     </div>` : "";
 
-  const f = (id, label, val, ph, multiline = false) => {
+  const categories = ["未分類", "獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
+  const currentCat = entry.category || "未分類";
+  const categorySelect = `<div class="bl-form-row">
+    <label for="bl_category">分類</label>
+    <select id="bl_category">
+      ${categories.map((c) => `<option value="${c}"${currentCat === c ? " selected" : ""}>${c}</option>`).join("")}
+    </select>
+  </div>`;
+
+  const inp = (id, label, val, ph) => {
     const esc = escapeHtml(val || "");
-    return multiline
-      ? `<div class="bl-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${ph}">${esc}</textarea></div>`
-      : `<div class="bl-form-row"><label for="${id}">${label}</label><input id="${id}" value="${esc}" placeholder="${ph}" /></div>`;
+    return `<div class="bl-form-row"><label for="${id}">${label}</label><input id="${id}" value="${esc}" placeholder="${ph}" /></div>`;
+  };
+  const txt = (id, label, val, ph) => {
+    const esc = escapeHtml(val || "");
+    return `<div class="bl-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${ph}">${esc}</textarea></div>`;
   };
 
   return `
@@ -885,16 +893,12 @@ function beastLogEditorHtml(entry, obsNotes) {
       <div class="bl-modal-body">
         ${refHtml}
         <div class="bl-form">
-          ${f("bl_target",      "対象名",           entry.target,              "例：森喰い兎")}
-          ${f("bl_category",    "分類",              entry.category,            "例：小型獣、植物")}
-          ${f("bl_area",        "遭遇地域",          entry.area,                "例：薄明の森")}
-          ${f("bl_appearance",  "外見・特徴",        entry.appearance,          "体の大きさ、色、特徴的な部位など", true)}
-          ${f("bl_behavior",    "行動",              entry.behavior,            "どう動くか、何を狙うか、いつ活動するか", true)}
-          ${f("bl_danger",      "危険性",            entry.danger,              "直接の攻撃、荷物への被害、感染など", true)}
-          ${f("bl_effective",   "有効だった対処",    entry.effectiveMeasures,   "追い払えた方法、回避できた状況など", true)}
-          ${f("bl_ineffective", "効かなかった対処",  entry.ineffectiveMeasures, "試したが効果がなかったこと", true)}
-          ${f("bl_notes",       "観察メモ",          entry.notes,               "気になったこと、次回への引き継ぎ", true)}
-          ${f("bl_nextcheck",   "次に確認したいこと", entry.nextCheck,           "次回の観察で調べたいこと", true)}
+          ${inp("bl_target",     "名前",       entry.target,     "例：森喰い兎")}
+          ${categorySelect}
+          ${inp("bl_area",       "遭遇地域",   entry.area,       "例：薄明の森")}
+          ${txt("bl_appearance", "外見・特徴", entry.appearance, "体の大きさ、色、特徴的な部位など")}
+          ${txt("bl_notes",      "備考",       entry.notes,
+            "・どんな行動をしたか\n・危険そうな点\n・有効だった対処\n・効かなかった対処\n・次に確認したいこと")}
           <div class="button-row" style="margin-top: 18px;">
             <button class="primary-button" onclick="saveBeastLogEntry()">図鑑に保存</button>
             <button class="ghost-button" onclick="closeBeastLogEditor()">キャンセル</button>
