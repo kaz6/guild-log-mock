@@ -1,0 +1,22 @@
+# secret / env
+.env
+.env.*
+*.key
+*.pem
+*.p12
+
+# backups
+_backup*/
+__*/
+backup*/
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+
+# dependencies
+node_modules/
