@@ -1908,7 +1908,11 @@ function generateReport(expedition) {
     };
 
     add("", `${formatNames(party)}が「${quest.title}」のため、${quest.area}へ向かった。`);
-    add("", `支給品：${items.length ? items.map((item) => item.name).join("、") : "なし"}。`);
+    const lifeSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${lifeSupplyDesc.length > 0 ? lifeSupplyDesc.join(" / ") : "なし"}。`);
     add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
     workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
     if (personal) add("drama", personal);
