@@ -1505,6 +1505,44 @@ function lifeQuestPersonalEventText(quest, party, rng) {
   return pickOne(candidates, rng);
 }
 
+function statsPersonalityLog(party, rng) {
+  if (!party.length) return null;
+  const statKeys = ["memory", "caution", "courage", "kindness", "curiosity"];
+  const chosen = pickOne(statKeys, rng);
+  const best = party.reduce((a, b) => ((b.stats?.[chosen] ?? 0) > (a.stats?.[chosen] ?? 0) ? b : a));
+  const val = best.stats?.[chosen] ?? 0;
+  if (val < 3) return null;
+  const name = getDisplayName(best);
+  const lines = {
+    memory: [
+      `${name}は、道中で気になった細部を手帳の端に書き留めていた。`,
+      `${name}の報告書には、順番と向きまで細かく記録されていた。`,
+      `${name}は、道標の傾きと泥の跳ね方まで報告書に残していた。`
+    ],
+    caution: [
+      `${name}は、作業前に足場と帰り道を一つずつ確認した。`,
+      `${name}は急がず、周囲の状況を確かめてから次の手順へ進んだ。`,
+      `${name}は撤退路を頭に入れてから動いた。報告書にもその手順が残っている。`
+    ],
+    courage: [
+      `${name}は、物音のした方へ迷わず一歩進んだ。`,
+      `${name}は先頭に立ち、確認が必要な場所を率先して調べた。`,
+      `${name}は、他の者が足を止めた場面でも躊躇わなかった。`
+    ],
+    kindness: [
+      `${name}は、疲れた様子の者に声をかけてから作業へ戻った。`,
+      `${name}は、荷物の多い者に無言で手を貸した。`,
+      `${name}は、仲間の状態を確かめてから次の行動を決めた。`
+    ],
+    curiosity: [
+      `${name}は、本筋とは関係ない小さな痕跡まで気にしていた。`,
+      `${name}は、依頼の範囲外の場所を少し覗いた。報告書の余白にメモがある。`,
+      `${name}は、気になったものを指さして立ち止まった。`
+    ]
+  };
+  return pickOne(lines[chosen], rng);
+}
+
 function supplyEventText(quest, party, adventurerItemIds, rng) {
   const solo = party.length === 1;
   const has = (id) => getAllItemIds(adventurerItemIds).includes(id);
@@ -1902,6 +1940,7 @@ function generateReport(expedition) {
     const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
     const personal = lifeQuestPersonalEventText(quest, party, rng);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
+    const statsLog = statsPersonalityLog(party, rng);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
     const arrivalLines = {
@@ -1925,6 +1964,7 @@ function generateReport(expedition) {
     workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
+    if (statsLog) add("drama", statsLog);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -1976,6 +2016,7 @@ function generateReport(expedition) {
   const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng);
+  const statsLog = statsPersonalityLog(party, rng);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
   add("", `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
@@ -1988,6 +2029,7 @@ function generateReport(expedition) {
   roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng)));
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
+  if (statsLog) add("drama", statsLog);
   add("action", outcomeInfo.line);
   add("afterglow", outcomeInfo.after);
 
