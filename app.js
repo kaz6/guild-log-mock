@@ -201,9 +201,9 @@ function loadState() {
     const base = createInitialState();
     const parsed = JSON.parse(raw);
     const merged = { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };
-    merged.quests = mergeMasterList(masterQuests, parsed.quests);
-    merged.items = mergeMasterList(masterItems, parsed.items);
-    merged.adventurers = mergeMasterList(masterAdventurers, parsed.adventurers);
+    merged.quests = mergeMasterList(masterQuests);
+    merged.items = mergeMasterList(masterItems);
+    merged.adventurers = mergeAdventurerList(masterAdventurers, parsed.adventurers);
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
     merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
     return merged;
@@ -213,9 +213,21 @@ function loadState() {
   }
 }
 
-function mergeMasterList(masterList, savedList = []) {
-  const savedById = new Map(savedList.map((item) => [item.id, item]));
-  return masterList.map((masterItem) => ({ ...masterItem, ...(savedById.get(masterItem.id) ?? {}) }));
+function mergeMasterList(masterList) {
+  return masterList.map((masterItem) => ({ ...masterItem }));
+}
+
+function mergeAdventurerList(masterList, savedList = []) {
+  const savedById = new Map((Array.isArray(savedList) ? savedList : []).map((item) => [item.id, item]));
+  const savedKeys = ["favorite", "memo", "history", "status"];
+  return masterList.map((masterItem) => {
+    const saved = savedById.get(masterItem.id) ?? {};
+    const savedFields = {};
+    savedKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(saved, key)) savedFields[key] = saved[key];
+    });
+    return { ...masterItem, ...savedFields };
+  });
 }
 
 function saveState() {
