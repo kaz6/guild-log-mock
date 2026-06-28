@@ -608,6 +608,29 @@ hr.soft {
   margin: 16px 0;
 }
 
+/* ── 時間帯・天候バー ────────────────────────────────────────── */
+.weather-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.weather-bar-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.weather-bar-text {
+  letter-spacing: 0.03em;
+}
+
 /* ── 報告メモカード ──────────────────────────────────────────── */
 .memo-list {
   display: flex;

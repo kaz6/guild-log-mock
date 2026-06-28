@@ -382,11 +382,26 @@ function expeditionProgressHtml(expedition) {
   `;
 }
 
+function getCurrentConditions() {
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 6 ? "夜" : hour < 11 ? "朝" : hour < 16 ? "昼" : hour < 19 ? "夕方" : "夜";
+  const timeIcon = hour < 6 ? "🌙" : hour < 11 ? "🌅" : hour < 16 ? "☀" : hour < 19 ? "🌇" : "🌙";
+  const weathers = ["晴れ", "曇り", "小雨", "風が強い", "霧"];
+  const weatherIdx = (state.worldState.totalExpeditions * 3 + state.worldState.archiveSeed) % weathers.length;
+  const weather = weathers[weatherIdx];
+  return { timeOfDay, timeIcon, weather };
+}
+
 function renderQuests() {
   const selectedQuest = getQuest(selectedQuestId);
   const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && !state.expedition;
 
+  const cond = getCurrentConditions();
   app.innerHTML = `
+    <div class="weather-bar">
+      <span class="weather-bar-icon">${cond.timeIcon}</span>
+      <span class="weather-bar-text">現在：${cond.timeOfDay} / ${cond.weather}</span>
+    </div>
     <section class="card">
       <div class="card-body">
         <div class="card-title">
