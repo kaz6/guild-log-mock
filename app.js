@@ -1607,8 +1607,8 @@ function statsPersonalityLog(party, rng) {
 
 function canUseItemInQuest(quest, itemId, weather = null) {
   const allowedByQuest = {
-    quest_wedding_support: ["item_pot", "item_bandage", "item_map"],
-    quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_map", "item_oilcase"],
+    quest_wedding_support: ["item_pot", "item_bandage"],
+    quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
     quest_letter: ["item_map", "item_oilcase"],
     quest_herb: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
     quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"]
@@ -1655,16 +1655,12 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
   }
   if (has("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
     const expert = expertFor("item_map", [(p) => p.find((a) => a.job === "斥候")]);
-    if (quest.id === "quest_wedding_support") {
-      lines.push(`${h("item_map")}は古地図で会場までの道順を確かめた。席順や荷物運びの時間を崩さずに済んだ。`);
-    } else if (expert && !solo) {
+    if (expert && !solo) {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げた。${expert}が横から覗き込み、今の道との照合を手伝った。`);
     } else {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げ、道標の位置を確認した。迷う前に違和感に気づけたのが大きい。`);
     }
-    if (quest.id !== "quest_wedding_support") {
-      lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
-    }
+    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
   }
   if (has("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
     if (solo) {
