@@ -80,7 +80,7 @@ const masterQuests = [
   },
   {
     id: "quest_wedding_support",
-    title: "結婚式の裏方",
+    title: "結婚式の手伝い",
     category: "生活",
     danger: "低",
     area: "町の小さな祝宴会場",
@@ -1357,6 +1357,8 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
 }
 
 function workEventText(quest, eventName, party, itemIds, rng) {
+  const solo = party.length === 1;
+  const hasPost = party.some((a) => a.background === "郵便配達人");
   const caregiver = findByTrait(party, "personality", "世話焼き");
   const brave = findByTrait(party, "personality", "豪胆");
   const careful = findByTrait(party, "personality", "慎重");
@@ -1367,32 +1369,36 @@ function workEventText(quest, eventName, party, itemIds, rng) {
 
   const weddingEvents = {
     長椅子の設営: [
-      `${name(brave)}が長椅子を担いで会場へ運んだ。「何脚いる」と確かめながら、黙って運び続けた。`,
-      `${name(caregiver)}は長椅子の向きを細かく調整した。招待客が座りやすいよう、通路の幅も確かめていた。`
+      `${name(brave)}が長椅子を二脚まとめて担いで会場へ運んだ。通路をふさがない位置に置いてから、「まだあるか」と聞いた。`,
+      `${name(careful)}は長椅子の向きと間隔を細かく調整した。年配の方が通りやすいよう、通路の幅も確かめていた。`
     ],
     厨房の手伝い: [
-      `${name(caregiver)}は厨房で皿洗いと盛り付けを手伝った。料理人の邪魔をしない動き方を、自然と心得ていた。`,
-      `${name(herbalist)}は厨房の薬草束を見て、料理人に使い方を伝えた。「そこの葉は香り付けです」と言うと、礼を言われた。`
+      `${name(caregiver)}は厨房で盛り付けと配膳の手伝いをした。料理人の手元を見てから動くので、邪魔にならずに済んでいた。`,
+      `${name(herbalist)}は厨房の薬草束を見て、料理人に使い方を伝えた。「その葉は香り付けです」と一言言うと、温かく礼を言われた。`
     ],
     酒樽の運搬: [
-      `${name(brave)}が重い酒樽を肩に担いだ。転がすより早いと判断したらしく、他の者より先に着いた。`,
-      `酒樽の運搬は手分けした。${name(careful)}は段差を確かめながら、樽が傾かないように進んだ。`
+      `${name(brave)}が重い酒樽を肩に担いで運んだ。「転がすより早い」と言いながら、先に着いていた。`,
+      `酒樽の運搬は段差のある場所だけ気をつけた。${name(careful)}が傾きを確かめながら進んだおかげで、一滴もこぼれなかった。`
     ],
     招待客の案内: [
-      `${name(post)}は席割りを一度見ただけで覚え、招待客を迷わず席まで案内した。配達の仕事が活きていた。`,
-      `${name(caregiver)}は年配の客に丁寧に声をかけた。迷いそうな細い廊下を一緒に歩き、席まで送り届けた。`
+      hasPost
+        ? `${name(post)}は席割りを一度見ただけで頭に入れ、招待客を迷わず席まで案内した。昔の仕事が自然に出ていた。`
+        : `${name(careful)}は席次の札を一枚ずつ確かめながら、招待客を丁寧に席まで案内した。`,
+      `${name(caregiver)}は年配の客に丁寧に声をかけ、細い廊下を一緒に歩いて席まで案内した。途中で少し話した。`
     ],
     迷子対応: [
-      `子どもが一人、席を離れて迷子になった。${name(caregiver)}がすぐに気づき、泣き出す前に保護した。`,
-      `${name(post)}は迷子の子どもが言った「大きな木のそば」という手がかりをもとに、親を見つけた。昔の道案内の癖だ。`
+      `子どもが席を離れて迷子になった。${name(caregiver)}がすぐに気づき、泣き出す前に見つけた。子どもは笑って親の元へ戻った。`,
+      hasPost
+        ? `迷子の子どもが「大きな木のそば」と言った。${name(post)}はその一言をもとに親を探し、すぐに見つけた。昔の癖だ。`
+        : `${name(brave)}は迷子の子どもを抱き上げ、依頼人に声をかけて親のいる席まで連れて行った。子どもは泣かなかった。`
     ],
     夜間の見回り: [
-      `${name(guard)}は会場の裏口と入口を交互に確認しながら見回りを続けた。宿場仕事そのままの動き方だった。`,
-      `夜間の見回り中、${name(brave)}は外で休んでいた遠方の客を見つけた。声をかけ、中へ案内した。`
+      `${name(guard)}は会場の裏口と入口を順番に確認した。宿場仕事そのままの動きで、静かに一回りを済ませた。`,
+      `夜の見回り中、${name(brave)}は外の縁台で眠りかけていた年配の客を見つけた。声をかけ、中の席へ案内した。`
     ],
     飾り紐の受け渡し: [
-      `飾り紐を花嫁の控え室まで届けた。${name(caregiver)}は袋の結び目をほどかず、そっと渡した。`,
-      `${name(careful)}は飾り紐を折れないよう平らにして運んだ。渡した時、受け取った人がほっとした顔をした。`
+      `飾り紐を花嫁の控え室まで届けた。${name(caregiver)}は袋を開けず、そっと両手で渡した。受け取った人が小さく頭を下げた。`,
+      `${name(careful)}は飾り紐が折れないよう平らにして運んだ。渡した時、受け取った人がほっとした顔をした。`
     ]
   };
 
@@ -1743,6 +1749,7 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
 }
 
 function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
+  const solo = party.length === 1;
   const caregiver = findByTrait(party, "personality", "世話焼き");
   const careful = findByTrait(party, "personality", "慎重");
 
@@ -1750,24 +1757,26 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
     const variants = {
       成功: {
         result: "成功",
-        summary: "式の裏方を最後まで務めた。大きな問題はなく、当日は無事に終わった。",
-        line: `一行は担当した作業をすべて終えた。式は滞りなく進み、見送りの時、依頼人から「来てくれてよかった」と言われた。`,
-        after: `帰り道、${getDisplayName(caregiver)}は「いい式でしたね」と言った。報告書には書かれないことを、覚えている人間がいる。`,
-        history: "結婚式の裏方で、設営から見回りまでを担当。式は無事終了。"
+        summary: "式の手伝いを最後まで務めた。大きな問題はなく、当日は無事に終わった。",
+        line: `担当した作業をすべて終えた。式は滞りなく進み、見送りの時、依頼人から「来てくれてよかった」と言われた。`,
+        after: `片付けが終わった会場の床に、花びらと小さな足跡が残っていた。${getDisplayName(caregiver)}は「いい式でしたね」と言って、最後の掃除をした。`,
+        history: "結婚式の手伝い。設営から片付けまでを担当。式は無事終了。"
       },
       小さな失敗: {
         result: "小さな失敗",
         summary: "軽微なミスはあったが、式の進行に支障はなかった。",
         line: `飾り紐の受け渡しが少し遅れた。${getDisplayName(careful)}はすぐに気づいて補ったが、あの一瞬は報告書に残した。`,
         after: `依頼人は「気にしないで」と言った。そう言ってもらえるうちは、次の機会に活かせる失敗だ。`,
-        history: "結婚式の裏方。軽微なミスあり、式は無事終了。"
+        history: "結婚式の手伝い。軽微なミスあり、式は無事終了。"
       },
       感謝: {
         result: "感謝",
         summary: "依頼の範囲を超えた対応が、依頼人から感謝された。",
         line: `${getDisplayName(caregiver)}が迷子の子どもを保護したことで、式の雰囲気が崩れずに済んだ。依頼人から改めて礼を言われた。`,
-        after: `式が終わった後、依頼人は一行に小さな菓子折りを持たせた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`,
-        history: "結婚式の裏方。迷子対応など依頼範囲外にも対応し、感謝を受けた。"
+        after: solo
+          ? `式が終わった後、依頼人は小さな菓子折りを渡してくれた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`
+          : `式が終わった後、依頼人は一行に小さな菓子折りを持たせた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`,
+        history: "結婚式の手伝い。迷子対応など依頼範囲外にも対応し、感謝を受けた。"
       }
     };
     return variants[outcome] ?? variants["成功"];
@@ -1958,8 +1967,8 @@ function generateReport(expedition) {
 
     const arrivalLines = {
       quest_wedding_support: [
-        `会場に着くと、すでに準備の真っ最中だった。依頼人の顔に安堵が浮かんだ。`,
-        `町の小さな祝宴会場に着いた。外はにぎやかで、中はまだ落ち着きがなかった。`
+        `会場に着くと、すでに準備の真っ最中だった。依頼人の顔に安堵が浮かんだ。花の飾り付けはまだ途中だった。`,
+        `町の小さな祝宴会場に着いた。外には招待客らしい人が少しずつ集まり始めていた。`
       ],
       quest_old_house_cleanup: [
         `町外れの家屋に着いた。戸は開いたまま、中は物が積み重なっていた。`,
