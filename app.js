@@ -1273,7 +1273,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
       `${name(scout)}は泥に残った足跡を見て、同じ道を通った者がいると判断した。`
     ],
     古い道標: [
-      `道の脇に古い道標が立っていた。文字は薄いが、まだ読める。${has("item_map") ? "古地図と照合すると、少しだけ表記が古いことが分かった。" : "一行は目印だけを報告書に写し取った。"}`,
+      `道の脇に古い道標が立っていた。文字は薄いが、まだ読める。${has("item_map") ? "古地図と照合すると、少しだけ表記が古いことが分かった。" : solo ? `${name(party[0])}は目印だけを報告書に写し取った。` : "一行は目印だけを報告書に写し取った。"}`,
       `${name(scout)}は道標の根元を調べ、最近誰かが土を踏み固めた跡を見つけた。`
     ],
     商人とのすれ違い: [
@@ -1311,7 +1311,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
       `草むらが揺れ、小さな影が荷袋へ走った。${name(warrior)}が足音で追い払い、袋の破れは最小限で済んだ。`
     ],
     薬草袋の破れ: [
-      `薬草袋の縫い目が裂けかけていた。${has("item_bandage") ? "支給された包帯を荷紐の補修に使い、採集物を失わずに済んだ。" : "一行は外套の紐で応急処置をしたが、少量の葉を失った。"}`,
+      `薬草袋の縫い目が裂けかけていた。${has("item_bandage") ? "支給された包帯を荷紐の補修に使い、採集物を失わずに済んだ。" : solo ? `${name(party[0])}は外套の紐で応急処置をしたが、少量の葉を失った。` : "一行は外套の紐で応急処置をしたが、少量の葉を失った。"}`,
       `${name(herbalist)}は袋の中身を並べ直し、香りの強い薬草を内側へ移した。`
     ],
     泥被り茸の群生: [
@@ -1319,7 +1319,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
       `泥をかぶった茸ほど香りが強い。${name(herbalist)}はその違いを報告書の余白に書き残した。`
     ],
     休憩地点: [
-      `${has("item_pot") ? `${name(herbalist)}は携帯鍋で薄いスープを作った。${name(warrior)}は文句を言いながらも、最後まで飲み干した。` : `一行は倒木のそばで短い休憩を取った。温かいものはないが、靴紐を結び直す余裕はあった。`}`,
+      `${has("item_pot") ? `${name(herbalist)}は携帯鍋で薄いスープを作った。${solo ? "温かさが足取りを少し軽くした。" : `${name(warrior)}は文句を言いながらも、最後まで飲み干した。`}` : solo ? `${name(party[0])}は倒木のそばで短い休憩を取った。靴紐を結び直し、また歩き始めた。` : `一行は倒木のそばで短い休憩を取った。温かいものはないが、靴紐を結び直す余裕はあった。`}`,
       `休憩中、${name(scout)}は森の音が途切れる場所を記録した。採集路としては使えそうだ。`
     ],
     道標の傾き: [
@@ -1335,7 +1335,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
         : `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうだったため止められた。`
     ],
     旧道の分岐: [
-      `${has("item_map") ? `古地図には、現在使われていない旧道の線が残っていた。一行は分岐を確認し、報告書に照合結果を残した。` : `旧道らしき分岐があったが、手元の記録だけでは照合しきれなかった。次回は古地図が必要。`}`,
+      `${has("item_map") ? `古地図には、現在使われていない旧道の線が残っていた。${solo ? `${name(party[0])}は分岐を確認し、報告書に照合結果を残した。` : "一行は分岐を確認し、報告書に照合結果を残した。"}` : `旧道らしき分岐があったが、手元の記録だけでは照合しきれなかった。次回は古地図が必要。`}`,
       `分岐の先は草に覆われていた。通行量は少ないが、完全に途絶えているわけではない。`
     ],
     壊れた橋: [
@@ -1349,7 +1349,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
       `旅人から、雨の日だけ旧道を使う者がいると聞いた。理由はまだ分からない。`
     ],
     根元のゆるみ: [
-      `道標の根元は雨でゆるんでいた。${has("item_bandage") ? "包帯を仮の固定具として巻き、石を積んで補強した。" : "一行は石を積んで応急処置をした。"}`,
+      `道標の根元は雨でゆるんでいた。${has("item_bandage") ? "包帯を仮の固定具として巻き、石を積んで補強した。" : solo ? `${name(party[0])}は石を積んで応急処置をした。` : "一行は石を積んで応急処置をした。"}`,
       `${name(scout)}は根元の土を触り、次の雨でまた傾く可能性が高いと判断した。`
     ]
   };
@@ -1462,6 +1462,7 @@ function personalEventText(quest, party, rng) {
 }
 
 function lifeQuestPersonalEventText(quest, party, rng) {
+  const solo = party.length === 1;
   const candidates = [];
   party.forEach((adv) => {
     const name = getDisplayName(adv);
@@ -1479,17 +1480,21 @@ function lifeQuestPersonalEventText(quest, party, rng) {
         candidates.push(`${name}は重い荷物を率先して引き受けた。こういう場所での控え方を、どこかで覚えてきたらしい。`);
         candidates.push(`${name}は段取りに口を出さず、言われたことを黙ってやり続けた。派手さはないが、確実だった。`);
       } else {
-        candidates.push(`${name}は重い家具を次々と外へ運んだ。仲間が確認を終えるまで、ちゃんと待っていた。`);
+        candidates.push(solo
+          ? `${name}は重い家具を次々と外へ運んだ。ひとりでも手を止めず、黙々と続けた。`
+          : `${name}は重い家具を次々と外へ運んだ。仲間が確認を終えるまで、ちゃんと待っていた。`);
         candidates.push(`${name}は埃だらけの部屋でも文句を言わなかった。顔を袖で覆い、黙々と続けた。`);
       }
     }
     if (adv.personality === "世話焼き") {
       if (quest.id === "quest_wedding_support") {
         candidates.push(`${name}は会場全体を見渡し、困っている人がいないかを常に気にしていた。依頼書に書かれた仕事の外まで、自然と手が伸びていた。`);
-        candidates.push(`${name}は仲間が一息ついた時、「少し飲んでいいですよ」と水を渡した。自分が飲んだのは全員の後だった。`);
+        if (!solo) candidates.push(`${name}は仲間が一息ついた時、「少し飲んでいいですよ」と水を渡した。自分が飲んだのは全員の後だった。`);
       } else {
         candidates.push(`${name}は作業中も住民の話に耳を傾けた。報告書に書くほどのことではないが、依頼人が安心できる言葉をかけていた。`);
-        candidates.push(`${name}は片付けを進めながら、仲間の疲れ具合を見ていた。休憩のタイミングをうまく提案して、作業が安定した。`);
+        candidates.push(solo
+          ? `${name}は自分の疲れを見ながら、こまめに手を止めて作業を続けた。無理をしない判断が、最後まで動けた理由だった。`
+          : `${name}は片付けを進めながら、仲間の疲れ具合を見ていた。休憩のタイミングをうまく提案して、作業が安定した。`);
       }
     }
     if (adv.background === "郵便配達人") {
@@ -1507,6 +1512,7 @@ function lifeQuestPersonalEventText(quest, party, rng) {
 
 function statsPersonalityLog(party, rng) {
   if (!party.length) return null;
+  const solo = party.length === 1;
   const statKeys = ["memory", "caution", "courage", "kindness", "curiosity"];
   const chosen = pickOne(statKeys, rng);
   const best = party.reduce((a, b) => ((b.stats?.[chosen] ?? 0) > (a.stats?.[chosen] ?? 0) ? b : a));
@@ -1529,7 +1535,10 @@ function statsPersonalityLog(party, rng) {
       `${name}は先頭に立ち、確認が必要な場所を率先して調べた。`,
       `${name}は、他の者が足を止めた場面でも躊躇わなかった。`
     ],
-    kindness: [
+    kindness: solo ? [
+      `${name}は、疲れを感じたら早めに手を止め、自分のペースで作業を続けた。`,
+      `${name}は、無理をせず確実に進める方を選んだ。報告書にはその判断が見える。`
+    ] : [
       `${name}は、疲れた様子の者に声をかけてから作業へ戻った。`,
       `${name}は、荷物の多い者に無言で手を貸した。`,
       `${name}は、仲間の状態を確かめてから次の行動を決めた。`
@@ -2023,7 +2032,10 @@ function generateReport(expedition) {
   const statsLog = statsPersonalityLog(party, rng);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
-  add("", `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
+  const soloAdv = party.length === 1;
+  add("", soloAdv
+    ? `${getDisplayName(party[0])}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+    : `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
   const supplyDesc = party.map((adv) => {
     const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
     return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
@@ -2040,7 +2052,7 @@ function generateReport(expedition) {
   const adventurerHistoryLines = {};
   party.forEach((adv) => {
     const displayName = getDisplayName(adv);
-    const roleNote = adv.job === "斥候" ? "確認役として" : adv.job === "薬草師" ? "採集と手当で" : adv.job === "戦士" ? "荷運びと警戒で" : "一行の一員として";
+    const roleNote = adv.job === "斥候" ? "確認役として" : adv.job === "薬草師" ? "採集と手当で" : adv.job === "戦士" ? "荷運びと警戒で" : soloAdv ? "単独で" : "一行の一員として";
     adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
   });
 
