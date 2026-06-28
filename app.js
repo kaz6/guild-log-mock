@@ -247,6 +247,14 @@ function getDisplayName(adventurer) {
   return adventurer.nickname?.trim() || adventurer.name;
 }
 
+function isSoloParty(party) {
+  return party.length === 1;
+}
+
+function partySubject(party) {
+  return isSoloParty(party) ? getDisplayName(party[0]) : "一行";
+}
+
 function getQuest(id) {
   return state.quests.find((quest) => quest.id === id);
 }
@@ -1597,6 +1605,20 @@ function statsPersonalityLog(party, rng) {
   return pickOne(lines[chosen], rng);
 }
 
+function canUseItemInQuest(quest, itemId, weather = null) {
+  const allowedByQuest = {
+    quest_wedding_support: ["item_pot", "item_bandage", "item_map"],
+    quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_map", "item_oilcase"],
+    quest_letter: ["item_map", "item_oilcase"],
+    quest_herb: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
+    quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"]
+  };
+  const allowed = allowedByQuest[quest.id];
+  if (!allowed) return true;
+  if (itemId === "item_oilcase" && weather !== "小雨" && quest.id === "quest_wedding_support") return false;
+  return allowed.includes(itemId);
+}
+
 function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
   const solo = party.length === 1;
   const has = (id) => getAllItemIds(adventurerItemIds).includes(id);
@@ -1622,7 +1644,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
 
   const lines = [];
 
-  if (has("item_bandage")) {
+  if (has("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather)) {
     const expert = expertFor("item_bandage", [(p) => p.find((a) => a.job === "薬草師")]);
     if (expert && !solo) {
       lines.push(`${h("item_bandage")}は自分の荷から包帯を取り出した。手当ては${expert}が引き取り、素早く処置を終えた。`);
@@ -1631,16 +1653,20 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
     }
     lines.push(`${h("item_bandage")}が持っていた包帯を荷紐の補修に使った。怪我のためではなかったが、役に立った。`);
   }
-  if (has("item_map")) {
+  if (has("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
     const expert = expertFor("item_map", [(p) => p.find((a) => a.job === "斥候")]);
-    if (expert && !solo) {
+    if (quest.id === "quest_wedding_support") {
+      lines.push(`${h("item_map")}は古地図で会場までの道順を確かめた。席順や荷物運びの時間を崩さずに済んだ。`);
+    } else if (expert && !solo) {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げた。${expert}が横から覗き込み、今の道との照合を手伝った。`);
     } else {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げ、道標の位置を確認した。迷う前に違和感に気づけたのが大きい。`);
     }
-    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
+    if (quest.id !== "quest_wedding_support") {
+      lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
+    }
   }
-  if (has("item_whistle") && quest.id !== "quest_wedding_support") {
+  if (has("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
     if (solo) {
       lines.push(`視界が悪くなった時、${h("item_whistle")}は笛を短く吹いて自分の位置を確かめた。音の響き方で周囲の地形が分かる。`);
     } else {
@@ -1648,7 +1674,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
       lines.push(`${h("item_whistle")}が試しに笛を吹いたら、思ったより大きな音が出た。以後、合図は短く一回に決まった。`);
     }
   }
-  if (has("item_pot")) {
+  if (has("item_pot") && canUseItemInQuest(quest, "item_pot", weather)) {
     const expert = expertFor("item_pot", [
       (p) => p.find((a) => a.background === "村の調合係"),
       (p) => p.find((a) => a.job === "薬草師")
@@ -1664,7 +1690,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
     }
     lines.push(`${h("item_pot")}が携帯鍋でスープを作った。${solo ? "帰り道の足取りが少し軽くなった。" : "評判は分かれたが、帰り道の足取りは少し軽くなった。"}`);
   }
-  if (has("item_oilcase")) {
+  if (has("item_oilcase") && canUseItemInQuest(quest, "item_oilcase", weather)) {
     const expert = expertFor("item_oilcase", [(p) => p.find((a) => a.background === "郵便配達人")]);
     const isRainy = weather === "小雨";
     if (isRainy) {
@@ -1678,7 +1704,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
       lines.push(`${h("item_oilcase")}は油紙の手紙入れを荷物に忍ばせていた。今日は使わずに済んだが、あると心強い。`);
     }
   }
-  if (has("item_obs_sheet")) {
+  if (has("item_obs_sheet") && canUseItemInQuest(quest, "item_obs_sheet", weather)) {
     lines.push(`${h("item_obs_sheet")}は観察記録票を上着の内側にしまっていた。帰還後に報告書へ転記するためだ。`);
   }
   if (lines.length === 0) return null;
@@ -1689,6 +1715,7 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
   const scout = findByTrait(party, "job", "斥候");
   const herbalist = findByTrait(party, "job", "薬草師");
   const post = findByTrait(party, "background", "郵便配達人");
+  const subject = partySubject(party);
   const has = (id) => itemIds.includes(id);
 
   if (quest.id === "quest_letter") {
@@ -1703,14 +1730,14 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
       持ち帰り: {
         result: "持ち帰り",
         summary: "受取人不在のため、手紙は濡れない状態で持ち帰られた。",
-        line: `宛先の家は空き家だった。近所に預ける案も出たが、${getDisplayName(scout)}は首を振った。「本人に渡す依頼です。今日は持ち帰ります」`,
+        line: `宛先の家は空き家だった。近所に預ける案も出たが、${getDisplayName(scout)}は本人に渡すべき依頼だと判断し、今日は持ち帰ることにした。`,
         after: `受付嬢は手紙を受け取ると、乾いた布で封筒の端をそっと押さえた。こういう判断も、ちゃんと記録に残る。`,
         history: "届けられなかった手紙を持ち帰り。封筒の保全を優先。"
       },
       再配達: {
         result: "再配達",
         summary: "宛先の所在は判明。次回の再配達が必要。",
-        line: `宛先の人物は夕方まで戻らないと分かった。一行は無理に待たず、現在の所在だけを記録して帰還した。`,
+        line: `宛先の人物は夕方まで戻らないと分かった。${subject}は無理に待たず、現在の所在だけを記録して帰還した。`,
         after: `報告書の最後には「次回は午後発が望ましい」とある。失敗ではない。次に繋がる記録だ。`,
         history: "手紙依頼で受取人の所在を確認。次回再配達。"
       },
@@ -1770,7 +1797,7 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
     応急処置: {
       result: "応急処置",
       summary: "道標の傾きを確認し、倒れないよう補強した。",
-      line: `道標の根元はゆるんでいた。一行は石を積み、次の巡回までは倒れないよう応急処置をした。`,
+      line: `道標の根元はゆるんでいた。${subject}は石を積み、次の巡回までは倒れないよう応急処置をした。`,
       after: `帰還した${formatNames(party)}の靴には、道標の根元と同じ赤土がついていた。`,
       history: "古い道標の確認で、根元を応急補強。"
     },
@@ -1784,7 +1811,7 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
     再確認: {
       result: "再確認",
       summary: "道標の文字が一部読めず、再確認が必要。",
-      line: `苔に隠れた文字は一部しか読めなかった。無理に削ると木が崩れそうだったため、一行は保存を優先した。`,
+      line: `苔に隠れた文字は一部しか読めなかった。無理に削ると木が崩れそうだったため、${subject}は保存を優先した。`,
       after: `読めない文字を、読めないまま残す判断。記録係としては、少しだけ嬉しい報告だった。`,
       history: "古い道標の確認で、文字保存を優先し再確認扱い。"
     }
@@ -1793,7 +1820,7 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
 }
 
 function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
-  const solo = party.length === 1;
+  const subject = partySubject(party);
   const caregiver = findByTrait(party, "personality", "世話焼き");
   const careful = findByTrait(party, "personality", "慎重");
 
@@ -1817,9 +1844,7 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
         result: "感謝",
         summary: "依頼の範囲を超えた対応が、依頼人から感謝された。",
         line: `${getDisplayName(caregiver)}が迷子の子どもを保護したことで、式の雰囲気が崩れずに済んだ。依頼人から改めて礼を言われた。`,
-        after: solo
-          ? `式が終わった後、依頼人は小さな菓子折りを渡してくれた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`
-          : `式が終わった後、依頼人は一行に小さな菓子折りを持たせた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`,
+        after: `式が終わった後、依頼人は${subject}に小さな菓子折りを持たせた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`,
         history: "結婚式の手伝い。迷子対応など依頼範囲外にも対応し、感謝を受けた。"
       }
     };
@@ -1831,7 +1856,7 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
       成功: {
         result: "成功",
         summary: "廃屋の片付けを完了した。整理品と要確認品を分けて引き渡した。",
-        line: `一行は部屋を順番に片付け、処分品・保管品・要確認品を分けて依頼人へ報告した。住人の名前は最後まで分からなかった。`,
+        line: `${subject}は部屋を順番に片付け、処分品・保管品・要確認品を分けて依頼人へ報告した。住人の名前は最後まで分からなかった。`,
         after: `報告書には「住人名は不明。生活用品のみ整理」と記されている。${getDisplayName(careful)}の文字は丁寧だった。`,
         history: "廃屋の片付けを完了。住人名は不明のまま、生活用品を整理して引き渡した。"
       },
@@ -1856,7 +1881,7 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
   return {
     result: "成功",
     summary: "生活依頼を完了した。",
-    line: `一行は依頼を無事に終えた。`,
+    line: `${subject}は依頼を無事に終えた。`,
     after: `報告書は受付へ提出された。`,
     history: `${quest.title}：完了。`
   };
@@ -2019,11 +2044,13 @@ function generateReport(expedition) {
       ],
       quest_old_house_cleanup: [
         `町外れの家屋に着いた。戸は開いたまま、中は物が積み重なっていた。`,
-        `古い家屋の前に立った。${formatNames(party)}は外から中を見渡し、どこから手をつけるかを相談した。`
+        isSoloParty(party)
+          ? `古い家屋の前に立った。${partySubject(party)}は外から中を見渡し、どこから手をつけるかを判断した。`
+          : `古い家屋の前に立った。一行は外から中を見渡し、どこから手をつけるかを相談した。`
       ]
     };
 
-    add("", `${formatNames(party)}が「${quest.title}」のため、${quest.area}へ向かった。`);
+    add("", `${partySubject(party)}が「${quest.title}」のため、${quest.area}へ向かった。`);
     const lifeSupplyDesc = party.map((adv) => {
       const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
       return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
@@ -2089,10 +2116,10 @@ function generateReport(expedition) {
   const statsLog = statsPersonalityLog(party, rng);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
-  const soloAdv = party.length === 1;
+  const soloAdv = isSoloParty(party);
   add("", soloAdv
-    ? `${getDisplayName(party[0])}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
-    : `一行は「${quest.title}」のため、${quest.area}へ向かった。`);
+    ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+    : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
   const supplyDesc = party.map((adv) => {
     const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
     return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
