@@ -1463,11 +1463,13 @@ function personalEventText(quest, party, rng) {
     const name = getDisplayName(adv);
     if (adv.personality === "慎重") {
       candidates.push(`${name}はすぐには判断せず、報告書に残せる形で状況を整理してから${solo ? "動いた" : "仲間に伝えた"}。`);
-      candidates.push(`${name}は「急がなくていい場面です」と言い、確認を一つ増やした。結果的に、その一手で見落としが減った。`);
+      candidates.push(`${name}は急ぐ必要のない場面だと判断し、確認を一つ増やした。結果的に、その一手で見落としが減った。`);
     }
     if (adv.personality === "豪胆") {
       candidates.push(`${name}は面倒な道を笑って進んだ。乱暴に見えるが、危ない場所では意外と慎重に足を置く。`);
-      candidates.push(`${name}は「帰ったら飯だな」と言って、重い荷物を背負い直した。疲れているのに気にしない。`);
+      candidates.push(solo
+        ? `${name}は重い荷物を黙って背負い直した。疲れているのに、足取りは変わらなかった。`
+        : `${name}は「帰ったら飯だな」と言って、重い荷物を背負い直した。疲れているのに気にしない。`);
     }
     if (adv.personality === "世話焼き") {
       if (!solo) candidates.push(`${name}は休憩のたびに仲間の顔色を見ていた。報告書には書きにくいが、こういう気配りは遠征を安定させる。`);
@@ -1494,10 +1496,14 @@ function lifeQuestPersonalEventText(quest, party, rng) {
     if (adv.personality === "慎重") {
       if (quest.id === "quest_wedding_support") {
         candidates.push(`${name}は依頼書の段取りを確認し、手順に抜けがないかを一つずつ確かめた。焦らず動く姿勢が、小さなミスを防いでいた。`);
-        candidates.push(`${name}は「急いで雑にするより、ゆっくり丁寧にやった方が後が楽です」と言って、作業の順番を整えた。`);
+        candidates.push(solo
+          ? `${name}は急いで雑にするより丁寧にやる方がよいと判断し、作業の順番を整えた。`
+          : `${name}は「急いで雑にするより、ゆっくり丁寧にやった方が後が楽です」と言って、作業の順番を整えた。`);
       } else {
         candidates.push(`${name}は片付けた場所に何があったかを逐一メモした。捨てる前の記録が、依頼人の確認作業を助けた。`);
-        candidates.push(`${name}は判断に迷うものを勝手に捨てず、「確認が必要なものは別にしておきます」と積み分けた。`);
+        candidates.push(solo
+          ? `${name}は判断に迷うものを勝手に捨てず、確認が必要なものとして別に積み分けた。`
+          : `${name}は判断に迷うものを勝手に捨てず、「確認が必要なものは別にしておきます」と積み分けた。`);
       }
     }
     if (adv.personality === "豪胆") {
