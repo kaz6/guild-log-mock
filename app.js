@@ -956,6 +956,7 @@ function renderReportDetail(reportId) {
           <span>分類</span><strong>${escapeHtml(quest?.category ?? "遠征")}</strong>
           <span>編成</span><strong>${escapeHtml(party)}</strong>
           <span>支給品</span><strong>${escapeHtml(items)}</strong>
+          ${report.departConditions ? `<span>出発時</span><strong>${escapeHtml(report.departConditions.timeOfDay)} / ${escapeHtml(report.departConditions.weather)}</strong>` : ""}
           <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>
         </div>
         <hr class="soft" />
@@ -1025,6 +1026,7 @@ function startExpedition() {
     const adv = getAdventurer(id);
     if (adv) adv.status = "遠征中";
   });
+  const departCond = getCurrentConditions();
   state.worldState.totalExpeditions += 1;
   state.expedition = {
     id: `exp_${Date.now()}`,
@@ -1034,7 +1036,9 @@ function startExpedition() {
     itemIds: getAllItemIds(selectedAdventurerItems),
     startTime: Date.now(),
     durationMs: DEMO_DURATION_MS,
-    seed: Math.floor(Math.random() * 1000000)
+    seed: Math.floor(Math.random() * 1000000),
+    departTimeOfDay: departCond.timeOfDay,
+    departWeather: departCond.weather
   };
   selectedQuestId = null;
   selectedAdventurerIds = [];
@@ -1199,21 +1203,21 @@ function generateWeatherLog(quest, party, weather, rng) {
         `朝の光が差す中、${leader}は${quest.area}へひとりで向かった。出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`,
         `空はよく晴れていた。視界が広く、${leader}は遠くの道標まで確認しながら一人で進んだ。`
       ],
+      曇り: [
+        `曇り空の下、${leader}は荷物を確かめてから${quest.area}へひとりで向かった。天候が崩れる前に戻れるよう、足を止めずに進んだ。`,
+        `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、荷造りを確かめてから歩き始めた。`
+      ],
       小雨: [
         `小雨の中、${leader}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、何度も手元を確認した。`,
         `出発からしばらくして細い雨が降り始めた。${leader}は濡れやすいものを荷物の内側へ移し直した。`
       ],
-      霧: [
-        `街道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
-        `霧で視界が悪い。${leader}は立ち止まって耳を澄ませ、足元を確かめてから歩き続けた。`
-      ],
-      強風: [
+      風が強い: [
         `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、風を避けるように低い道を選んだ。`,
         `古い街道には乾いた葉が舞っていた。${leader}は顔を伏せながら、黙って歩き続けた。`
       ],
-      雨上がり: [
-        `雨上がりの道はぬかるんでいた。${leader}は泥の深さを見て、遠回りでも固い道を選んだ。`,
-        `森の入口には湿った匂いが残っていた。${leader}は「こういう日は足元から冷える」と呟きながら進んだ。`
+      霧: [
+        `街道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
+        `霧で視界が悪い。${leader}は立ち止まって耳を澄ませ、足元を確かめてから歩き続けた。`
       ]
     };
     return pickOne(table[weather] ?? table["晴れ"], rng);
@@ -1224,24 +1228,24 @@ function generateWeatherLog(quest, party, weather, rng) {
       `朝の光が差す中、一行は${quest.area}へ向かった。足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`,
       `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くの道標まで確認しながら進んだ。`
     ],
+    曇り: [
+      `曇り空の下、一行は${quest.area}へ向かった。${getDisplayName(careful)}は「雨になるかもしれない」と呟き、荷造りを確かめ直した。`,
+      `灰色の空が広がっていたが、風はなかった。${leader}は出発前に荷物の重さを確かめ、足取りを整えた。`
+    ],
     小雨: [
       `小雨の中、一行は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、${getDisplayName(careful)}が何度も手元を確認した。`,
       `出発からしばらくして細い雨が降り始めた。${getDisplayName(caregiver)}は仲間の荷物に布をかけ、濡れやすいものを内側へ移した。`
     ],
-    霧: [
-      `街道には薄い霧がかかっていた。${getDisplayName(careful)}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
-      `霧で視界が悪い。${getDisplayName(brave)}は先に進もうとしたが、仲間の声を聞いて歩幅を落とした。`
-    ],
-    強風: [
+    風が強い: [
       `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、一行は風を避けるように低い道を選んだ。`,
       `古い街道には乾いた葉が舞っていた。${getDisplayName(brave)}は笑っていたが、声は風に流されてほとんど聞こえなかった。`
     ],
-    雨上がり: [
-      `雨上がりの道はぬかるんでいた。${getDisplayName(careful)}は泥の深さを見て、遠回りでも固い道を選んだ。`,
-      `森の入口には湿った匂いが残っていた。${getDisplayName(caregiver)}は「こういう日は足元から冷えます」と仲間に声をかけた。`
+    霧: [
+      `街道には薄い霧がかかっていた。${getDisplayName(careful)}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
+      `霧で視界が悪い。${getDisplayName(brave)}は先に進もうとしたが、仲間の声を聞いて歩幅を落とした。`
     ]
   };
-  return pickOne(table[weather], rng);
+  return pickOne(table[weather] ?? table["晴れ"], rng);
 }
 
 const questEventPools = {
@@ -1573,7 +1577,7 @@ function statsPersonalityLog(party, rng) {
   return pickOne(lines[chosen], rng);
 }
 
-function supplyEventText(quest, party, adventurerItemIds, rng) {
+function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
   const solo = party.length === 1;
   const has = (id) => getAllItemIds(adventurerItemIds).includes(id);
   const holderAdv = (itemId) => {
@@ -1642,12 +1646,17 @@ function supplyEventText(quest, party, adventurerItemIds, rng) {
   }
   if (has("item_oilcase")) {
     const expert = expertFor("item_oilcase", [(p) => p.find((a) => a.background === "郵便配達人")]);
-    if (expert && !solo) {
-      lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れを、${expert}が依頼書の保護に使うよう提案した。紙は濡れずに済んだ。`);
+    const isRainy = weather === "小雨";
+    if (isRainy) {
+      if (expert && !solo) {
+        lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れを、${expert}が依頼書の保護に使うよう提案した。紙は濡れずに済んだ。`);
+      } else {
+        lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れのおかげで、書きつけは濡れずに済んだ。`);
+      }
+      lines.push(`${h("item_oilcase")}は濡れた手で依頼書に触れないよう、油紙の上から内容を確認した。`);
     } else {
-      lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れにより、紙の依頼書とメモは濡れずに済んだ。地味だが大事な仕事だ。`);
+      lines.push(`${h("item_oilcase")}は油紙の手紙入れを荷物に忍ばせていた。今日は使わずに済んだが、あると心強い。`);
     }
-    lines.push(`${h("item_oilcase")}は濡れた手で依頼書に触れないよう、油紙の上から内容を確認した。`);
   }
   if (has("item_obs_sheet")) {
     lines.push(`${h("item_obs_sheet")}は観察記録票を上着の内側にしまっていた。帰還後に報告書へ転記するためだ。`);
@@ -1955,6 +1964,9 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  const departConditions = expedition.departTimeOfDay
+    ? { timeOfDay: expedition.departTimeOfDay, weather: expedition.departWeather }
+    : null;
   // adventurerItemIds: 新形式。旧形式（itemIds配列）はアドベンチャラー順に割り当てて互換。
   const adventurerItemIds = expedition.adventurerItemIds ??
     Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]));
@@ -2028,6 +2040,7 @@ function generateReport(expedition) {
       observationUpdates: [],
       observationText: [],
       observationNotes,
+      departConditions,
       hiddenTags: { workEvents, outcome, recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
@@ -2036,7 +2049,7 @@ function generateReport(expedition) {
   // 遠征依頼フロー
   const pool = questEventPools[quest.id];
 
-  const weather = pickOne(pool.weather, rng);
+  const weather = expedition.departWeather ?? "晴れ";
   const roadEvents = pickMany(pool.roadEvents, 2 + Math.floor(rng() * 2), rng);
   let outcome = pickOne(pool.outcomes, rng);
 
@@ -2052,7 +2065,7 @@ function generateReport(expedition) {
   const observationUpdates = hasObsSheet ? observationUpdateFor(quest, outcome, roadEvents) : [];
   const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
-  const supply = supplyEventText(quest, party, adventurerItemIds, rng);
+  const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
@@ -2096,6 +2109,7 @@ function generateReport(expedition) {
     observationUpdates,
     observationText,
     observationNotes,
+    departConditions,
     hiddenTags: {
       weather,
       roadEvents,
