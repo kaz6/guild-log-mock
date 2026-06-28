@@ -14,7 +14,7 @@ const masterAdventurers = [
     memo: "道をよく覚えている。無理をしない判断ができる。手紙配達系の依頼に向いていそう。",
     status: "待機中",
     history: [],
-    stats: { memory: 5 }
+    stats: { memory: 5, caution: 4, courage: 3, kindness: 3, curiosity: 4 }
   },
   {
     id: "adv_gadd",
@@ -27,7 +27,7 @@ const masterAdventurers = [
     memo: "前に出る癖がある。危険度が低い依頼でも、念のため包帯を持たせたい。",
     status: "待機中",
     history: [],
-    stats: { memory: 2 }
+    stats: { memory: 2, caution: 2, courage: 5, kindness: 4, curiosity: 2 }
   },
   {
     id: "adv_elne",
@@ -40,7 +40,7 @@ const masterAdventurers = [
     memo: "採集依頼で頼りになる。休憩時の観察が細かい。",
     status: "待機中",
     history: [],
-    stats: { memory: 4 }
+    stats: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3 }
   }
 ];
 
