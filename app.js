@@ -1599,8 +1599,12 @@ function supplyEventText(quest, party, adventurerItemIds, rng) {
       (p) => p.find((a) => a.background === "村の調合係"),
       (p) => p.find((a) => a.job === "薬草師")
     ]);
+    const isLife = quest.category === "生活";
     if (expert && !solo) {
       lines.push(`${h("item_pot")}は自分に預けられていた携帯鍋を取り出した。火加減は${expert}が横から口を出し、簡単なスープができあがった。`);
+    } else if (isLife) {
+      lines.push(`${h("item_pot")}は携帯鍋で湯を沸かした。湯気のおかげで、冷えた手を温めながら作業を続けられた。`);
+      lines.push(`${h("item_pot")}は携帯鍋を取り出し、作業の合間に温かい飲み物を用意した。短い休憩になった。`);
     } else {
       lines.push(`${h("item_pot")}は携帯鍋で湯を沸かした。採集物の泥を落とすのに使い、休憩が確認作業を兼ねた。`);
     }
