@@ -1535,7 +1535,9 @@ function lifeQuestPersonalEventText(quest, party, rng) {
       candidates.push(`${name}は作業の合間に自然と人の動きを見渡していた。誰がどこにいるかを常に把握しようとする癖は宿場仕事から来ている。`);
     }
     if (adv.background === "村の調合係") {
-      candidates.push(`${name}は古い薬草束や瓶を見て、素材かどうかを確かめた。「これは使えます」という一言が、いくつかのものを廃棄から救った。`);
+      if (quest.id !== "quest_wedding_support") {
+        candidates.push(`${name}は古い薬草束や瓶を見て、素材かどうかを確かめた。「これは使えます」という一言が、いくつかのものを廃棄から救った。`);
+      }
     }
   });
   return pickOne(candidates, rng);
@@ -1626,7 +1628,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
     }
     lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
   }
-  if (has("item_whistle")) {
+  if (has("item_whistle") && quest.id !== "quest_wedding_support") {
     if (solo) {
       lines.push(`視界が悪くなった時、${h("item_whistle")}は笛を短く吹いて自分の位置を確かめた。音の響き方で周囲の地形が分かる。`);
     } else {
