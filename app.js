@@ -1605,53 +1605,85 @@ function statsPersonalityLog(party, rng) {
   return pickOne(lines[chosen], rng);
 }
 
-function partyInteractionLog(party, rng) {
-  if (party.length < 2) return null;
-  // 確率で間引き（1報告書に多くても1行）
-  if (rng() < 0.35) return null;
+function partyInteractionLog(party, quest, rng) {
+  if (party.length < 2) return [];
 
   const mina  = party.find((a) => a.id === "adv_mina");
   const gadd  = party.find((a) => a.id === "adv_gadd");
   const elne  = party.find((a) => a.id === "adv_elne");
-  const careful  = findByTrait(party, "personality", "慎重");
-  const brave    = findByTrait(party, "personality", "豪胆");
+  const careful   = findByTrait(party, "personality", "慎重");
+  const brave     = findByTrait(party, "personality", "豪胆");
   const caregiver = findByTrait(party, "personality", "世話焼き");
-
   const nm = (adv) => adv ? getDisplayName(adv) : null;
-  const candidates = [];
 
-  // ミナ + 鉄鍋
+  // 汎用（依頼を問わず使える掛け合い）
+  const general = [];
   if (mina && gadd) {
-    candidates.push(`${nm(mina)}が足元を確認すると、${nm(gadd)}は黙って荷物の位置をずらした。`);
-    candidates.push(`${nm(mina)}が道順を読み上げ、${nm(gadd)}は黙って頷いてから歩き始めた。`);
-    candidates.push(`${nm(gadd)}が重い荷物を引き受けているあいだ、${nm(mina)}は通り道に残った小物を拾い集めた。`);
+    general.push(`${nm(mina)}が足元の段差を指さすと、${nm(gadd)}は何も言わず荷物の持ち方を変えた。`);
+    general.push(`${nm(mina)}が道順を読み上げ、${nm(gadd)}は黙って頷いてから歩き始めた。`);
+    general.push(`${nm(gadd)}が重い荷物を引き受けているあいだ、${nm(mina)}は通り道に残った小物を拾い集めた。`);
+    general.push(`${nm(gadd)}が「こっちは任せろ」と短く言うと、${nm(mina)}はその間に記録をまとめた。`);
   }
-  // ミナ + エルネ
   if (mina && elne) {
-    candidates.push(`${nm(mina)}が道順を読み上げ、${nm(elne)}は忘れ物の有無を確かめた。`);
-    candidates.push(`${nm(elne)}が「確認が取れました」と言うと、${nm(mina)}は報告書に一行書き加えた。`);
-    candidates.push(`${nm(mina)}が気になった点を指すと、${nm(elne)}はそれを手早くメモした。`);
+    general.push(`${nm(mina)}が道順を読み上げ、${nm(elne)}は忘れ物の有無を確かめた。`);
+    general.push(`${nm(mina)}が小さな違和感を記録している間、${nm(elne)}は確認を取った。`);
+    general.push(`${nm(mina)}が気になった点を指すと、${nm(elne)}はそれを手早くメモした。`);
+    general.push(`${nm(elne)}が「確認が取れました」と言うと、${nm(mina)}は報告書に一行書き加えた。`);
   }
-  // 鉄鍋 + エルネ
   if (gadd && elne) {
-    candidates.push(`${nm(elne)}が「少し休みましょう」と言うと、${nm(gadd)}は文句も言わず腰を下ろした。`);
-    candidates.push(`${nm(elne)}は${nm(gadd)}の手元を見て、包帯を使うほどではない傷だと判断した。`);
-    candidates.push(`${nm(gadd)}が先に動き始め、${nm(elne)}がその後ろで小さな荷物をまとめた。`);
+    general.push(`${nm(elne)}が休憩を促すと、${nm(gadd)}は少し不満そうにしながらも腰を下ろした。`);
+    general.push(`${nm(elne)}は${nm(gadd)}の手元を見て、包帯を使うほどではない傷だと判断した。`);
+    general.push(`${nm(gadd)}が先に動き始め、${nm(elne)}がその後ろで小さな荷物をまとめた。`);
   }
-  // 性格の組み合わせ（IDに関係なく）
   if (careful && brave && careful.id !== brave.id) {
-    candidates.push(`${nm(careful)}が確認を一つ増やすよう提案すると、${nm(brave)}は少しだけ足を止めた。`);
-    candidates.push(`${nm(brave)}が先に進もうとしたとき、${nm(careful)}が静かに制した。結果的にその判断が正しかった。`);
+    general.push(`${nm(careful)}が確認を一つ増やすよう提案すると、${nm(brave)}は少しだけ足を止めた。`);
+    general.push(`${nm(brave)}が先に進もうとしたとき、${nm(careful)}が静かに制した。結果的にその判断が正しかった。`);
   }
   if (caregiver && brave && caregiver.id !== brave.id) {
-    candidates.push(`${nm(caregiver)}が${nm(brave)}の荷物の重さを気にして声をかけた。${nm(brave)}は「平気だ」と言いながら、少し荷を下げた。`);
+    general.push(`${nm(caregiver)}が${nm(brave)}の荷物の重さを気にして声をかけた。${nm(brave)}は「平気だ」と言いながら、少し荷を下げた。`);
   }
   if (caregiver && careful && caregiver.id !== careful.id) {
-    candidates.push(`${nm(caregiver)}は${nm(careful)}の確認が終わるのを待ってから、次の場所へ移った。`);
+    general.push(`${nm(caregiver)}は${nm(careful)}の確認が終わるのを待ってから、次の場所へ移った。`);
   }
 
-  if (candidates.length === 0) return null;
-  return pickOne(candidates, rng);
+  // 依頼固有（依頼カテゴリ・IDに合う掛け合い）
+  const contextual = [];
+  if (quest.id === "quest_wedding_support") {
+    if (gadd && elne) contextual.push(`${nm(elne)}が年配の客に声をかけると、${nm(gadd)}は通路を広く空けた。`);
+    if (mina && elne) contextual.push(`${nm(mina)}が席順を確認し、${nm(elne)}が配膳の順番を整えた。`);
+    if (mina && gadd) contextual.push(`${nm(gadd)}が重い荷物を運び、${nm(mina)}は置き場所を一つずつ確認した。`);
+    if (elne && gadd) contextual.push(`${nm(gadd)}が長椅子を運ぶあいだ、${nm(elne)}は通り道に残った小物を拾い集めた。`);
+  }
+  if (quest.id === "quest_old_house_cleanup") {
+    if (mina && gadd) contextual.push(`${nm(gadd)}が棚を動かし、${nm(mina)}は後ろに隠れていたものを取り出して確認した。`);
+    if (elne && gadd) contextual.push(`${nm(gadd)}が重い家具を外へ運び、${nm(elne)}はそれを受け取って積み上げた。`);
+    if (mina && elne) contextual.push(`${nm(elne)}が依頼人と話している間、${nm(mina)}は残置物のリストを書き続けた。`);
+  }
+  if (quest.id === "quest_letter") {
+    if (mina && gadd) contextual.push(`${nm(mina)}が宛先を確認すると、${nm(gadd)}は周囲の様子を見渡した。`);
+    if (elne) {
+      const other = party.find((a) => a.id !== elne.id);
+      if (other) contextual.push(`${nm(elne)}が近くの住人に声をかけ、${nm(other)}は少し離れた場所で待った。`);
+    }
+  }
+  if (quest.id === "quest_herb" || quest.id === "quest_signpost") {
+    if (mina && gadd) {
+      contextual.push(`${nm(mina)}が足跡を見つけると、${nm(gadd)}は周囲に目を配った。`);
+      contextual.push(`${nm(gadd)}が先に進みすぎたため、${nm(mina)}が小さく咳払いをした。`);
+    }
+    if (elne && gadd) contextual.push(`${nm(elne)}が足場を気にして立ち止まると、${nm(gadd)}はその場所を確かめた。`);
+    if (mina && elne) contextual.push(`${nm(elne)}が足場を気にして立ち止まると、${nm(mina)}はその場所を記録した。`);
+  }
+
+  // 依頼固有を先に1つ（60%）、汎用を後に1つ（70%）まで追加
+  const result = [];
+  if (contextual.length > 0 && rng() < 0.60) {
+    result.push(pickOne(contextual, rng));
+  }
+  if (general.length > 0 && result.length < 2 && rng() < 0.70) {
+    result.push(pickOne(general, rng));
+  }
+  return result;
 }
 
 function canUseItemInQuest(quest, itemId, weather = null) {
@@ -2080,7 +2112,7 @@ function generateReport(expedition) {
     const personal = lifeQuestPersonalEventText(quest, party, rng);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
     const statsLog = statsPersonalityLog(party, rng);
-    const interaction = partyInteractionLog(party, rng);
+    const interactions = partyInteractionLog(party, quest, rng);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
     const arrivalLines = {
@@ -2107,7 +2139,7 @@ function generateReport(expedition) {
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
     if (statsLog) add("drama", statsLog);
-    if (interaction) add("drama", interaction);
+    interactions.forEach((line) => add("drama", line));
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -2161,7 +2193,7 @@ function generateReport(expedition) {
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng);
-  const interaction = partyInteractionLog(party, rng);
+  const interactions = partyInteractionLog(party, quest, rng);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
   const soloAdv = isSoloParty(party);
@@ -2178,7 +2210,7 @@ function generateReport(expedition) {
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
   if (statsLog) add("drama", statsLog);
-  if (interaction) add("drama", interaction);
+  interactions.forEach((line) => add("drama", line));
   add("action", outcomeInfo.line);
   add("afterglow", outcomeInfo.after);
 
