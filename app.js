@@ -31,11 +31,14 @@ const masterAdventurers = [
       tags: ["記憶", "道案内", "慎重"]
     },
     obsession: {
-      title: "帰り道を失わないこと",
-      intensity: 4,
-      tags: ["記憶", "道", "慎重"],
-      positiveLine: "ミナは必ず帰り道を覚えてから、次の一歩を決める。",
-      dangerLine: "道を見失いそうになると、依頼よりも確認を優先してしまう。"
+      label: "贖罪",
+      type: "atonement",
+      core: "見捨てた側になりたくない",
+      lie: "自分だけ安全に帰る資格はない",
+      triggerTags: ["負傷", "撤退", "仲間", "救助"],
+      positiveLine: "最後尾の足音を確認してから、ようやく歩き出した。",
+      dangerLine: "撤退できる状況でも、倒れた影の方へ戻ろうとした。",
+      idleLine: "何もない道で、何度も背後を振り返っていた。"
     }
   },
   {
@@ -65,11 +68,14 @@ const masterAdventurers = [
       tags: ["豪胆", "料理", "前に出る"]
     },
     obsession: {
-      title: "誰かの前に立つこと",
-      intensity: 5,
-      tags: ["前衛", "責任", "豪胆"],
-      positiveLine: "鉄鍋は危ないと思った瞬間、考えるより先に前へ出る。",
-      dangerLine: "守る相手がいると、引く判断が遅れることがある。"
+      label: "収集",
+      type: "hoarding",
+      core: "欠乏に戻りたくない",
+      lie: "蓄えがなければ、また何も持たない自分に戻ってしまう",
+      triggerTags: ["食料", "道具", "畑", "村", "物資"],
+      positiveLine: "使えそうな物を拾い集め、帰り道の荷を少しだけ重くした。",
+      dangerLine: "捨ててよいはずの古道具を、どうしても置いていけなかった。",
+      idleLine: "鉄鍋は袋の中身を何度も数え直していた。"
     }
   },
   {
@@ -99,11 +105,14 @@ const masterAdventurers = [
       tags: ["手当", "気配り", "薬草"]
     },
     obsession: {
-      title: "誰も置いていかないこと",
-      intensity: 4,
-      tags: ["手当", "気配り", "世話焼き"],
-      positiveLine: "エルネ・シェルカは小さな不調にも気づき、早めに足を止められる。",
-      dangerLine: "誰かを気にしすぎて、自分の疲れを後回しにすることがある。"
+      label: "統制",
+      type: "control",
+      core: "不明なまま終わらせたくない",
+      lie: "名前も記録もないものは、存在しなかったことにされてしまう",
+      triggerTags: ["記録", "観察", "なにか", "不明", "図鑑"],
+      positiveLine: "曖昧な輪郭を、震える字で報告書の余白に残した。",
+      dangerLine: "逃げるべき場面で、もう一度だけ対象を見ようとした。",
+      idleLine: "エルネ・シェルカは、消えかけた名前を何度も書き直していた。"
     }
   },
   {
@@ -133,11 +142,14 @@ const masterAdventurers = [
       tags: ["合図", "責任感", "退路確認"]
     },
     obsession: {
-      title: "入口を守ること",
-      intensity: 4,
-      tags: ["守り", "責任感", "門番"],
-      positiveLine: "ロウは一度守る場所を決めると、簡単には動かない。",
-      dangerLine: "守る位置にこだわりすぎて、判断が少し遅れることがある。"
+      label: "回帰",
+      type: "return",
+      core: "帰れる場所があると確認したい",
+      lie: "帰り道を見失ったら、自分もそこに置き去りになる",
+      triggerTags: ["帰還", "夜道", "地図", "退路", "迷子"],
+      positiveLine: "戦う前に、まず帰り道のぬかるみを確かめていた。",
+      dangerLine: "敵を見るより先に、退路がまだ同じ場所にあるかを確かめてしまった。",
+      idleLine: "ロウは古地図を畳んでは開き、同じ道を何度も指でなぞっていた。"
     }
   }
 ];
@@ -798,7 +810,7 @@ function adventurerEditorHtml(adventurer) {
       <span>前職</span><strong>${escapeHtml(adventurer.background)}</strong>
       <span>固有武器</span><strong>${escapeHtml(adventurer.weapon?.name ?? "なし")}</strong>
       <span>アクセサリー</span><strong>${escapeHtml(adventurer.accessory?.name ?? "なし")}</strong>
-      <span>執着</span><strong>${escapeHtml(adventurer.obsession?.title ?? "なし")}</strong>
+      <span>執着</span><strong>${escapeHtml(adventurer.obsession?.label ?? "なし")}</strong>
     </div>
 
     <hr class="soft" />
