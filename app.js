@@ -110,6 +110,17 @@ const masterQuests = [
     tags: ["戦闘", "追い払い", "未同定", "畑"],
     observationTarget: "「なにか」",
     summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
+  },
+  {
+    id: "quest_lingering_light",
+    title: "夜道に残る灯りの調査",
+    category: "調査",
+    danger: "低",
+    area: "村はずれの道",
+    recommended: ["慎重", "記録", "観察"],
+    tags: ["調査", "夜道", "怪異", "記録"],
+    observationTarget: "残る灯り",
+    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。"
   }
 ];
 
@@ -119,7 +130,8 @@ const masterItems = [
   { id: "item_whistle", name: "笛", tags: ["合流", "撤退"], note: "視界が悪い場所での合流ログに影響する。" },
   { id: "item_pot", name: "携帯鍋", tags: ["休憩", "士気"], note: "休憩ログや関係性ログに影響する。" },
   { id: "item_oilcase", name: "油紙の手紙入れ", tags: ["手紙", "雨", "記録保護"], note: "紙の依頼書や手紙を濡らさず運ぶ。" },
-  { id: "item_obs_sheet", name: "観察記録票", tags: ["観察", "記録", "生物", "図鑑"], note: "観察対象がいる依頼で持たせると、報告書に冒険者ごとの観察メモが追加される。" }
+  { id: "item_obs_sheet", name: "観察記録票", tags: ["観察", "記録", "生物", "図鑑"], note: "観察対象がいる依頼で持たせると、報告書に冒険者ごとの観察メモが追加される。" },
+  { id: "item_lantern", name: "ランタン", tags: ["夜道", "灯り", "調査"], note: "夜道や暗所で足元と帰り道を確認するための支給品。" }
 ];
 
 const masterObservations = [
@@ -1704,7 +1716,8 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_letter: ["item_map", "item_oilcase"],
     quest_herb: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
     quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
-    quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"]
+    quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"],
+    quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"]
   };
   const allowed = allowedByQuest[quest.id];
   if (!allowed) return true;
@@ -2100,9 +2113,34 @@ function generateMysteryFieldNote(adv, rng) {
   ], rng);
 }
 
+function generateLingeringLightNote(adv, rng) {
+  const memory = adv.stats?.memory ?? 3;
+  const curiosity = adv.stats?.curiosity ?? 3;
+  const caution = adv.stats?.caution ?? 3;
+  const name = getDisplayName(adv);
+
+  if (memory >= 4) {
+    return pickOne([
+      `${name}は、灯りが道の右手、古い曲がり角の先で二度揺れてから消えたと記録している。足跡は増えていなかった。`,
+      `${name}の記録では、灯りは人の腰ほどの高さに見え、近づくほど遠ざかったように見えた。位置の記録は次回調査に使える。`
+    ], rng);
+  }
+  if (curiosity >= 4) {
+    return pickOne([
+      `${name}は灯りそのものより、消えた後の暗さを気にしていた。道の先に反射するものがあるのかもしれない。`,
+      `${name}は灯りが揺れる間隔を気にしていた。風や人の手とは違う動きだった、と報告している。`
+    ], rng);
+  }
+  if (caution >= 4) {
+    return `${name}は、帰り道の轍を見失わない位置で観察を止めた。安全な距離の記録として有用。`;
+  }
+  return `${name}は、小さな灯りが道の先に見え、しばらくして消えたと記録した。詳細は次回確認が必要。`;
+}
+
 function generateAdventurerObservationNote(target, adv, rng) {
   if (target === "森喰い兎") return generateRabbitNote(adv, rng);
   if (target === "「なにか」") return generateMysteryFieldNote(adv, rng);
+  if (target === "残る灯り") return generateLingeringLightNote(adv, rng);
   return `${getDisplayName(adv)}は${target}の様子を確認した。短い観察だったため、詳細な記録はできなかった。`;
 }
 
@@ -2212,6 +2250,102 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   return logs;
 }
 
+function lightInvestigationResponseText(party, isNight, hasLantern, rng) {
+  const stat = pickOne(["caution", "memory", "curiosity", "courage", "kindness"], rng);
+  const adv = bestByStat(party, stat);
+  const name = getDisplayName(adv);
+  const solo = isSoloParty(party);
+  const other = party.find((member) => member.id !== adv.id);
+
+  if (!isNight) {
+    if (stat === "memory") return `${name}は人の足跡と荷車の跡だけを記録した。灯りにつながる痕跡は見つからなかった。`;
+    if (stat === "caution") return `${name}は道の曲がり角と帰り道を確認したが、昼の調査では危険な点はなかった。`;
+    return `${name}は道端の草や古い轍を確かめた。異常と呼べるものは残っていなかった。`;
+  }
+
+  if (hasLantern) {
+    if (stat === "caution") return `${name}はランタンの明かりを足元に落とし、帰り道の轍を見失わない位置で調査を止めた。`;
+    if (stat === "memory") return `${name}は灯りが見えた位置と、消えた方角を報告書に書き込んだ。`;
+    if (stat === "curiosity") return solo
+      ? `${name}は近づきたい気持ちを抑え、見える距離から灯りの揺れ方だけを観察した。`
+      : `${name}は近づきたがったが、${getDisplayName(other)}が帰り道を示して距離を保たせた。`;
+    if (stat === "courage") return `${name}は前に出ようとしたが、ランタンの届く範囲を越えないところで足を止めた。`;
+    return solo
+      ? `${name}は足元を確かめながら、無理に暗がりへ踏み込まない判断をした。`
+      : `${name}は${getDisplayName(other)}の足元を気にし、暗い方へ寄りすぎないよう位置を直した。`;
+  }
+
+  if (stat === "caution") return `${name}は足元と帰り道が不安定だと判断し、深追いを避けた。`;
+  if (stat === "memory") return `${name}は灯りが見えた方角だけを記録し、接近調査は次回に回した。`;
+  if (stat === "curiosity") return `${name}は灯りの正体を気にしていたが、暗さのためそれ以上は近づかなかった。`;
+  if (stat === "courage") return `${name}は一歩前に出たが、足元が見えないためそこで止まった。`;
+  return solo
+    ? `${name}は無理をせず、見える範囲の情報だけを持ち帰ることにした。`
+    : `${name}は${getDisplayName(other)}の足元を確かめ、無理に進まないよう促した。`;
+}
+
+function lightInvestigationInteractionText(party, rng) {
+  if (isSoloParty(party)) return null;
+  const mina = party.find((a) => a.id === "adv_mina");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const lines = [];
+
+  if (mina && gadd) lines.push(`${nm(mina)}が灯りの位置を読み上げると、${nm(gadd)}は道の端で足場を確かめた。`);
+  if (mina && elne) lines.push(`${nm(mina)}が消えた方角を記録し、${nm(elne)}は帰り道の目印を確認した。`);
+  if (gadd && elne) lines.push(`${nm(elne)}が「ここまでにしましょう」と言うと、${nm(gadd)}は不満を飲み込んで引き返した。`);
+
+  return lines.length > 0 ? pickOne(lines, rng) : null;
+}
+
+function lightObservationRecordText(party, adventurerItemIds, rng) {
+  const holder = party.find((adv) => getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet"));
+  if (!holder) return null;
+  const name = getDisplayName(holder);
+  return pickOne([
+    `${name}は観察記録票に、灯りが見えた位置と消えた方角を書き残した。`,
+    `報告書には、${name}の記録として灯りの揺れ方と見えた高さが追記されている。`,
+    `${name}は、灯りが道の曲がり角の向こうで消えたことだけを観察記録票に残した。`
+  ], rng);
+}
+
+function generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng) {
+  const logs = [];
+  const isNight = departTimeOfDay === "夜";
+  const itemIds = getAllItemIds(adventurerItemIds);
+  const hasLantern = itemIds.includes("item_lantern");
+  const hasMap = itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map");
+  const observation = isNight ? lightObservationRecordText(party, adventurerItemIds, rng) : null;
+
+  if (!isNight) {
+    logs.push(`昼の道には、人の足跡と荷車の跡が残っているだけだった。`);
+    logs.push(lightInvestigationResponseText(party, false, hasLantern, rng));
+    if (hasMap) logs.push(`古地図と照らしても、道筋そのものに新しい変化は見つからなかった。`);
+    logs.push(`問題の灯りは見えず、報告書には「昼間の異常は確認できず」と記されている。`);
+    logs.push(`依頼人は、やはり夜にだけ見えるのだと言った。`);
+    return logs;
+  }
+
+  logs.push(`夜道の先に、小さな灯りが一つ浮かんで見えた。`);
+  if (hasLantern) {
+    logs.push(`ランタンの明かりを地面に落とすと、帰り道の轍がはっきり見えた。`);
+    logs.push(lightInvestigationResponseText(party, true, true, rng));
+    const interaction = lightInvestigationInteractionText(party, rng);
+    if (interaction) logs.push(interaction);
+    logs.push(`灯りはしばらく揺れたあと、道の曲がり角の向こうで消えた。`);
+    if (!observation) logs.push(`報告書には「ランタンなしでの再調査は避けること」と書き添えられている。`);
+  } else {
+    logs.push(`足元が暗く、帰り道の目印もすぐに見えなくなった。`);
+    logs.push(lightInvestigationResponseText(party, true, false, rng));
+    logs.push(`${partySubject(party)}は深追いせず、その場で引き返した。`);
+    logs.push(`報告書には「灯りは確認。ただし接近調査は不可」とだけ残っている。`);
+  }
+
+  if (observation) logs.push(observation);
+  return logs;
+}
+
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -2227,6 +2361,44 @@ function generateReport(expedition) {
   const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
   const logs = [];
   const add = (kind, text) => logs.push({ kind, text });
+
+  if (quest.id === "quest_lingering_light") {
+    const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
+    const lightLogs = generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng);
+    lightLogs.forEach((text, index) => add(index === lightLogs.length - 1 ? "afterglow" : "action", text));
+    const isNight = departTimeOfDay === "夜";
+    const observationNotes = isNight ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null;
+    const hasLantern = itemIds.includes("item_lantern");
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認"}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return {
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし",
+      summary: isNight
+        ? (hasLantern ? "夜道の灯りを安全な距離から確認し、消えた方角を記録した。" : "夜道の灯りは確認したが、暗さのため接近調査は避けた。")
+        : "昼間の道に異常はなく、問題の灯りも確認されなかった。",
+      historyLine: `${quest.title}：${isNight ? (hasLantern ? "ランタンありで夜間確認。" : "夜間に灯りを確認、接近は保留。") : "昼間確認では異常なし。"}`,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes,
+      departConditions,
+      hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
+      createdAt: new Date().toISOString()
+    };
+  }
 
   if (quest.id === "quest_field_mystery") {
     const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng);
