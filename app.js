@@ -2363,6 +2363,14 @@ function battleSupplyEventText(quest, party, adventurerItemIds, rng) {
   return lines.length > 0 ? pickOne(lines, rng) : null;
 }
 
+function battleEncounterText(rng) {
+  return pickOne([
+    `畑の畝の間から、「なにか」が跳ねるように飛び出した。`,
+    `荒らされた畝の陰から、「なにか」が姿を見せた。`,
+    `依頼人が指差した畝の先で、「なにか」が土を蹴って跳ねた。`
+  ], rng);
+}
+
 function battleOpponentEventText(rng) {
   return pickOne([
     `「なにか」は苗の間を低く跳ね、こちらを見るたびに向きを変えた。`,
@@ -2373,6 +2381,75 @@ function battleOpponentEventText(rng) {
   ], rng);
 }
 
+function battleWeaponPushLine(adv, rng) {
+  const name = getDisplayName(adv);
+  const weapon = adv.weapon;
+  if (!weapon) return null;
+  const isRanged = weapon.range === "中距離";
+  const isBlunt = weapon.type?.includes("鈍器");
+  const isShield = weapon.type?.includes("盾");
+  const isStaff = weapon.type?.includes("杖");
+
+  if (isRanged) {
+    return pickOne([
+      `${name}は${weapon.name}で間合いを保ちながら、「なにか」の逃げ道を畑の外へ向けた。`,
+      `${name}は${weapon.name}を構え、影が畝から出ないよう牽制した。`
+    ], rng);
+  }
+  if (isBlunt) {
+    return pickOne([
+      `${name}は${weapon.name}で地面を叩き、音と圧で「なにか」を畑の端まで押し返した。`,
+      `${name}は${weapon.name}を振り上げ、怯む「なにか」を畑の外側へ追いやった。`
+    ], rng);
+  }
+  if (isShield) {
+    return pickOne([
+      `${name}は${weapon.name}で身を低く構え、「なにか」の進路を畑の外へ誘導した。`,
+      `${name}は盾を畑の端に向け、小さな影が逃げる方角を狭めた。`
+    ], rng);
+  }
+  if (isStaff) {
+    return pickOne([
+      `${name}は${weapon.name}で畝を示し、「なにか」が畑の外へ出る道だけを残した。`,
+      `${name}は${weapon.name}を地面に向け、追い払いの合図のように一度打ち付けた。`
+    ], rng);
+  }
+  return pickOne([
+    `${name}は${weapon.name}を構え、「なにか」を畑の外へ追いやった。`,
+    `${name}は${weapon.name}で牽制し、影の動きを畑の端へ向けた。`
+  ], rng);
+}
+
+function battleOpponentRetreatText(rng) {
+  return pickOne([
+    `「なにか」は何度か振り返ったが、畑の端へ向かう動きが強くなった。`,
+    `小さな影は畝から離れ、畑の外側へ逃げ道を探し始めた。`,
+    `「なにか」は抵抗を続けたが、畑の外へ逃げる方角ばかり向くようになった。`
+  ], rng);
+}
+
+// 押し合い・牽制・追い払い（最大2行）
+function battlePushRepelText(quest, party, adventurerItemIds, rng) {
+  const lines = [];
+  const roles = battleRoleDivisionText(party, rng);
+  if (roles.length > 0) lines.push(roles[0]);
+
+  const pusher = bestByStat(party, "courage");
+  const weaponLine = battleWeaponPushLine(pusher, rng);
+  if (weaponLine) lines.push(weaponLine);
+
+  if (lines.length < 2) {
+    const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
+    if (supply) lines.push(supply);
+  }
+
+  if (lines.length === 0) {
+    lines.push(`${getDisplayName(pusher)}は「なにか」を畑の外へ追い払うため、前に出た。`);
+  }
+
+  return lines.slice(0, 2);
+}
+
 function battleStatEventText(party, rng) {
   const stat = pickOne(["courage", "caution", "kindness", "memory", "curiosity"], rng);
   const adv = bestByStat(party, stat);
@@ -2380,10 +2457,11 @@ function battleStatEventText(party, rng) {
   const solo = isSoloParty(party);
   const other = party.find((member) => member.id !== adv.id);
   const weapon = adv.weapon ?? null;
-  const useWeapon = weapon != null && rng() < 0.55; // 55%の確率で武器名を使う
+  const useWeapon = weapon != null && rng() < 0.55;
   const isRanged = weapon?.range === "中距離";
+  const isBlunt = weapon?.type?.includes("鈍器");
+  const isShield = weapon?.type?.includes("盾");
 
-  // 武器あり分岐：range で近接 / 中距離を分ける
   if (useWeapon) {
     const weaponPools = {
       courage: isRanged
@@ -2391,10 +2469,20 @@ function battleStatEventText(party, rng) {
             `${name}は${weapon.name}を手に、「なにか」の正面から間合いを詰めた。`,
             `${name}は${weapon.name}で「なにか」の退路を畑の外側へ向け、そのまま追いやった。`
           ]
-        : [
-            `${name}は${weapon.name}を構え、怯まず前に踏み込んだ。`,
-            `${name}は${weapon.name}で地面を一度叩き、「なにか」を畑の端まで押し返した。`
-          ],
+        : isBlunt
+          ? [
+              `${name}は${weapon.name}を構え、怯まず前に踏み込んだ。`,
+              `${name}は${weapon.name}で地面を一度叩き、「なにか」を畑の端まで押し返した。`
+            ]
+          : isShield
+            ? [
+                `${name}は${weapon.name}で身を低く構え、依頼人の前に立った。`,
+                `${name}は盾を畑の端に向け、「なにか」の進路を外側へ誘導した。`
+              ]
+            : [
+                `${name}は${weapon.name}を構え、怯まず前に踏み込んだ。`,
+                `${name}は${weapon.name}で地面を一度叩き、「なにか」を畑の端まで押し返した。`
+              ],
       caution: [
         `${name}は${weapon.name}を手に間合いを測り、逃げ道が外側を向くよう位置を変えた。`,
         `${name}は${weapon.name}を構えたまま急がず、「なにか」を端へ誘導した。`
@@ -2583,7 +2671,7 @@ function battleOutcomeLines(party, adventurerItemIds, rng) {
 }
 
 function battleWithdrawalText(party, rng) {
-  if (rng() < 0.30) return null; // 約70%の確率で出す
+  if (rng() < 0.12) return null; // 約88%の確率で出す
   const stat = pickOne(["caution", "courage", "kindness", "memory", "curiosity"], rng);
   const adv = bestByStat(party, stat);
   const name = getDisplayName(adv);
@@ -2623,20 +2711,20 @@ function battleWithdrawalText(party, rng) {
 
 function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   const logs = [];
-  logs.push(`畑の畝の間から、「なにか」が跳ねるように飛び出した。`);
+  // 1. 遭遇
+  logs.push(battleEncounterText(rng));
+  // 2. 相手の様子
   logs.push(battleOpponentEventText(rng));
+  // 3. 冒険者の対応
   logs.push(battleStatEventText(party, rng));
-  const roles = battleRoleDivisionText(party, rng);
-  roles.forEach((r) => logs.push(r));
-  const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
-  if (roles.length === 0) {
-    // アクセサリー → supply の順に試みる。どちらかが出たら1行に収める
-    const accessory = battleAccessoryText(party, rng);
-    if (accessory) logs.push(accessory);
-    else if (supply) logs.push(supply);
-  }
+  // 4. 押し合い・牽制・追い払い
+  battlePushRepelText(quest, party, adventurerItemIds, rng).forEach((line) => logs.push(line));
+  // 4→5. 相手が退き始める
+  logs.push(battleOpponentRetreatText(rng));
+  // 5. 切り上げ判断
   const withdrawal = battleWithdrawalText(party, rng);
   if (withdrawal) logs.push(withdrawal);
+  // 6. 結果
   const outcomeLines = battleOutcomeLines(party, adventurerItemIds, rng);
   outcomeLines.forEach((line) => logs.push(line));
   const observation = battleObservationRecordText(party, adventurerItemIds, rng);
