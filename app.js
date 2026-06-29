@@ -99,6 +99,17 @@ const masterQuests = [
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
     summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。"
+  },
+  {
+    id: "quest_field_mystery",
+    title: "畑を荒らす「なにか」の追い払い",
+    category: "戦闘",
+    danger: "低",
+    area: "村はずれの畑",
+    recommended: ["戦士", "慎重", "観察"],
+    tags: ["戦闘", "追い払い", "未同定", "畑"],
+    observationTarget: "「なにか」",
+    summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
   }
 ];
 
@@ -1692,7 +1703,8 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
     quest_letter: ["item_map", "item_oilcase"],
     quest_herb: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
-    quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"]
+    quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
+    quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"]
   };
   const allowed = allowedByQuest[quest.id];
   if (!allowed) return true;
@@ -2065,8 +2077,32 @@ function generateRabbitNote(adv, rng) {
   ], rng);
 }
 
+function generateMysteryFieldNote(adv, rng) {
+  const memory = adv.stats?.memory ?? 3;
+  const curiosity = adv.stats?.curiosity ?? 3;
+  const name = getDisplayName(adv);
+
+  if (memory >= 4) {
+    return pickOne([
+      `${name}は、耳の先が黒く、泥の跳ね方が左右で違っていたと記録している。足跡は畝の間から外側へ続いていた。`,
+      `${name}の記録には、背丈は膝ほど、畑の柔らかい土を避けるように跳ねた、とある。正体は未確定。`
+    ], rng);
+  }
+  if (curiosity >= 4) {
+    return pickOne([
+      `${name}は「なにか」が逃げた後の草の倒れ方を気にしていた。巣穴か通り道が近くにあるかもしれない。`,
+      `${name}は姿よりも痕跡を気にしていた。畑の外で同じ足跡を探したが、途中で途切れている。`
+    ], rng);
+  }
+  return pickOne([
+    `${name}は、小さな影が畑の外へ逃げたと記録した。特徴はまだ少ない。`,
+    `${name}は、素早く跳ねる未同定の相手だったとだけ報告している。`
+  ], rng);
+}
+
 function generateAdventurerObservationNote(target, adv, rng) {
   if (target === "森喰い兎") return generateRabbitNote(adv, rng);
+  if (target === "「なにか」") return generateMysteryFieldNote(adv, rng);
   return `${getDisplayName(adv)}は${target}の様子を確認した。短い観察だったため、詳細な記録はできなかった。`;
 }
 
@@ -2081,6 +2117,76 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
     text: generateAdventurerObservationNote(quest.observationTarget, adv, rng)
   }));
   return { target: quest.observationTarget, notes };
+}
+
+function bestByStat(party, statKey) {
+  return party.reduce((best, adv) => ((adv.stats?.[statKey] ?? 0) > (best.stats?.[statKey] ?? 0) ? adv : best), party[0]);
+}
+
+function battleSupplyEventText(quest, party, adventurerItemIds, rng) {
+  const usableItems = getAllItemIds(adventurerItemIds).filter((itemId) => canUseItemInQuest(quest, itemId));
+  const holderName = (itemId) => {
+    const adv = party.find((member) => getAdvItemIds(adventurerItemIds, member.id).includes(itemId)) ?? party[0];
+    return getDisplayName(adv);
+  };
+  const lines = [];
+
+  if (usableItems.includes("item_bandage")) {
+    lines.push(`${holderName("item_bandage")}は包帯を取り出し、畑の柵で擦った手を簡単に確かめた。処置は軽く済んだ。`);
+  }
+  if (usableItems.includes("item_whistle")) {
+    lines.push(`${holderName("item_whistle")}は笛を短く鳴らし、「なにか」を畑の外側へ追いやった。音に驚いた影は畝から離れた。`);
+  }
+  if (usableItems.includes("item_obs_sheet")) {
+    lines.push(`${holderName("item_obs_sheet")}は観察記録票に、足跡の向きと逃げた先を短く書き留めた。`);
+  }
+
+  return lines.length > 0 ? pickOne(lines, rng) : null;
+}
+
+function battleStatEventText(party, rng) {
+  const stat = pickOne(["courage", "caution", "kindness", "memory", "curiosity"], rng);
+  const adv = bestByStat(party, stat);
+  const name = getDisplayName(adv);
+  const solo = isSoloParty(party);
+  const other = party.find((member) => member.id !== adv.id);
+  const lines = {
+    courage: `${name}は怯まず前に出て、鍬の柄で地面を強く叩いた。「なにか」は畝の間で足を止めた。`,
+    caution: `${name}は間合いを測り、畑の外へ逃がす道を先に確かめた。深追いはしなかった。`,
+    kindness: solo
+      ? `${name}は依頼人が畑に入らないよう手で制し、自分だけで畝の外側へ回り込んだ。`
+      : `${name}は依頼人と${getDisplayName(other)}の位置を確かめ、誰も畑の奥へ踏み込みすぎないようにした。`,
+    memory: `${name}は、耳の先が黒く、泥の跳ね方が妙だったと記録している。`,
+    curiosity: `${name}は「なにか」が逃げた後の足跡を気にしていた。正体はまだ分からない。`
+  };
+  return lines[stat];
+}
+
+function battleInteractionText(party, rng) {
+  if (isSoloParty(party)) return null;
+  const mina = party.find((a) => a.id === "adv_mina");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const lines = [];
+
+  if (mina && gadd) lines.push(`${nm(mina)}が畝の切れ目を指すと、${nm(gadd)}はそこへ回り込んで逃げ道をふさいだ。`);
+  if (mina && elne) lines.push(`${nm(mina)}が足跡を見つけ、${nm(elne)}は踏み荒らされた苗を避けて立ち位置を変えた。`);
+  if (gadd && elne) lines.push(`${nm(elne)}が「畑の外へ」と短く言うと、${nm(gadd)}は大きく踏み込まずに圧をかけた。`);
+
+  return lines.length > 0 ? pickOne(lines, rng) : null;
+}
+
+function generateBattleLogs(quest, party, adventurerItemIds, rng) {
+  const logs = [];
+  logs.push(`畑の畝の間から、「なにか」が跳ねるように飛び出した。`);
+  logs.push(battleStatEventText(party, rng));
+  const interaction = battleInteractionText(party, rng);
+  if (interaction) logs.push(interaction);
+  const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
+  if (supply && logs.length < 4) logs.push(supply);
+  logs.push(`最後には、「なにか」は畑の外へ逃げていった。畑の被害はそこで止まっている。`);
+  return logs;
 }
 
 function generateReport(expedition) {
@@ -2098,6 +2204,39 @@ function generateReport(expedition) {
   const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
   const logs = [];
   const add = (kind, text) => logs.push({ kind, text });
+
+  if (quest.id === "quest_field_mystery") {
+    const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng);
+    battleLogs.forEach((text, index) => add(index === battleLogs.length - 1 ? "afterglow" : "action", text));
+    const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに";
+      adventurerHistoryLines[adv.id] = `${quest.title}：追い払い。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return {
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: "追い払い",
+      summary: "畑を荒らしていた未同定の相手を、畑の外へ追い払った。正体はまだ不明。",
+      historyLine: "畑を荒らす「なにか」を追い払い。未同定のまま、特徴のみ記録。",
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes,
+      departConditions,
+      hiddenTags: { combat: true, target: "「なにか」", recordDensityGain: 1 + logs.length },
+      createdAt: new Date().toISOString()
+    };
+  }
 
   // 生活依頼（lifeQuestEventPools に登録されているもの）は専用フローで生成
   if (lifeQuestEventPools[quest.id]) {
