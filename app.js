@@ -2679,29 +2679,49 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
   const isBattle = quest.category === "戦闘";
   const isInvestigation = quest.category === "調査";
 
+  // 武器・アクセサリー候補を先に準備する
+  const front = party.reduce((best, a) => (a.stats?.courage ?? 0) > (best.stats?.courage ?? 0) ? a : best, party[0]);
+  const frontName = getDisplayName(front);
+  const frontWeapon = front.weapon ?? null;
+  // アクセサリー持ちをランダムに1人取得
+  const accAdvs = party.filter((a) => a.accessory);
+  const accAdv = accAdvs.length > 0 ? accAdvs[Math.floor(rng() * accAdvs.length)] : null;
+  const accName = accAdv ? getDisplayName(accAdv) : null;
+  const acc = accAdv?.accessory ?? null;
+
   // 夜の戦闘・調査依頼
   if (isNight && (isBattle || isInvestigation)) {
-    return pickOne([
+    const lines = [
       `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`,
       `夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`
-    ], rng);
+    ];
+    if (frontWeapon) lines.push(`${frontName}は${frontWeapon.name}を手に夜道へ向かった。帰還したとき、それは少し傷ついていた。`);
+    if (acc) lines.push(`${accName}の${acc.name}は、夜の遠征でもいつも通りそこにあった。`);
+    return pickOne(lines, rng);
   }
 
   // 戦闘依頼（夜以外）
   if (isBattle) {
-    const front = party.reduce((best, a) => (a.stats?.courage ?? 0) > (best.stats?.courage ?? 0) ? a : best, party[0]);
-    return pickOne([
-      `${getDisplayName(front)}は怯まず前に出た。それが今回の遠征で一番はっきりしたことだ。`,
+    const lines = [
+      `${frontName}は怯まず前に出た。それが今回の遠征で一番はっきりしたことだ。`,
       `追い払いは成功した。ただし正体は、まだ誰も知らない。`
-    ], rng);
+    ];
+    if (frontWeapon) {
+      lines.push(`${frontName}は${frontWeapon.name}を構え、畑の入口から最後まで動かなかった。`);
+      lines.push(`${frontWeapon.name}が「なにか」の退路を畑の外へ向けた。それで十分だった。`);
+    }
+    if (acc) lines.push(`${accName}の${acc.name}は、帰還後もしばらくその手元にあった。`);
+    return pickOne(lines, rng);
   }
 
   // 調査依頼（夜以外）
   if (isInvestigation) {
-    return pickOne([
+    const lines = [
       `現地で確かめたことは、書面の情報より少し違っていた。それが今回の収穫だ。`,
       `調査は完了した。次に来るとき、また何かが変わっているかもしれない。`
-    ], rng);
+    ];
+    if (acc) lines.push(`${accName}の${acc.name}が、調査の間ずっとそこにあった。小さなものが判断を支えることがある。`);
+    return pickOne(lines, rng);
   }
 
   // 支給品が役立った
@@ -2726,20 +2746,24 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
     ], rng);
   }
 
-  // 結果別
+  // 結果別（低確率でアクセサリー追加候補）
   if (result === "成功" || result === "調査成功") {
-    return pickOne([
+    const lines = [
       `依頼は成功した。こういう積み重ねが、${subject}の評判をつくっていく。`,
       `問題なく完了した。報告書が棚に増えるのは、悪いことではない。`
-    ], rng);
+    ];
+    if (acc && rng() < 0.40) lines.push(`${accName}の${acc.name}が目に入った。今回も、その小さな頼りを信じていたのかもしれない。`);
+    return pickOne(lines, rng);
   }
 
-  // 汎用フォールバック
-  return pickOne([
+  // 汎用フォールバック（低確率でアクセサリー追加候補）
+  const fallback = [
     `今回の遠征で、${subject}はまた少し、この仕事を覚えた。`,
     `報告書が棚に収まった。${subject}の記録が、また一つ増えた。`,
     `遠征は終わった。次の依頼が、すでに掲示板に張り出されている。`
-  ], rng);
+  ];
+  if (acc && rng() < 0.30) fallback.push(`${accName}の${acc.name}は、今回も変わらずそこにあった。`);
+  return pickOne(fallback, rng);
 }
 
 function generateReport(expedition) {
