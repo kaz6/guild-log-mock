@@ -2312,6 +2312,42 @@ function battleStatEventText(party, rng) {
   const name = getDisplayName(adv);
   const solo = isSoloParty(party);
   const other = party.find((member) => member.id !== adv.id);
+  const weapon = adv.weapon ?? null;
+  const useWeapon = weapon != null && rng() < 0.55; // 55%の確率で武器名を使う
+  const isRanged = weapon?.range === "中距離";
+
+  // 武器あり分岐：range で近接 / 中距離を分ける
+  if (useWeapon) {
+    const weaponPools = {
+      courage: isRanged
+        ? [
+            `${name}は${weapon.name}を手に、「なにか」の正面から間合いを詰めた。`,
+            `${name}は${weapon.name}で「なにか」の退路を畑の外側へ向け、そのまま追いやった。`
+          ]
+        : [
+            `${name}は${weapon.name}を構え、怯まず前に踏み込んだ。`,
+            `${name}は${weapon.name}で地面を一度叩き、「なにか」を畑の端まで押し返した。`
+          ],
+      caution: [
+        `${name}は${weapon.name}を手に間合いを測り、逃げ道が外側を向くよう位置を変えた。`,
+        `${name}は${weapon.name}を構えたまま急がず、「なにか」を端へ誘導した。`
+      ],
+      kindness: solo
+        ? [`${name}は${weapon.name}を手に、依頼人を先に退かせてから「なにか」に向き直った。`]
+        : [`${name}は${weapon.name}を腰に、${getDisplayName(other)}と依頼人の位置をまず確かめた。`],
+      memory: [
+        `${name}は${weapon.name}を手に動きながら、「なにか」の跳び方と特徴を頭に記録していた。`,
+        `${name}は${weapon.name}の持ち方を変えながら、逃げ方のパターンを観察した。`
+      ],
+      curiosity: [
+        `${name}は${weapon.name}を持ちながら追いたがったが、依頼の目的を優先した。`,
+        `${name}は${weapon.name}で足跡を示しながら、「なにか」の正体を考えていた。`
+      ]
+    };
+    return pickOne(weaponPools[stat], rng);
+  }
+
+  // 武器なし / 武器非使用時の従来プール
   const pools = {
     courage: [
       `${name}は怯まず前に出て、鍬の柄で地面を強く叩いた。`,
@@ -2344,6 +2380,19 @@ function battleStatEventText(party, rng) {
     ]
   };
   return pickOne(pools[stat], rng);
+}
+
+// アクセサリーを持つ冒険者がいれば、低確率で装備品の一文を返す
+function battleAccessoryText(party, rng) {
+  if (rng() < 0.65) return null; // 35%の確率で出す
+  const adv = party.find((a) => a.accessory) ?? null;
+  if (!adv) return null;
+  const name = getDisplayName(adv);
+  const acc = adv.accessory;
+  return pickOne([
+    `${name}の${acc.name}が揺れた。それを一瞬確かめてから、次の動きを決めた。`,
+    `${acc.name}がふと目に入った。いつもの遠征と変わらない装備だった。`
+  ], rng);
 }
 
 // 戻り値は string[]。ソロは0〜1行、2人は1行、3人以上は同一冒険者重複なしで最大2行。
@@ -2513,7 +2562,12 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   const roles = battleRoleDivisionText(party, rng);
   roles.forEach((r) => logs.push(r));
   const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
-  if (supply && roles.length === 0) logs.push(supply); // 役割分担行がある場合は行数を抑える
+  if (roles.length === 0) {
+    // アクセサリー → supply の順に試みる。どちらかが出たら1行に収める
+    const accessory = battleAccessoryText(party, rng);
+    if (accessory) logs.push(accessory);
+    else if (supply) logs.push(supply);
+  }
   const withdrawal = battleWithdrawalText(party, rng);
   if (withdrawal) logs.push(withdrawal);
   const outcomeLines = battleOutcomeLines(party, adventurerItemIds, rng);
