@@ -39,7 +39,12 @@ const masterAdventurers = [
       positiveLine: "最後尾の足音を確認してから、ようやく歩き出した。",
       dangerLine: "撤退できる状況でも、倒れた影の方へ戻ろうとした。",
       idleLine: "何もない道で、何度も背後を振り返っていた。"
-    }
+    },
+    traits: [
+      { name: "面倒見がいい", type: "positive", tags: ["仲間", "救助", "住民"] },
+      { name: "よく気がつく", type: "positive", tags: ["観察", "小さな異変"] },
+      { name: "自分を後回しにする", type: "flaw", tags: ["負傷", "包帯", "撤退"] }
+    ]
   },
   {
     id: "adv_gadd",
@@ -76,7 +81,12 @@ const masterAdventurers = [
       positiveLine: "使えそうな物を拾い集め、帰り道の荷を少しだけ重くした。",
       dangerLine: "捨ててよいはずの古道具を、どうしても置いていけなかった。",
       idleLine: "鉄鍋は袋の中身を何度も数え直していた。"
-    }
+    },
+    traits: [
+      { name: "気前がいい", type: "positive", tags: ["食料", "住民", "生活依頼"] },
+      { name: "場を和ませる", type: "positive", tags: ["祝宴", "村", "会話"] },
+      { name: "生活の匂いに情が移る", type: "flaw", tags: ["台所", "道具", "畑", "廃屋"] }
+    ]
   },
   {
     id: "adv_elne",
@@ -113,7 +123,12 @@ const masterAdventurers = [
       positiveLine: "曖昧な輪郭を、震える字で報告書の余白に残した。",
       dangerLine: "逃げるべき場面で、もう一度だけ対象を見ようとした。",
       idleLine: "エルネ・シェルカは、消えかけた名前を何度も書き直していた。"
-    }
+    },
+    traits: [
+      { name: "記録が正確", type: "positive", tags: ["記録", "報告書", "観察"] },
+      { name: "冷静に観察する", type: "positive", tags: ["なにか", "不明", "図鑑"] },
+      { name: "記録を優先しすぎる", type: "flaw", tags: ["危険", "観察", "撤退"] }
+    ]
   },
   {
     id: "adv_row",
@@ -150,7 +165,12 @@ const masterAdventurers = [
       positiveLine: "戦う前に、まず帰り道のぬかるみを確かめていた。",
       dangerLine: "敵を見るより先に、退路がまだ同じ場所にあるかを確かめてしまった。",
       idleLine: "ロウは古地図を畳んでは開き、同じ道を何度も指でなぞっていた。"
-    }
+    },
+    traits: [
+      { name: "慎重に進む", type: "positive", tags: ["退路", "罠", "夜道"] },
+      { name: "道を覚える", type: "positive", tags: ["地図", "帰還", "探索"] },
+      { name: "退路を疑いすぎる", type: "flaw", tags: ["迷子", "帰還", "撤退"] }
+    ]
   }
 ];
 
@@ -793,6 +813,12 @@ function adventurerListCardHtml(adventurer) {
   `;
 }
 
+function traitsDisplayText(adventurer) {
+  const traits = adventurer.traits ?? [];
+  if (traits.length === 0) return adventurer.personality ?? "なし";
+  return traits.map((trait) => trait.name).join(" / ");
+}
+
 function adventurerEditorHtml(adventurer) {
   return `
     <div class="card-title">
@@ -806,7 +832,7 @@ function adventurerEditorHtml(adventurer) {
     <div class="kv">
       <span>本名</span><strong>${escapeHtml(adventurer.name)}</strong>
       <span>職業</span><strong>${escapeHtml(adventurer.job)}</strong>
-      <span>性格</span><strong>${escapeHtml(adventurer.personality)}</strong>
+      <span>性格</span><strong>${escapeHtml(traitsDisplayText(adventurer))}</strong>
       <span>前職</span><strong>${escapeHtml(adventurer.background)}</strong>
       <span>固有武器</span><strong>${escapeHtml(adventurer.weapon?.name ?? "なし")}</strong>
       <span>アクセサリー</span><strong>${escapeHtml(adventurer.accessory?.name ?? "なし")}</strong>
@@ -2729,6 +2755,11 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
   const accAdv = accAdvs.length > 0 ? accAdvs[Math.floor(rng() * accAdvs.length)] : null;
   const accName = accAdv ? getDisplayName(accAdv) : null;
   const acc = accAdv?.accessory ?? null;
+  // 執着持ちをランダムに1人取得
+  const obsAdvs = party.filter((a) => a.obsession);
+  const obsAdv = obsAdvs.length > 0 ? obsAdvs[Math.floor(rng() * obsAdvs.length)] : null;
+  const obsName = obsAdv ? getDisplayName(obsAdv) : null;
+  const obs = obsAdv?.obsession ?? null;
 
   // 夜の戦闘・調査依頼
   if (isNight && (isBattle || isInvestigation)) {
@@ -2738,6 +2769,8 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
     ];
     if (frontWeapon) lines.push(`${frontName}は${frontWeapon.name}を手に夜道へ向かった。帰還したとき、それは少し傷ついていた。`);
     if (acc) lines.push(`${accName}の${acc.name}は、夜の遠征でもいつも通りそこにあった。`);
+    // 執着：idleLine（夜の静けさに合う）
+    if (obs) lines.push(`${obsName}【${obs.label}】— ${obs.idleLine}`);
     return pickOne(lines, rng);
   }
 
@@ -2752,6 +2785,8 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
       lines.push(`${frontWeapon.name}が「なにか」の退路を畑の外へ向けた。それで十分だった。`);
     }
     if (acc) lines.push(`${accName}の${acc.name}は、帰還後もしばらくその手元にあった。`);
+    // 執着：positiveLine（行動として出た面）
+    if (obs) lines.push(`${obsName}【${obs.label}】— ${obs.positiveLine}`);
     return pickOne(lines, rng);
   }
 
@@ -2762,6 +2797,8 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
       `調査は完了した。次に来るとき、また何かが変わっているかもしれない。`
     ];
     if (acc) lines.push(`${accName}の${acc.name}が、調査の間ずっとそこにあった。小さなものが判断を支えることがある。`);
+    // 執着：positiveLine / idleLine どちらか
+    if (obs) lines.push(`${obsName}【${obs.label}】— ${rng() < 0.5 ? obs.positiveLine : obs.idleLine}`);
     return pickOne(lines, rng);
   }
 
@@ -2787,23 +2824,27 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
     ], rng);
   }
 
-  // 結果別（低確率でアクセサリー追加候補）
+  // 結果別
   if (result === "成功" || result === "調査成功") {
     const lines = [
       `依頼は成功した。こういう積み重ねが、${subject}の評判をつくっていく。`,
       `問題なく完了した。報告書が棚に増えるのは、悪いことではない。`
     ];
     if (acc && rng() < 0.40) lines.push(`${accName}の${acc.name}が目に入った。今回も、その小さな頼りを信じていたのかもしれない。`);
+    // 執着：低確率で positiveLine
+    if (obs && rng() < 0.35) lines.push(`${obsName}【${obs.label}】— ${obs.positiveLine}`);
     return pickOne(lines, rng);
   }
 
-  // 汎用フォールバック（低確率でアクセサリー追加候補）
+  // 汎用フォールバック
   const fallback = [
     `今回の遠征で、${subject}はまた少し、この仕事を覚えた。`,
     `報告書が棚に収まった。${subject}の記録が、また一つ増えた。`,
     `遠征は終わった。次の依頼が、すでに掲示板に張り出されている。`
   ];
   if (acc && rng() < 0.30) fallback.push(`${accName}の${acc.name}は、今回も変わらずそこにあった。`);
+  // 執着：低確率で idleLine（何もない道での癖として）
+  if (obs && rng() < 0.30) fallback.push(`${obsName}【${obs.label}】— ${obs.idleLine}`);
   return pickOne(fallback, rng);
 }
 
