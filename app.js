@@ -2261,6 +2261,43 @@ function battleObservationRecordText(party, adventurerItemIds, rng) {
   ], rng);
 }
 
+function battleOutcomeLines(party, rng) {
+  const solo = isSoloParty(party);
+  const subject = partySubject(party);
+
+  // 最も高いパラメータで結果パターンを選ぶ
+  const stats = ["caution", "courage", "memory", "curiosity", "kindness"];
+  const dominant = stats.reduce((best, s) => {
+    const bv = party.reduce((mx, a) => Math.max(mx, a.stats?.[best] ?? 0), 0);
+    const sv = party.reduce((mx, a) => Math.max(mx, a.stats?.[s] ?? 0), 0);
+    return sv > bv ? s : best;
+  }, "courage");
+
+  // パターン1：押し返し成功（courage 優位 or デフォルト）
+  if (dominant === "courage") {
+    return pickOne([
+      [`「なにか」は畑の外へ逃げていった。`, `畑の被害はそこで止まっている。`],
+      [`${subject}は「なにか」を畑の端まで強く押し返した。「なにか」は戻らなかった。`, `畑の被害はそこで止まっている。`]
+    ], rng);
+  }
+
+  // パターン2：正体不明・記録優先（memory or curiosity 優位）
+  if (dominant === "memory" || dominant === "curiosity") {
+    const recorder = bestByStat(party, dominant);
+    const rname = getDisplayName(recorder);
+    return pickOne([
+      [`「なにか」は森の方へ逃げたが、正体は分からないままだった。`, `${rname}は、次回は観察記録票を持参すべきだと報告書に書き添えている。`],
+      [`「なにか」は道の外へ消えた。正体は未確定だが、足跡と逃げた方角は記録に残っている。`, `畑の被害はそこで止まっている。`]
+    ], rng);
+  }
+
+  // パターン3：深追いせず・安全確認優先（caution or kindness 優位）
+  return pickOne([
+    [`${subject}は畑の外まで追い払ったところで足を止めた。`, `依頼は達成したが、巣や出どころの確認は次回に回された。`],
+    [`「なにか」は畑の外へ出た。${solo ? "深追いはしなかった。" : `${subject}は深追いせず、その場で状況を確認した。`}`, `畑の被害はそこで止まっている。`]
+  ], rng);
+}
+
 function battleWithdrawalText(party, rng) {
   if (rng() < 0.30) return null; // 約70%の確率で出す
   const stat = pickOne(["caution", "courage", "kindness", "memory", "curiosity"], rng);
@@ -2312,10 +2349,10 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   } else if (supply) {
     logs.push(supply);
   }
-  logs.push(`「なにか」は何度か振り返ったが、畑の外へ逃げていった。`);
   const withdrawal = battleWithdrawalText(party, rng);
   if (withdrawal) logs.push(withdrawal);
-  logs.push(`畑の被害はそこで止まっている。`);
+  const outcomeLines = battleOutcomeLines(party, rng);
+  outcomeLines.forEach((line) => logs.push(line));
   const observation = battleObservationRecordText(party, adventurerItemIds, rng);
   if (observation) logs.push(observation);
   return logs;
