@@ -166,6 +166,7 @@ let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
 let selectedAdventurerItems = state.selectedAdventurerItems ?? {};
 let editingAdventurerId = null;
+let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
 
 function createInitialState() {
   return {
@@ -426,13 +427,24 @@ function expeditionProgressHtml(expedition) {
 }
 
 function getCurrentConditions() {
-  const hour = new Date().getHours();
-  const timeOfDay = hour < 6 ? "夜" : hour < 11 ? "朝" : hour < 16 ? "昼" : hour < 19 ? "夕方" : "夜";
-  const timeIcon = hour < 6 ? "🌙" : hour < 11 ? "🌅" : hour < 16 ? "☀" : hour < 19 ? "🌇" : "🌙";
+  const timeIcons = { 朝: "🌅", 昼: "☀", 夕方: "🌇", 夜: "🌙" };
+  let timeOfDay;
+  if (mockTimeOfDay) {
+    timeOfDay = mockTimeOfDay;
+  } else {
+    const hour = new Date().getHours();
+    timeOfDay = hour < 6 ? "夜" : hour < 11 ? "朝" : hour < 16 ? "昼" : hour < 19 ? "夕方" : "夜";
+  }
+  const timeIcon = timeIcons[timeOfDay] ?? "☀";
   const weathers = ["晴れ", "曇り", "小雨", "風が強い", "霧"];
   const weatherIdx = (state.worldState.totalExpeditions * 3 + state.worldState.archiveSeed) % weathers.length;
   const weather = weathers[weatherIdx];
   return { timeOfDay, timeIcon, weather };
+}
+
+function setMockTimeOfDay(t) {
+  mockTimeOfDay = t;
+  render();
 }
 
 function renderQuests() {
@@ -440,10 +452,16 @@ function renderQuests() {
   const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && !state.expedition;
 
   const cond = getCurrentConditions();
+  const timeOptions = ["朝", "昼", "夕方", "夜"];
   app.innerHTML = `
     <div class="weather-bar">
       <span class="weather-bar-icon">${cond.timeIcon}</span>
       <span class="weather-bar-text">現在：${cond.timeOfDay} / ${cond.weather}</span>
+    </div>
+    <div class="mock-time-bar">
+      <span class="mock-time-label">🔧 Mock時間帯：</span>
+      ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
+      ${mockTimeOfDay ? `<button class="mock-time-btn" onclick="setMockTimeOfDay(null)">自動</button>` : `<button class="mock-time-btn active" onclick="setMockTimeOfDay(null)">自動</button>`}
     </div>
     <section class="card">
       <div class="card-body">
