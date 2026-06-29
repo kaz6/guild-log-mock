@@ -2235,19 +2235,43 @@ function battleStatEventText(party, rng) {
   return lines[stat];
 }
 
-function battleInteractionText(party, rng) {
-  if (isSoloParty(party)) return null;
+function battleRoleDivisionText(party, rng) {
   const mina = party.find((a) => a.id === "adv_mina");
   const gadd = party.find((a) => a.id === "adv_gadd");
   const elne = party.find((a) => a.id === "adv_elne");
   const nm = (adv) => adv ? getDisplayName(adv) : null;
+
+  if (isSoloParty(party)) {
+    if (rng() < 0.40) return null; // 60%の確率で出す
+    const adv = party[0];
+    const name = getDisplayName(adv);
+    const top = ["courage", "caution", "memory", "kindness", "curiosity"]
+      .reduce((best, s) => (adv.stats?.[s] ?? 0) > (adv.stats?.[best] ?? 0) ? s : best, "courage");
+    const soloLines = {
+      courage:   `${name}は前に出て圧をかけながら、足元の安全と退路も確かめた。`,
+      caution:   `${name}は間合いを測りながら、退路と逃げた先の方角を同時に確認した。`,
+      memory:    `${name}は距離を保ちながら、「なにか」の動きと特徴を頭に記録し続けた。`,
+      kindness:  `${name}は依頼人が近寄らないよう気を配りながら、自分で対処を進めた。`,
+      curiosity: `${name}は正体を確かめたかったが、まず追い払いを優先した。`
+    };
+    return soloLines[top] ?? null;
+  }
+
+  // 2人以上：ID組み合わせ優先、なければ stat ベースのフォールバック
   const lines = [];
+  if (gadd && mina) lines.push(`${nm(gadd)}が前に出ると、${nm(mina)}はその背後で逃げ道の向きを記録した。`);
+  if (gadd && elne) lines.push(`${nm(gadd)}が畑の端まで「なにか」を押し返すあいだ、${nm(elne)}は依頼人を畑の外へ下がらせた。`);
+  if (mina && elne) lines.push(`${nm(mina)}が足跡の方角を確認し、${nm(elne)}は踏み荒らされた苗の被害を見渡した。`);
+  if (lines.length > 0) return pickOne(lines, rng);
 
-  if (mina && gadd) lines.push(`${nm(mina)}が畝の切れ目を指すと、${nm(gadd)}はそこへ回り込んで逃げ道をふさいだ。`);
-  if (mina && elne) lines.push(`${nm(mina)}が足跡を見つけ、${nm(elne)}は踏み荒らされた苗を避けて立ち位置を変えた。`);
-  if (gadd && elne) lines.push(`${nm(elne)}が「畑の外へ」と短く言うと、${nm(gadd)}は大きく踏み込まずに圧をかけた。`);
-
-  return lines.length > 0 ? pickOne(lines, rng) : null;
+  // ID に合致しない組み合わせ（将来冒険者追加時のフォールバック）
+  const front = bestByStat(party, "courage");
+  const rest = party.filter((a) => a.id !== front.id);
+  if (rest.length > 0) {
+    const rec = bestByStat(rest, "memory");
+    return `${getDisplayName(front)}が前に出て距離を詰め、${getDisplayName(rec)}はその動きと「なにか」の反応を記録した。`;
+  }
+  return null;
 }
 
 function battleObservationRecordText(party, adventurerItemIds, rng) {
@@ -2261,9 +2285,12 @@ function battleObservationRecordText(party, adventurerItemIds, rng) {
   ], rng);
 }
 
-function battleOutcomeLines(party, rng) {
+function battleOutcomeLines(party, adventurerItemIds, rng) {
   const solo = isSoloParty(party);
   const subject = partySubject(party);
+  const hasObsSheet = party.some((adv) =>
+    getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet")
+  );
 
   // 最も高いパラメータで結果パターンを選ぶ
   const stats = ["caution", "courage", "memory", "curiosity", "kindness"];
@@ -2285,10 +2312,19 @@ function battleOutcomeLines(party, rng) {
   if (dominant === "memory" || dominant === "curiosity") {
     const recorder = bestByStat(party, dominant);
     const rname = getDisplayName(recorder);
-    return pickOne([
-      [`「なにか」は森の方へ逃げたが、正体は分からないままだった。`, `${rname}は、次回は観察記録票を持参すべきだと報告書に書き添えている。`],
-      [`「なにか」は道の外へ消えた。正体は未確定だが、足跡と逃げた方角は記録に残っている。`, `畑の被害はそこで止まっている。`]
-    ], rng);
+    if (hasObsSheet) {
+      // 観察記録票を持参している場合は記録済みの文体
+      return pickOne([
+        [`「なにか」は森の方へ逃げたが、正体は分からないままだった。`, `${rname}の観察記録票には、足跡と逃げた方角が書き留められている。`],
+        [`「なにか」は道の外へ消えた。正体は未確定だが、足跡と逃げた方角は記録に残っている。`, `畑の被害はそこで止まっている。`]
+      ], rng);
+    } else {
+      // 観察記録票を持っていない場合だけ「次回持参すべき」を出す
+      return pickOne([
+        [`「なにか」は森の方へ逃げたが、正体は分からないままだった。`, `${rname}は、次回は観察記録票を持参すべきだと報告書に書き添えている。`],
+        [`「なにか」は道の外へ消えた。正体は未確定だが、足跡と逃げた方角は記録に残っている。`, `畑の被害はそこで止まっている。`]
+      ], rng);
+    }
   }
 
   // パターン3：深追いせず・安全確認優先（caution or kindness 優位）
@@ -2342,16 +2378,13 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   logs.push(`畑の畝の間から、「なにか」が跳ねるように飛び出した。`);
   logs.push(battleOpponentEventText(rng));
   logs.push(battleStatEventText(party, rng));
-  const interaction = battleInteractionText(party, rng);
+  const role = battleRoleDivisionText(party, rng);
+  if (role) logs.push(role);
   const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
-  if (interaction) {
-    logs.push(interaction);
-  } else if (supply) {
-    logs.push(supply);
-  }
+  if (supply && !role) logs.push(supply); // 役割分担行がある場合は行数を抑える
   const withdrawal = battleWithdrawalText(party, rng);
   if (withdrawal) logs.push(withdrawal);
-  const outcomeLines = battleOutcomeLines(party, rng);
+  const outcomeLines = battleOutcomeLines(party, adventurerItemIds, rng);
   outcomeLines.forEach((line) => logs.push(line));
   const observation = battleObservationRecordText(party, adventurerItemIds, rng);
   if (observation) logs.push(observation);
