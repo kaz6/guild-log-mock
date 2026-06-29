@@ -167,6 +167,7 @@ let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
 let selectedAdventurerItems = state.selectedAdventurerItems ?? {};
 let editingAdventurerId = null;
 let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
+let mockWeather = null;  // Mock検証用: null の場合は totalExpeditions ベースで自動生成
 
 function createInitialState() {
   return {
@@ -438,12 +439,17 @@ function getCurrentConditions() {
   const timeIcon = timeIcons[timeOfDay] ?? "☀";
   const weathers = ["晴れ", "曇り", "小雨", "風が強い", "霧"];
   const weatherIdx = (state.worldState.totalExpeditions * 3 + state.worldState.archiveSeed) % weathers.length;
-  const weather = weathers[weatherIdx];
+  const weather = mockWeather ?? weathers[weatherIdx];
   return { timeOfDay, timeIcon, weather };
 }
 
 function setMockTimeOfDay(t) {
   mockTimeOfDay = t;
+  render();
+}
+
+function setMockWeather(w) {
+  mockWeather = w;
   render();
 }
 
@@ -453,15 +459,21 @@ function renderQuests() {
 
   const cond = getCurrentConditions();
   const timeOptions = ["朝", "昼", "夕方", "夜"];
+  const weatherOptions = ["晴れ", "曇り", "小雨", "霧", "風が強い"];
   app.innerHTML = `
     <div class="weather-bar">
       <span class="weather-bar-icon">${cond.timeIcon}</span>
       <span class="weather-bar-text">現在：${cond.timeOfDay} / ${cond.weather}</span>
     </div>
     <div class="mock-time-bar">
-      <span class="mock-time-label">🔧 Mock時間帯：</span>
+      <span class="mock-time-label">🔧 時間帯：</span>
       ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
       ${mockTimeOfDay ? `<button class="mock-time-btn" onclick="setMockTimeOfDay(null)">自動</button>` : `<button class="mock-time-btn active" onclick="setMockTimeOfDay(null)">自動</button>`}
+    </div>
+    <div class="mock-time-bar">
+      <span class="mock-time-label">🔧 天候：</span>
+      ${weatherOptions.map((w) => `<button class="mock-time-btn${mockWeather === w ? " active" : ""}" onclick="setMockWeather('${w}')">${w}</button>`).join("")}
+      ${mockWeather ? `<button class="mock-time-btn" onclick="setMockWeather(null)">自動</button>` : `<button class="mock-time-btn active" onclick="setMockWeather(null)">自動</button>`}
     </div>
     <section class="card">
       <div class="card-body">
@@ -2249,6 +2261,45 @@ function battleObservationRecordText(party, adventurerItemIds, rng) {
   ], rng);
 }
 
+function battleWithdrawalText(party, rng) {
+  if (rng() < 0.30) return null; // 約70%の確率で出す
+  const stat = pickOne(["caution", "courage", "kindness", "memory", "curiosity"], rng);
+  const adv = bestByStat(party, stat);
+  const name = getDisplayName(adv);
+  const solo = isSoloParty(party);
+  const other = party.find((m) => m.id !== adv.id);
+
+  const lines = {
+    caution: [
+      `${name}は深追いせず、「なにか」が畑の外へ出たところで足を止めた。`,
+      `${name}は退路を確認してから引き返した。畑の中で見失うよりも、安全を取る判断だ。`
+    ],
+    courage: [
+      `${name}はもう一歩前に出ようとしたが、依頼は追い払いだと思い直してその場で止まった。`,
+      `${name}は畑の外まで強く押し返したところで足を止めた。依頼は追い払いであって、討伐ではない。`
+    ],
+    kindness: solo
+      ? [
+          `${name}は踏み荒らされた苗と怪我人がいないことを確認してから、作業を切り上げた。`,
+          `${name}は依頼人の安全を先に確かめ、そこで引き返すことにした。`
+        ]
+      : [
+          `${name}は${getDisplayName(other)}の無事を確かめてから、作業を切り上げた。`,
+          `${name}は踏み荒らされた苗と怪我人の有無を確認し、そこで作業を切り上げた。`
+        ],
+    memory: [
+      `${name}は追跡せず、足跡と逃げた方向を記録した。追いかけても得られる情報は少ないと判断した。`,
+      `${name}は逃げた方角を記録し、追跡は次の依頼に回すべきだと判断した。`
+    ],
+    curiosity: [
+      `${name}は追いたがったが、今回の依頼は畑の被害を止めることだと思い直した。`,
+      `${name}は「なにか」の正体が気になったが、それは次回の仕事だとメモだけ残した。`
+    ]
+  };
+
+  return pickOne(lines[stat], rng);
+}
+
 function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   const logs = [];
   logs.push(`畑の畝の間から、「なにか」が跳ねるように飛び出した。`);
@@ -2262,6 +2313,8 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng) {
     logs.push(supply);
   }
   logs.push(`「なにか」は何度か振り返ったが、畑の外へ逃げていった。`);
+  const withdrawal = battleWithdrawalText(party, rng);
+  if (withdrawal) logs.push(withdrawal);
   logs.push(`畑の被害はそこで止まっている。`);
   const observation = battleObservationRecordText(party, adventurerItemIds, rng);
   if (observation) logs.push(observation);
