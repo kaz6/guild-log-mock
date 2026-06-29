@@ -2137,11 +2137,16 @@ function battleSupplyEventText(quest, party, adventurerItemIds, rng) {
   if (usableItems.includes("item_whistle")) {
     lines.push(`${holderName("item_whistle")}は笛を短く鳴らし、「なにか」を畑の外側へ追いやった。音に驚いた影は畝から離れた。`);
   }
-  if (usableItems.includes("item_obs_sheet")) {
-    lines.push(`${holderName("item_obs_sheet")}は観察記録票に、足跡の向きと逃げた先を短く書き留めた。`);
-  }
 
   return lines.length > 0 ? pickOne(lines, rng) : null;
+}
+
+function battleOpponentEventText(rng) {
+  return pickOne([
+    `「なにか」は苗の間を低く跳ね、こちらを見るたびに向きを変えた。`,
+    `「なにか」は畑の土を蹴り、畝を越えたり戻ったりしていた。`,
+    `小さな影は何度か振り返りながら、荒らした畝の近くを離れようとしなかった。`
+  ], rng);
 }
 
 function battleStatEventText(party, rng) {
@@ -2151,7 +2156,7 @@ function battleStatEventText(party, rng) {
   const solo = isSoloParty(party);
   const other = party.find((member) => member.id !== adv.id);
   const lines = {
-    courage: `${name}は怯まず前に出て、鍬の柄で地面を強く叩いた。「なにか」は畝の間で足を止めた。`,
+    courage: `${name}は怯まず前に出て、鍬の柄で地面を強く叩いた。`,
     caution: `${name}は間合いを測り、畑の外へ逃がす道を先に確かめた。深追いはしなかった。`,
     kindness: solo
       ? `${name}は依頼人が畑に入らないよう手で制し、自分だけで畝の外側へ回り込んだ。`
@@ -2177,15 +2182,33 @@ function battleInteractionText(party, rng) {
   return lines.length > 0 ? pickOne(lines, rng) : null;
 }
 
+function battleObservationRecordText(party, adventurerItemIds, rng) {
+  const holder = party.find((adv) => getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet"));
+  if (!holder) return null;
+  const name = getDisplayName(holder);
+  return pickOne([
+    `${name}は観察記録票に、耳の先が黒かったことだけを書き添えている。`,
+    `${name}は観察記録票に、足跡の向きと逃げた先を短く書き留めた。`,
+    `報告書には、${name}の記録として泥の跳ね方と小さな足跡だけが残っている。`
+  ], rng);
+}
+
 function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   const logs = [];
   logs.push(`畑の畝の間から、「なにか」が跳ねるように飛び出した。`);
+  logs.push(battleOpponentEventText(rng));
   logs.push(battleStatEventText(party, rng));
   const interaction = battleInteractionText(party, rng);
-  if (interaction) logs.push(interaction);
   const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
-  if (supply && logs.length < 4) logs.push(supply);
-  logs.push(`最後には、「なにか」は畑の外へ逃げていった。畑の被害はそこで止まっている。`);
+  if (interaction) {
+    logs.push(interaction);
+  } else if (supply) {
+    logs.push(supply);
+  }
+  logs.push(`「なにか」は何度か振り返ったが、畑の外へ逃げていった。`);
+  logs.push(`畑の被害はそこで止まっている。`);
+  const observation = battleObservationRecordText(party, adventurerItemIds, rng);
+  if (observation) logs.push(observation);
   return logs;
 }
 
