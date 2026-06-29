@@ -15,7 +15,21 @@ const masterAdventurers = [
     memo: "道をよく覚えている。無理をしない判断ができる。手紙配達系の依頼に向いていそう。",
     status: "待機中",
     history: [],
-    stats: { memory: 5, caution: 4, courage: 3, kindness: 3, curiosity: 4 }
+    stats: { memory: 5, caution: 4, courage: 3, kindness: 3, curiosity: 4 },
+    weapon: {
+      name: "短弓と配達短剣",
+      type: "弓 / 短剣",
+      range: "中距離",
+      power: 2,
+      guard: 2,
+      control: 5,
+      tags: ["牽制", "足止め", "記録補助"]
+    },
+    accessory: {
+      name: "道標の小札",
+      effect: "帰り道や目印を見落としにくい。",
+      tags: ["記憶", "道案内", "慎重"]
+    }
   },
   {
     id: "adv_gadd",
@@ -28,7 +42,21 @@ const masterAdventurers = [
     memo: "前に出る癖がある。危険度が低い依頼でも、念のため包帯を持たせたい。",
     status: "待機中",
     history: [],
-    stats: { memory: 2, caution: 2, courage: 5, kindness: 4, curiosity: 2 }
+    stats: { memory: 2, caution: 2, courage: 5, kindness: 4, curiosity: 2 },
+    weapon: {
+      name: "鉄鍋槌",
+      type: "鈍器",
+      range: "近距離",
+      power: 5,
+      guard: 3,
+      control: 2,
+      tags: ["押し返し", "威圧", "前衛"]
+    },
+    accessory: {
+      name: "焦げた鍋つかみ",
+      effect: "熱いものや荒い作業に少し強い。",
+      tags: ["豪胆", "料理", "前に出る"]
+    }
   },
   {
     id: "adv_elne",
@@ -41,7 +69,21 @@ const masterAdventurers = [
     memo: "採集依頼で頼りになる。休憩時の観察が細かい。",
     status: "待機中",
     history: [],
-    stats: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3 }
+    stats: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3 },
+    weapon: {
+      name: "薬草師の杖",
+      type: "杖",
+      range: "近距離",
+      power: 2,
+      guard: 3,
+      control: 4,
+      tags: ["支援", "足場確認", "制止"]
+    },
+    accessory: {
+      name: "乾燥薬草の匂い袋",
+      effect: "疲労や軽い不調に気づきやすい。",
+      tags: ["手当", "気配り", "薬草"]
+    }
   },
   {
     id: "adv_row",
@@ -54,7 +96,21 @@ const masterAdventurers = [
     memo: "判断は少し遅いが、一度決めると粘る。仲間の前に立ち、退路をふさがない位置を気にする。",
     status: "待機中",
     history: [],
-    stats: { memory: 3, caution: 3, courage: 4, kindness: 3, curiosity: 2 }
+    stats: { memory: 3, caution: 3, courage: 4, kindness: 3, curiosity: 2 },
+    weapon: {
+      name: "見習い盾と短槍",
+      type: "盾 / 槍",
+      range: "近距離",
+      power: 3,
+      guard: 5,
+      control: 3,
+      tags: ["守り", "足止め", "前衛"]
+    },
+    accessory: {
+      name: "門番見習いの笛紐",
+      effect: "合図と立ち位置の確認を忘れにくい。",
+      tags: ["合図", "責任感", "退路確認"]
+    }
   }
 ];
 
@@ -712,6 +768,8 @@ function adventurerEditorHtml(adventurer) {
       <span>職業</span><strong>${escapeHtml(adventurer.job)}</strong>
       <span>性格</span><strong>${escapeHtml(adventurer.personality)}</strong>
       <span>前職</span><strong>${escapeHtml(adventurer.background)}</strong>
+      <span>固有武器</span><strong>${escapeHtml(adventurer.weapon?.name ?? "なし")}</strong>
+      <span>アクセサリー</span><strong>${escapeHtml(adventurer.accessory?.name ?? "なし")}</strong>
     </div>
 
     <hr class="soft" />
@@ -1046,6 +1104,11 @@ function renderReportDetail(reportId) {
           ${report.departConditions ? `<span>出発時</span><strong>${escapeHtml(report.departConditions.timeOfDay)} / ${escapeHtml(report.departConditions.weather)}</strong>` : ""}
           <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>
         </div>
+        ${report.highlight ? `
+        <div class="highlight-box">
+          <p class="eyebrow">今回のハイライト</p>
+          <p class="highlight-text">「${escapeHtml(report.highlight)}」</p>
+        </div>` : ""}
         <hr class="soft" />
         <p class="meta-label">${quest?.category === "生活" ? "作業報告" : "遠征ログ"}</p>
         <div class="log-list">
@@ -2237,7 +2300,9 @@ function battleOpponentEventText(rng) {
   return pickOne([
     `「なにか」は苗の間を低く跳ね、こちらを見るたびに向きを変えた。`,
     `「なにか」は畑の土を蹴り、畝を越えたり戻ったりしていた。`,
-    `小さな影は何度か振り返りながら、荒らした畝の近くを離れようとしなかった。`
+    `小さな影は何度か振り返りながら、荒らした畝の近くを離れようとしなかった。`,
+    `「なにか」は畝の陰に身を低くし、近づくたびに横へ飛んで場所を変えた。`,
+    `「なにか」は大きさの割に素早く、何度か向きを変えながら畝の間を移動し続けた。`
   ], rng);
 }
 
@@ -2247,27 +2312,50 @@ function battleStatEventText(party, rng) {
   const name = getDisplayName(adv);
   const solo = isSoloParty(party);
   const other = party.find((member) => member.id !== adv.id);
-  const lines = {
-    courage: `${name}は怯まず前に出て、鍬の柄で地面を強く叩いた。`,
-    caution: `${name}は間合いを測り、畑の外へ逃がす道を先に確かめた。深追いはしなかった。`,
+  const pools = {
+    courage: [
+      `${name}は怯まず前に出て、鍬の柄で地面を強く叩いた。`,
+      `${name}は「なにか」の目の前まで踏み込み、退路を畑の外側へ向けた。`,
+      `${name}は躊躇なく前へ出た。「なにか」は一瞬だけ動きを止めた。`
+    ],
+    caution: [
+      `${name}は間合いを測り、畑の外へ逃がす道を先に確かめた。深追いはしなかった。`,
+      `${name}は「なにか」の動きを読みながら、逃げ道が外側を向くよう位置を変えた。`,
+      `${name}は急がなかった。焦りが余分な被害を出すと判断したからだ。`
+    ],
     kindness: solo
-      ? `${name}は依頼人が畑に入らないよう手で制し、自分だけで畝の外側へ回り込んだ。`
-      : `${name}は依頼人と${getDisplayName(other)}の位置を確かめ、誰も畑の奥へ踏み込みすぎないようにした。`,
-    memory: `${name}は、耳の先が黒く、泥の跳ね方が妙だったと記録している。`,
-    curiosity: `${name}は「なにか」が逃げた後の足跡を気にしていた。正体はまだ分からない。`
+      ? [
+          `${name}は依頼人が畑に入らないよう手で制し、自分だけで畝の外側へ回り込んだ。`,
+          `${name}は先に依頼人を畑の端まで下がらせてから、「なにか」に向き直った。`
+        ]
+      : [
+          `${name}は依頼人と${getDisplayName(other)}の位置を確かめ、誰も畑の奥へ踏み込みすぎないようにした。`,
+          `${name}は「なにか」よりも先に、踏み荒らされた苗と周囲の安全を確かめた。`
+        ],
+    memory: [
+      `${name}は、耳の先が黒く、泥の跳ね方が妙だったと記録している。`,
+      `${name}は「なにか」の跳び方と向き直る癖を観察しながら、頭の中に記録していた。`,
+      `${name}は逃げ方のパターンを覚えながら、次の動きを読んで位置を変えた。`
+    ],
+    curiosity: [
+      `${name}は「なにか」が逃げた後の足跡を気にしていた。正体はまだ分からない。`,
+      `${name}は追いたかったが、まず畑の被害を止めることを優先した。`,
+      `${name}は「なにか」の動きに見覚えがあると感じたが、今は確かめる場ではなかった。`
+    ]
   };
-  return lines[stat];
+  return pickOne(pools[stat], rng);
 }
 
+// 戻り値は string[]。ソロは0〜1行、2人は1行、3人以上は同一冒険者重複なしで最大2行。
 function battleRoleDivisionText(party, rng) {
   const mina = party.find((a) => a.id === "adv_mina");
   const gadd = party.find((a) => a.id === "adv_gadd");
   const elne = party.find((a) => a.id === "adv_elne");
-  const row = party.find((a) => a.id === "adv_row");
+  const row  = party.find((a) => a.id === "adv_row");
   const nm = (adv) => adv ? getDisplayName(adv) : null;
 
   if (isSoloParty(party)) {
-    if (rng() < 0.40) return null; // 60%の確率で出す
+    if (rng() < 0.40) return []; // 60%の確率で出す
     const adv = party[0];
     const name = getDisplayName(adv);
     const top = ["courage", "caution", "memory", "kindness", "curiosity"]
@@ -2279,27 +2367,43 @@ function battleRoleDivisionText(party, rng) {
       kindness:  `${name}は依頼人が近寄らないよう気を配りながら、自分で対処を進めた。`,
       curiosity: `${name}は正体を確かめたかったが、まず追い払いを優先した。`
     };
-    return soloLines[top] ?? null;
+    return soloLines[top] ? [soloLines[top]] : [];
   }
 
-  // 2人以上：ID組み合わせ優先、なければ stat ベースのフォールバック
-  const lines = [];
-  if (row && gadd) lines.push(`${nm(gadd)}が前に圧をかけ、${nm(row)}は退路をふさがない位置でその横に立った。`);
-  if (row && mina) lines.push(`${nm(row)}が仲間の前に立ち、${nm(mina)}はその背後で足跡と逃げた方角を記録した。`);
-  if (row && elne) lines.push(`${nm(row)}が畑の入口側を守り、${nm(elne)}は依頼人と苗の被害を確認した。`);
-  if (gadd && mina) lines.push(`${nm(gadd)}が前に出ると、${nm(mina)}はその背後で逃げ道の向きを記録した。`);
-  if (gadd && elne) lines.push(`${nm(gadd)}が畑の端まで「なにか」を押し返すあいだ、${nm(elne)}は依頼人を畑の外へ下がらせた。`);
-  if (mina && elne) lines.push(`${nm(mina)}が足跡の方角を確認し、${nm(elne)}は踏み荒らされた苗の被害を見渡した。`);
-  if (lines.length > 0) return pickOne(lines, rng);
+  // 2人以上：各IDペアの候補を全部列挙する
+  // 各エントリは [line, [advId, advId]] の形で冒険者IDを記録する
+  const candidates = [];
+  if (row && gadd) candidates.push([`${nm(gadd)}が前に圧をかけ、${nm(row)}は退路をふさがない位置でその横に立った。`, [gadd.id, row.id]]);
+  if (row && mina) candidates.push([`${nm(row)}が仲間の前に立ち、${nm(mina)}はその背後で足跡と逃げた方角を記録した。`, [row.id, mina.id]]);
+  if (row && elne) candidates.push([`${nm(row)}が畑の入口側を守り、${nm(elne)}は依頼人と苗の被害を確認した。`, [row.id, elne.id]]);
+  if (gadd && mina) candidates.push([`${nm(gadd)}が前に出ると、${nm(mina)}はその背後で逃げ道の向きを記録した。`, [gadd.id, mina.id]]);
+  if (gadd && elne) candidates.push([`${nm(gadd)}が畑の端まで「なにか」を押し返すあいだ、${nm(elne)}は依頼人を畑の外へ下がらせた。`, [gadd.id, elne.id]]);
+  if (mina && elne) candidates.push([`${nm(mina)}が足跡の方角を確認し、${nm(elne)}は踏み荒らされた苗の被害を見渡した。`, [mina.id, elne.id]]);
 
-  // ID に合致しない組み合わせ（将来冒険者追加時のフォールバック）
-  const front = bestByStat(party, "courage");
-  const rest = party.filter((a) => a.id !== front.id);
-  if (rest.length > 0) {
-    const rec = bestByStat(rest, "memory");
-    return `${getDisplayName(front)}が前に出て距離を詰め、${getDisplayName(rec)}はその動きと「なにか」の反応を記録した。`;
+  if (candidates.length === 0) {
+    // ID に合致しない組み合わせ（フォールバック）
+    const front = bestByStat(party, "courage");
+    const rest = party.filter((a) => a.id !== front.id);
+    if (rest.length > 0) {
+      const rec = bestByStat(rest, "memory");
+      return [`${getDisplayName(front)}が前に出て距離を詰め、${getDisplayName(rec)}はその動きと「なにか」の反応を記録した。`];
+    }
+    return [];
   }
-  return null;
+
+  // シャッフルして、使用済み冒険者IDが重複しない行を最大 (party.length >= 3 ? 2 : 1) 行取る
+  const maxLines = party.length >= 3 ? 2 : 1;
+  const shuffled = [...candidates].sort(() => rng() - 0.5);
+  const picked = [];
+  const usedIds = new Set();
+  for (const [line, ids] of shuffled) {
+    if (ids.every((id) => !usedIds.has(id))) {
+      picked.push(line);
+      ids.forEach((id) => usedIds.add(id));
+    }
+    if (picked.length >= maxLines) break;
+  }
+  return picked;
 }
 
 function battleObservationRecordText(party, adventurerItemIds, rng) {
@@ -2406,10 +2510,10 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng) {
   logs.push(`畑の畝の間から、「なにか」が跳ねるように飛び出した。`);
   logs.push(battleOpponentEventText(rng));
   logs.push(battleStatEventText(party, rng));
-  const role = battleRoleDivisionText(party, rng);
-  if (role) logs.push(role);
+  const roles = battleRoleDivisionText(party, rng);
+  roles.forEach((r) => logs.push(r));
   const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
-  if (supply && !role) logs.push(supply); // 役割分担行がある場合は行数を抑える
+  if (supply && roles.length === 0) logs.push(supply); // 役割分担行がある場合は行数を抑える
   const withdrawal = battleWithdrawalText(party, rng);
   if (withdrawal) logs.push(withdrawal);
   const outcomeLines = battleOutcomeLines(party, adventurerItemIds, rng);
@@ -2515,6 +2619,75 @@ function generateLightInvestigationLogs(quest, party, adventurerItemIds, departT
   return logs;
 }
 
+function generateHighlight(quest, party, itemIds, departConditions, result, rng) {
+  const subject = partySubject(party);
+  const isNight = departConditions?.timeOfDay === "夜";
+  const isBattle = quest.category === "戦闘";
+  const isInvestigation = quest.category === "調査";
+
+  // 夜の戦闘・調査依頼
+  if (isNight && (isBattle || isInvestigation)) {
+    return pickOne([
+      `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`,
+      `夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`
+    ], rng);
+  }
+
+  // 戦闘依頼（夜以外）
+  if (isBattle) {
+    const front = party.reduce((best, a) => (a.stats?.courage ?? 0) > (best.stats?.courage ?? 0) ? a : best, party[0]);
+    return pickOne([
+      `${getDisplayName(front)}は怯まず前に出た。それが今回の遠征で一番はっきりしたことだ。`,
+      `追い払いは成功した。ただし正体は、まだ誰も知らない。`
+    ], rng);
+  }
+
+  // 調査依頼（夜以外）
+  if (isInvestigation) {
+    return pickOne([
+      `現地で確かめたことは、書面の情報より少し違っていた。それが今回の収穫だ。`,
+      `調査は完了した。次に来るとき、また何かが変わっているかもしれない。`
+    ], rng);
+  }
+
+  // 支給品が役立った
+  if (itemIds.includes("item_lantern") && isNight) {
+    return `ランタンが暗がりで役立った。灯りがなければ、別の結果になっていたかもしれない。`;
+  }
+  if (itemIds.includes("item_bandage")) {
+    return pickOne([
+      `包帯を使う場面があった。大事には至らなかったが、持っていてよかった。`,
+      `あの包帯がなかったら、帰りはもう少し遅くなっていただろう。`
+    ], rng);
+  }
+  if (itemIds.includes("item_oilcase")) {
+    return `油紙の手紙入れのおかげで、依頼の書類は濡れずに済んだ。`;
+  }
+
+  // 悪天候
+  if (departConditions?.weather === "小雨" || departConditions?.weather === "霧") {
+    return pickOne([
+      `足元の悪い中での遠征だった。それでも${subject}は、予定の仕事を終えた。`,
+      `${departConditions.weather}の中、${subject}は出かけた。帰還したとき、服はまだ乾いていなかった。`
+    ], rng);
+  }
+
+  // 結果別
+  if (result === "成功" || result === "調査成功") {
+    return pickOne([
+      `依頼は成功した。こういう積み重ねが、${subject}の評判をつくっていく。`,
+      `問題なく完了した。報告書が棚に増えるのは、悪いことではない。`
+    ], rng);
+  }
+
+  // 汎用フォールバック
+  return pickOne([
+    `今回の遠征で、${subject}はまた少し、この仕事を覚えた。`,
+    `報告書が棚に収まった。${subject}の記録が、また一つ増えた。`,
+    `遠征は終わった。次の依頼が、すでに掲示板に張り出されている。`
+  ], rng);
+}
+
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -2564,6 +2737,7 @@ function generateReport(expedition) {
       observationText: [],
       observationNotes,
       departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし", rng),
       hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
@@ -2597,6 +2771,7 @@ function generateReport(expedition) {
       observationText: [],
       observationNotes,
       departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, "追い払い", rng),
       hiddenTags: { combat: true, target: "「なにか」", recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
@@ -2670,6 +2845,7 @@ function generateReport(expedition) {
       observationText: [],
       observationNotes,
       departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
       hiddenTags: { workEvents, outcome, recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
@@ -2741,6 +2917,7 @@ function generateReport(expedition) {
     observationText,
     observationNotes,
     departConditions,
+    highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
     hiddenTags: {
       weather,
       roadEvents,
