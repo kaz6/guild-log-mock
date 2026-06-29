@@ -1,6 +1,7 @@
 const STORAGE_KEY = "expeditionGuildLogMockV011";
 const DEMO_DURATION_MS = 10000;
 const MOCK_VERSION = "v0.1.2";
+const MAX_PARTY_SIZE = 4;
 
 const masterAdventurers = [
   {
@@ -41,6 +42,19 @@ const masterAdventurers = [
     status: "待機中",
     history: [],
     stats: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3 }
+  },
+  {
+    id: "adv_row",
+    name: "ロウ",
+    nickname: "",
+    favorite: false,
+    job: "見習い盾役",
+    personality: "我慢強い",
+    background: "門番見習い",
+    memo: "判断は少し遅いが、一度決めると粘る。仲間の前に立ち、退路をふさがない位置を気にする。",
+    status: "待機中",
+    history: [],
+    stats: { memory: 3, caution: 3, courage: 4, kindness: 3, curiosity: 2 }
   }
 ];
 
@@ -498,7 +512,7 @@ function renderQuests() {
               <p class="eyebrow">Party</p>
               <h3>冒険者選択</h3>
             </div>
-            <span class="status-pill">${selectedAdventurerIds.length}/3人</span>
+            <span class="status-pill">${selectedAdventurerIds.length}/${MAX_PARTY_SIZE}人</span>
           </div>
           <div class="content">
             ${state.adventurers.map(selectableAdventurerHtml).join("")}
@@ -1064,7 +1078,7 @@ function toggleAdventurer(id) {
     selectedAdventurerIds = selectedAdventurerIds.filter((advId) => advId !== id);
     delete selectedAdventurerItems[id];
   } else {
-    if (selectedAdventurerIds.length >= 3) return;
+    if (selectedAdventurerIds.length >= MAX_PARTY_SIZE) return;
     selectedAdventurerIds = [...selectedAdventurerIds, id];
   }
   saveState();
@@ -1664,6 +1678,7 @@ function partyInteractionLog(party, quest, rng) {
   const mina  = party.find((a) => a.id === "adv_mina");
   const gadd  = party.find((a) => a.id === "adv_gadd");
   const elne  = party.find((a) => a.id === "adv_elne");
+  const row   = party.find((a) => a.id === "adv_row");
   const careful   = findByTrait(party, "personality", "慎重");
   const brave     = findByTrait(party, "personality", "豪胆");
   const caregiver = findByTrait(party, "personality", "世話焼き");
@@ -1687,6 +1702,15 @@ function partyInteractionLog(party, quest, rng) {
     general.push(`${nm(elne)}が休憩を促すと、${nm(gadd)}は少し不満そうにしながらも腰を下ろした。`);
     general.push(`${nm(elne)}は${nm(gadd)}の手元を見て、包帯を使うほどではない傷だと判断した。`);
     general.push(`${nm(gadd)}が先に動き始め、${nm(elne)}がその後ろで小さな荷物をまとめた。`);
+  }
+  if (row && mina) {
+    general.push(`${nm(row)}が前に立つ位置を選び、${nm(mina)}は退路がふさがっていないことを確認した。`);
+  }
+  if (row && gadd) {
+    general.push(`${nm(gadd)}が先に動こうとしたとき、${nm(row)}は少し遅れてから同じ方向へ足をそろえた。`);
+  }
+  if (row && elne) {
+    general.push(`${nm(row)}が荷物の前に立ち、${nm(elne)}は周囲に怪我人がいないかを確かめた。`);
   }
   if (careful && brave && careful.id !== brave.id) {
     general.push(`${nm(careful)}が確認を一つ増やすよう提案すると、${nm(brave)}は少しだけ足を止めた。`);
@@ -2239,6 +2263,7 @@ function battleRoleDivisionText(party, rng) {
   const mina = party.find((a) => a.id === "adv_mina");
   const gadd = party.find((a) => a.id === "adv_gadd");
   const elne = party.find((a) => a.id === "adv_elne");
+  const row = party.find((a) => a.id === "adv_row");
   const nm = (adv) => adv ? getDisplayName(adv) : null;
 
   if (isSoloParty(party)) {
@@ -2259,6 +2284,9 @@ function battleRoleDivisionText(party, rng) {
 
   // 2人以上：ID組み合わせ優先、なければ stat ベースのフォールバック
   const lines = [];
+  if (row && gadd) lines.push(`${nm(gadd)}が前に圧をかけ、${nm(row)}は退路をふさがない位置でその横に立った。`);
+  if (row && mina) lines.push(`${nm(row)}が仲間の前に立ち、${nm(mina)}はその背後で足跡と逃げた方角を記録した。`);
+  if (row && elne) lines.push(`${nm(row)}が畑の入口側を守り、${nm(elne)}は依頼人と苗の被害を確認した。`);
   if (gadd && mina) lines.push(`${nm(gadd)}が前に出ると、${nm(mina)}はその背後で逃げ道の向きを記録した。`);
   if (gadd && elne) lines.push(`${nm(gadd)}が畑の端まで「なにか」を押し返すあいだ、${nm(elne)}は依頼人を畑の外へ下がらせた。`);
   if (mina && elne) lines.push(`${nm(mina)}が足跡の方角を確認し、${nm(elne)}は踏み荒らされた苗の被害を見渡した。`);
