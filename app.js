@@ -29,6 +29,13 @@ const masterAdventurers = [
       name: "道標の小札",
       effect: "帰り道や目印を見落としにくい。",
       tags: ["記憶", "道案内", "慎重"]
+    },
+    obsession: {
+      title: "帰り道を失わないこと",
+      intensity: 4,
+      tags: ["記憶", "道", "慎重"],
+      positiveLine: "ミナは必ず帰り道を覚えてから、次の一歩を決める。",
+      dangerLine: "道を見失いそうになると、依頼よりも確認を優先してしまう。"
     }
   },
   {
@@ -56,6 +63,13 @@ const masterAdventurers = [
       name: "焦げた鍋つかみ",
       effect: "熱いものや荒い作業に少し強い。",
       tags: ["豪胆", "料理", "前に出る"]
+    },
+    obsession: {
+      title: "誰かの前に立つこと",
+      intensity: 5,
+      tags: ["前衛", "責任", "豪胆"],
+      positiveLine: "鉄鍋は危ないと思った瞬間、考えるより先に前へ出る。",
+      dangerLine: "守る相手がいると、引く判断が遅れることがある。"
     }
   },
   {
@@ -83,6 +97,13 @@ const masterAdventurers = [
       name: "乾燥薬草の匂い袋",
       effect: "疲労や軽い不調に気づきやすい。",
       tags: ["手当", "気配り", "薬草"]
+    },
+    obsession: {
+      title: "誰も置いていかないこと",
+      intensity: 4,
+      tags: ["手当", "気配り", "世話焼き"],
+      positiveLine: "エルネ・シェルカは小さな不調にも気づき、早めに足を止められる。",
+      dangerLine: "誰かを気にしすぎて、自分の疲れを後回しにすることがある。"
     }
   },
   {
@@ -110,6 +131,13 @@ const masterAdventurers = [
       name: "門番見習いの笛紐",
       effect: "合図と立ち位置の確認を忘れにくい。",
       tags: ["合図", "責任感", "退路確認"]
+    },
+    obsession: {
+      title: "入口を守ること",
+      intensity: 4,
+      tags: ["守り", "責任感", "門番"],
+      positiveLine: "ロウは一度守る場所を決めると、簡単には動かない。",
+      dangerLine: "守る位置にこだわりすぎて、判断が少し遅れることがある。"
     }
   }
 ];
@@ -770,6 +798,7 @@ function adventurerEditorHtml(adventurer) {
       <span>前職</span><strong>${escapeHtml(adventurer.background)}</strong>
       <span>固有武器</span><strong>${escapeHtml(adventurer.weapon?.name ?? "なし")}</strong>
       <span>アクセサリー</span><strong>${escapeHtml(adventurer.accessory?.name ?? "なし")}</strong>
+      <span>執着</span><strong>${escapeHtml(adventurer.obsession?.title ?? "なし")}</strong>
     </div>
 
     <hr class="soft" />
