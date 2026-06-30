@@ -309,6 +309,19 @@ const masterQuests = [
     summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。"
   },
   {
+    id: "quest_herb_delivery",
+    title: "薬草包みの納品",
+    category: "輸送",
+    danger: "低",
+    area: "雨待ちの街道",
+    recommended: ["薬草師", "斥候", "慎重"],
+    tags: ["輸送", "配達", "薬草", "街道", "壊れ物", "地域"],
+    observationTarget: "なし",
+    tensionBase: 28,
+    tensionRange: 22,
+    summary: "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。"
+  },
+  {
     id: "quest_lingering_light",
     title: "夜道に残る灯りの調査",
     category: "調査",
@@ -570,6 +583,14 @@ function elsiePartyLogText(quest, party, rng) {
       "エルシーは橋のたもとで耳を立て、水音と足音のする方を交互に見ていた。",
       "エルシーは岸の草むらで鼻を鳴らし、小川の匂いをしばらく追っていた。",
       "エルシーは橋のたもとで伏せ、作業の合図があるまで動かなかった。"
+    );
+  }
+
+  if (quest.id === "quest_herb_delivery") {
+    pool.push(
+      "エルシーは薬草の匂いが気になるのか、包みの近くで一度だけ鼻を鳴らした。",
+      "エルシーは荷物のそばで伏せ、出発の合図まで待っていた。",
+      "エルシーは道中、何度も振り返りながら歩いた。"
     );
   }
 
@@ -2216,7 +2237,8 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"],
     quest_barn_bite: ["item_bandage", "item_whistle", "item_lantern", "item_obs_sheet"],
     quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"],
-    quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"]
+    quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"],
+    quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"]
   };
   const allowed = allowedByQuest[quest.id];
   if (!allowed) return true;
@@ -3514,6 +3536,149 @@ function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context 
   return logs;
 }
 
+function herbDeliveryOutcomeText(outcome, party, rng) {
+  const variants = {
+    納品完了: {
+      result: "納品完了",
+      summary: "薬草包みは破損なく診療所へ届けられた。納品書も無事だった。",
+      line: `診療所の受付は包みを受け取ると、中身を確かめてから受領印を押した。`,
+      after: `報告書には「薬草包み、破損なし。納品時刻内」と記されている。`,
+      history: "薬草包みの納品。破損なし、納品書も無事。"
+    },
+    時刻内納品: {
+      result: "時刻内納品",
+      summary: "遠回りにはなったが、指定時刻内に納品できた。",
+      line: `迂回路を取ったが、診療所の受付は指定時刻前に包みを受け取った。受領印が押された。`,
+      after: `帰り道、${partySubject(party)}は荷の結び目をもう一度だけ確かめてから門へ戻った。`,
+      history: "薬草包みの納品。遠回りしたが時刻内に納品。"
+    },
+    一部注意: {
+      result: "一部注意",
+      summary: "包みの外布は少し湿ったが、中身と納品書は守られた。",
+      line: `診療所へ届けたが、外布は雨で少し湿っていた。中身と納品書は無事で、受領印も押された。`,
+      after: `報告書には「外布に湿気あり。中身・書類は問題なし」と書き添えられている。`,
+      history: "薬草包みの納品。外布は湿ったが中身と納品書は無事。"
+    }
+  };
+  return variants[outcome] ?? variants["納品完了"];
+}
+
+function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const weather = context.departConditions?.weather ?? "晴れ";
+  const tensionValue = context.tensionValue ?? 50;
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const row = party.find((a) => a.id === "adv_row");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const mina = party.find((a) => a.id === "adv_mina");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const scout = findByTrait(party, "job", "斥候");
+  const herbalist = findByTrait(party, "job", "薬草師");
+  const caregiver = findByTrait(party, "personality", "世話焼き");
+  const careful = findByTrait(party, "personality", "慎重");
+  const warrior = findByTrait(party, "job", "戦士");
+  const logs = [];
+
+  const holderName = (itemId) => {
+    for (const advId of Object.keys(adventurerItemIds)) {
+      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
+        const adv = getAdventurer(advId);
+        if (adv) return getDisplayName(adv);
+      }
+    }
+    const human = humanMembers(party)[0];
+    return human ? getDisplayName(human) : getDisplayName(party[0]);
+  };
+
+  logs.push(pick([
+    `調合所で受け取った薬草包みは、思ったより軽かったが、強く揺らすと中身が崩れそうだった。`,
+    `村の調合所で包みを受け取った。結び目は丁寧だが、道中の揺れには弱そうだった。`
+  ]));
+
+  logs.push(pick([
+    `${partySubject(party)}は納品書と宛先を確かめ、${quest.area}へ向かった。`,
+    `出発前に、診療所の表札と街道の分岐をもう一度読み直した。`
+  ]));
+
+  if (weather === "小雨" || weather === "雨") {
+    logs.push(pick([
+      `小雨が降り始め、街道の端はぬかるんでいた。包みを胸の高さに抱え、歩幅を狭めた。`,
+      `雨で荷紐が湿り、包みの外布に水気が移りやすかった。`
+    ]));
+  } else if (weather === "風が強い") {
+    logs.push(`風で包みの布がはためいた。歩くたびに荷が揺れないよう、手を添えて進んだ。`);
+  } else if (weather === "霧") {
+    logs.push(`霧で分岐が見えにくかったが、足元の轍を頼りに進んだ。`);
+  } else {
+    logs.push(pick([
+      `街道は乾いていたが、橋の手前だけぬかるみが残っていた。`,
+      `道中、荷車の轍と歩行者の足跡が混ざり、足場に注意が必要だった。`
+    ]));
+  }
+
+  const work = [];
+  if (mina) work.push(`${nm(mina)}は宛先の診療所と街道の分岐を確認し、遠回りでもぬかるみの少ない道を選んだ。`);
+  else if (scout && isHumanAdventurer(scout)) work.push(`${nm(scout)}は分岐と迂回路を確かめ、荷が揺れにくい道を選んだ。`);
+
+  if (elne) work.push(`${nm(elne)}は薬草包みの結び目を確かめ、湿気が入らないよう布をかけ直した。`);
+  else if (herbalist && isHumanAdventurer(herbalist)) work.push(`${nm(herbalist)}は包みの結び目と乾き具合を確かめ、布の端を整えた。`);
+
+  if (gadd) work.push(`${nm(gadd)}は荷を片側に寄せず、両手で抱えるようにして歩いた。`);
+  else if (warrior && isHumanAdventurer(warrior)) work.push(`${nm(warrior)}は荷を両手で支え、段差のたびに足を止めた。`);
+
+  if (row) work.push(`${nm(row)}は橋や段差の前で立ち止まり、荷物を持つ者が足を取られないよう先に足場を確かめた。`);
+  else if (careful && isHumanAdventurer(careful) && !work.some((line) => line.includes(nm(careful)))) {
+    work.push(`${nm(careful)}は段差の前で足場を確かめ、包みが揺れない位置を先に示した。`);
+  }
+
+  while (work.length > 3) work.splice(Math.floor(rng() * work.length), 1);
+  work.forEach((line) => logs.push(line));
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは薬草の匂いが気になるのか、包みの近くで一度だけ鼻を鳴らした。`,
+      `エルシーは荷物のそばで伏せ、出発の合図まで待っていた。`,
+      `エルシーは道中、何度も振り返りながら歩いた。`
+    ]));
+  }
+
+  if (itemIds.includes("item_oilcase") && canUseItemInQuest(quest, "item_oilcase", weather)) {
+    if (weather === "小雨" || weather === "雨") {
+      logs.push(`小雨が降り始めたが、油紙の手紙入れに納品書をしまっていたため、文字は滲まなかった。`);
+    } else {
+      logs.push(`${holderName("item_oilcase")}は油紙の手紙入れに納品書をしまい、湿気からラベルを守った。`);
+    }
+  }
+  if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
+    logs.push(`${holderName("item_map")}は古地図で街道と迂回路を確かめ、診療所への道筋を決めた。`);
+  }
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather)) {
+    logs.push(`${holderName("item_pot")}は携帯鍋で薄いお湯を沸かし、冷えた手を温めてから荷を抱え直した。`);
+  }
+  if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather) && (weather === "霧" || weather === "風が強い")) {
+    logs.push(`${holderName("item_whistle")}は笛を短く吹き、霧の中でも道から離れないよう合図した。`);
+  }
+  const isDim = context.departConditions?.timeOfDay === "夕方" || context.departConditions?.timeOfDay === "夜";
+  if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && isDim) {
+    logs.push(`${holderName("item_lantern")}はランタンで診療所の看板と足元を照らし、納品先を確かめた。`);
+  }
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather)) {
+    logs.push(pick([
+      `${holderName("item_bandage")}は緩んだ荷紐を包帯で補修し、包みが落ちないよう固定した。`,
+      `${holderName("item_bandage")}が持っていた包帯を、擦れた指に当ててから荷を抱え直した。`
+    ]));
+  }
+
+  logs.push(pick([
+    `街道沿いの診療所に着いた。受付の戸は開いており、薬草の乾いた匂いが漂っていた。`,
+    `診療所の前で立ち止まり、包みの結び目を最後にもう一度確かめた。`
+  ]));
+
+  return logs;
+}
+
 function generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng) {
   const logs = [];
   const isNight = departTimeOfDay === "夜";
@@ -3581,6 +3746,17 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
       `修理済みの板には、まだ新しい足跡が一つだけ残っていた。`
     ];
     if (rowName) lines.push(`${rowName}は最後にもう一度だけ橋板を踏み、沈まないことを確かめてから帰還した。`);
+    return pickOne(lines, rng);
+  }
+
+  if (quest.id === "quest_herb_delivery") {
+    const elne = party.find((a) => a.id === "adv_elne");
+    const elneName = elne ? getDisplayName(elne) : null;
+    const lines = [
+      `薬草包みは、最後までほどけなかった。`,
+      `診療所の受領印は、少し滲んでいたが確かに押されていた。`
+    ];
+    if (elneName) lines.push(`${elneName}は納品が終わるまで、一度も包みから目を離さなかった。`);
     return pickOne(lines, rng);
   }
 
@@ -3853,6 +4029,64 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
       hiddenTags: { preservation: true, outcome, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
+      createdAt: new Date().toISOString()
+    }, quest, party, rng);
+  }
+
+  // 輸送依頼：薬草包みの納品
+  if (quest.id === "quest_herb_delivery") {
+    const weather = expedition.departWeather ?? "晴れ";
+    let outcome = pickOne(["納品完了", "時刻内納品", "一部注意"], rng);
+    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["納品完了", "時刻内納品"], rng);
+    if ((weather === "小雨" || weather === "雨") && !itemIds.includes("item_oilcase") && rng() < 0.4) outcome = "一部注意";
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const deliverySupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${deliverySupplyDesc.length > 0 ? deliverySupplyDesc.join(" / ") : "なし"}。`);
+
+    const deliveryLogs = generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
+    deliveryLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = herbDeliveryOutcomeText(outcome, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
+        : adv.job === "薬草師" ? "包みの管理で" : adv.job === "斥候" ? "道順と宛先確認で"
+          : adv.job === "見習い盾役" ? "足場確認で" : adv.job === "戦士" ? "荷運びで"
+            : adv.personality === "慎重" ? "丁寧な運搬で" : "輸送補助で";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return withElsieLog({
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes: null,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: { transport: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
