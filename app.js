@@ -183,7 +183,7 @@ const masterAdventurers = [
     species: "dog",
     special: true,
     canSolo: false,
-    memo: "白毛を基調に耳元・目元・尾の付け根へ淡い茶色の、小柄で立ち耳のギルド犬。ふさふさの尾を振り、おだやかな雰囲気で、休むと丸くなって眠りそうに見える。嗅覚と警戒に長け追跡や帰還を助けるが、戦闘の主力にはならない。",
+    memo: "小柄で立ち耳のギルド犬。ふさふさの尾を振りおだやかな雰囲気だが、嗅覚と警戒に長け追跡や帰還を助ける。戦闘の主力にはならない。",
     status: "待機中",
     history: [],
     stats: { memory: 3, caution: 4, courage: 1, kindness: 4, curiosity: 3 },
