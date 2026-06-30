@@ -322,6 +322,45 @@ const masterQuests = [
     summary: "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。"
   },
   {
+    id: "quest_missing_herbalist",
+    title: "帰ってこない薬草採りの確認",
+    category: "救助",
+    danger: "中",
+    area: "薄明の森の浅瀬",
+    recommended: ["斥候", "薬草師", "慎重"],
+    tags: ["救助", "捜索", "薬草", "森", "足跡", "帰還", "地域"],
+    observationTarget: "なし",
+    tensionBase: 58,
+    tensionRange: 28,
+    summary: "朝に薬草を採りに出た村人が、夕方になっても戻らない。森の浅い場所を確認し、必要なら保護して連れ帰る。"
+  },
+  {
+    id: "quest_evening_market_escort",
+    title: "夕市帰りの親子の付き添い",
+    category: "護衛",
+    danger: "低",
+    area: "夕暮れの街道",
+    recommended: ["見習い盾役", "斥候", "慎重"],
+    tags: ["護衛", "付き添い", "夕方", "街道", "親子", "地域", "帰還"],
+    observationTarget: "なし",
+    tensionBase: 42,
+    tensionRange: 25,
+    summary: "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。"
+  },
+  {
+    id: "quest_old_stele_rubbing",
+    title: "古い石碑の拓本",
+    category: "記録",
+    danger: "低",
+    area: "旧街道脇の石碑",
+    recommended: ["斥候", "薬草師", "慎重"],
+    tags: ["記録", "石碑", "拓本", "旧街道", "文字", "歴史", "地域"],
+    observationTarget: "なし",
+    tensionBase: 34,
+    tensionRange: 24,
+    summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。"
+  },
+  {
     id: "quest_lingering_light",
     title: "夜道に残る灯りの調査",
     category: "調査",
@@ -591,6 +630,30 @@ function elsiePartyLogText(quest, party, rng) {
       "エルシーは薬草の匂いが気になるのか、包みの近くで一度だけ鼻を鳴らした。",
       "エルシーは荷物のそばで伏せ、出発の合図まで待っていた。",
       "エルシーは道中、何度も振り返りながら歩いた。"
+    );
+  }
+
+  if (quest.id === "quest_missing_herbalist") {
+    pool.push(
+      "エルシーは草むらの前で鼻を低くし、同じ場所を何度も嗅いでいた。",
+      "エルシーは森の入口で耳を立て、浅い草の揺れだけを追っていた。",
+      "エルシーは捜索のあいだ、保護対象のそばから離れなかった。"
+    );
+  }
+
+  if (quest.id === "quest_evening_market_escort") {
+    pool.push(
+      "エルシーは親子の少し後ろを歩き、子どもが立ち止まるたびに振り返った。",
+      "エルシーは夕暮れの街道で耳を立て、近づく足音だけを確かめていた。",
+      "エルシーは子どもの歩幅に合わせ、門の前までそばを離れなかった。"
+    );
+  }
+
+  if (quest.id === "quest_old_stele_rubbing") {
+    pool.push(
+      "エルシーは石碑の足元を嗅いでから、道の方を見て耳を立てた。",
+      "エルシーは拓本作業のあいだ、石碑から離れず伏せていた。",
+      "エルシーは旧街道の分岐を見て、一度だけ低く唸った。"
     );
   }
 
@@ -2238,7 +2301,10 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_barn_bite: ["item_bandage", "item_whistle", "item_lantern", "item_obs_sheet"],
     quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"],
     quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"],
-    quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"]
+    quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"],
+    quest_missing_herbalist: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot", "item_obs_sheet"],
+    quest_evening_market_escort: ["item_lantern", "item_whistle", "item_map", "item_bandage", "item_pot"],
+    quest_old_stele_rubbing: ["item_obs_sheet", "item_map", "item_oilcase", "item_lantern", "item_bandage", "item_whistle", "item_pot"]
   };
   const allowed = allowedByQuest[quest.id];
   if (!allowed) return true;
@@ -3679,6 +3745,422 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
   return logs;
 }
 
+function missingHerbalistOutcomeText(outcome, party, rng) {
+  const variants = {
+    保護: {
+      result: "保護",
+      summary: "薬草採りを森の浅瀬で保護し、無事に村まで連れ帰った。",
+      line: `薬草採りは倒木のそばで座り込んでいた。足をくじいていたが、意識ははっきりしていた。`,
+      after: `報告書には「保護。歩行は可能。本日は休養を要する」と記されている。`,
+      history: "帰ってこない薬草採りの確認。保護し村へ連れ帰った。"
+    },
+    発見: {
+      result: "発見",
+      summary: "薬草採りを発見した。軽い負傷はあったが、自力歩行は可能だった。",
+      line: `草むらの先で薬草採りを見つけた。膝を擦っていたが、自分の足で立ち上がれた。`,
+      after: `帰り道、本人は自分の袋だけは離さず持っていた。`,
+      history: "帰ってこない薬草採りの確認。発見、自力歩行可能。"
+    },
+    痕跡確認: {
+      result: "痕跡確認",
+      summary: "本人は見つからなかったが、落とし物と足跡を確認した。翌朝の再捜索が必要。",
+      line: `森の奥まで近づいたが、本人は見つからなかった。落とした薬草袋と足跡だけが残っていた。`,
+      after: `報告書には「再捜索推奨。痕跡は浅瀬方向」と書き添えられている。`,
+      history: "帰ってこない薬草採りの確認。本人未発見、痕跡のみ。"
+    }
+  };
+  return variants[outcome] ?? variants["保護"];
+}
+
+function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const weather = context.departConditions?.weather ?? "晴れ";
+  const timeOfDay = context.departConditions?.timeOfDay ?? "昼";
+  const tensionValue = context.tensionValue ?? 50;
+  const outcome = context.outcome ?? "保護";
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const row = party.find((a) => a.id === "adv_row");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const mina = party.find((a) => a.id === "adv_mina");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const scout = findByTrait(party, "job", "斥候");
+  const herbalist = findByTrait(party, "job", "薬草師");
+  const careful = findByTrait(party, "personality", "慎重");
+  const logs = [];
+
+  const holderName = (itemId) => {
+    for (const advId of Object.keys(adventurerItemIds)) {
+      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
+        const adv = getAdventurer(advId);
+        if (adv) return getDisplayName(adv);
+      }
+    }
+    const human = humanMembers(party)[0];
+    return human ? getDisplayName(human) : getDisplayName(party[0]);
+  };
+
+  logs.push(pick([
+    `依頼人は、薬草採りが朝から戻っていないとだけ言った。持っていた袋の色と、向かった森の入口が報告書に記された。`,
+    `夕方になっても戻らない薬草採りのことを、依頼人は短く説明した。袋の色と採りに行った森の入口だけが手がかりだった。`
+  ]));
+
+  logs.push(pick([
+    `${partySubject(party)}は${quest.area}へ向かった。森の浅い場所だけを確認する予定だった。`,
+    `森の入口に着くと、昼の足跡と夕方のぬかるみが混ざっていた。`
+  ]));
+
+  if (timeOfDay === "夕方" || timeOfDay === "夜") {
+    logs.push(pick([
+      `木の影が長く、森の中は思ったより早く暗くなっていた。`,
+      `夕方の森は静かで、遠くの水音だけがはっきり聞こえた。`
+    ]));
+  }
+
+  logs.push(pick([
+    `落ちていた薬草の束と、踏み荒らされた浅い足跡が見つかった。`,
+    `ぬかるみに、小さな薬草袋の跡と、よろめいた足跡が残っていた。`,
+    `森の浅瀬で、採取途中の薬草がいくつか落ちていた。`
+  ]));
+
+  if (weather === "小雨" || weather === "霧") {
+    logs.push(pick([
+      `霧で視界が悪く、足跡の先が読みにくかった。`,
+      `小雨で足跡が滲み、古いものと新しいものの区別に時間がかかった。`
+    ]));
+  }
+
+  const work = [];
+  if (mina) work.push(`${nm(mina)}は森の入口で足跡を確認し、まだ新しいものだけを追った。`);
+  else if (scout && isHumanAdventurer(scout)) work.push(`${nm(scout)}は足跡の向きを確かめ、浅瀬へ続く新しい跡だけを追った。`);
+
+  if (elne) work.push(`${nm(elne)}は落ちていた薬草を見て、採取中に急いで動いた可能性があると判断した。`);
+  else if (herbalist && isHumanAdventurer(herbalist)) work.push(`${nm(herbalist)}は落ちた薬草の切り口を見て、慌てて移動した形跡があると考えた。`);
+
+  if (row) work.push(`${nm(row)}は帰り道を見失わないよう、分岐ごとに目印を確認した。`);
+  else if (careful && isHumanAdventurer(careful)) work.push(`${nm(careful)}は分岐のたびに帰路の目印を確かめ、深追いしない範囲を決めた。`);
+
+  if (gadd) work.push(`${nm(gadd)}は声を出して呼びかけたが、返事がない場所では無理に奥へ踏み込まなかった。`);
+
+  while (work.length > 3) work.splice(Math.floor(rng() * work.length), 1);
+  work.forEach((line) => logs.push(line));
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは草むらの前で鼻を低くし、同じ場所を何度も嗅いでいた。`,
+      `エルシーは足跡のそばで立ち止まり、耳だけを動かしていた。`,
+      `エルシーは浅瀬の匂いを追い、一度だけ低く唸った。`
+    ]));
+  }
+
+  if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
+    if (outcome === "保護" || outcome === "発見") {
+      logs.push(`笛を短く鳴らすと、森の奥から弱い返事が返ってきた。`);
+    } else {
+      logs.push(`${holderName("item_whistle")}は笛を何度か吹いたが、返事は森の奥からは返ってこなかった。`);
+    }
+  }
+  const isDim = timeOfDay === "夕方" || timeOfDay === "夜";
+  if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && (isDim || weather === "霧")) {
+    logs.push(`ランタンを灯したことで、ぬかるみに残った足跡の向きが分かった。`);
+  }
+  if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
+    logs.push(`${holderName("item_map")}は古地図で採草地と帰り道を確かめ、浅瀬への近道を避けた。`);
+  }
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather) && (outcome === "保護" || outcome === "発見")) {
+    logs.push(`${holderName("item_bandage")}は見つかった薬草採りの擦れた膝に包帯を当て、歩行を楽にした。`);
+  }
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather) && (outcome === "保護" || outcome === "発見")) {
+    logs.push(`${holderName("item_pot")}は携帯鍋で薄いお湯を沸かし、冷えた手を温めてから帰路についた。`);
+  }
+  if (itemIds.includes("item_obs_sheet") && canUseItemInQuest(quest, "item_obs_sheet", weather)) {
+    logs.push(`${holderName("item_obs_sheet")}は観察記録票に、足跡の向きと落とし物の位置だけを書き留めた。`);
+  }
+
+  if (elsie && outcome === "保護") {
+    logs.push(`帰り道、エルシーは何度も振り返りながら、保護した村人の歩みに合わせて進んだ。`);
+  } else if (elsie && outcome === "発見") {
+    logs.push(`帰り道、エルシーは何度も振り返りながら、見つけた村人のそばを離れなかった。`);
+  }
+
+  return logs;
+}
+
+function eveningEscortOutcomeText(outcome, party, rng) {
+  const homeLine = partyHasElsie(party)
+    ? `町外れの家に着くと、子どもは眠そうにしながらも、エルシーに小さく手を振った。`
+    : `町外れの家に着くと、子どもは眠そうにしながら買い物袋を抱えていた。`;
+  const variants = {
+    無事帰宅: {
+      result: "無事帰宅",
+      summary: "親子を家まで送り届けた。荷物の破損もなく、道中の問題はなかった。",
+      line: homeLine,
+      after: `報告書には「親子、無事帰宅。荷物破損なし」と記されている。`,
+      history: "夕市帰りの親子の付き添い。無事帰宅、荷物破損なし。"
+    },
+    安全確認: {
+      result: "安全確認",
+      summary: "暗くなる前に危ない道を避け、無事に送り届けた。",
+      line: `暗くなる前に家へ着いた。親は荷物を受け取り、子どもの手を握って礼を言った。`,
+      after: `何も起きなかった。それが今回の一番良い報告だった。`,
+      history: "夕市帰りの親子の付き添い。危ない道を避け安全に送り届けた。"
+    },
+    遠回り帰宅: {
+      result: "遠回り帰宅",
+      summary: "近道は避け、明るい道を選んだため少し遅れたが、無事に帰宅できた。",
+      line: `明るい道を選んだため到着は遅れたが、親子は無事に家の戸口へ着いた。`,
+      after: `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`,
+      history: "夕市帰りの親子の付き添い。遠回りしたが無事帰宅。"
+    }
+  };
+  return variants[outcome] ?? variants["無事帰宅"];
+}
+
+function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const weather = context.departConditions?.weather ?? "晴れ";
+  const timeOfDay = context.departConditions?.timeOfDay ?? "夕方";
+  const tensionValue = context.tensionValue ?? 50;
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const row = party.find((a) => a.id === "adv_row");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const mina = party.find((a) => a.id === "adv_mina");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const scout = findByTrait(party, "job", "斥候");
+  const caregiver = findByTrait(party, "personality", "世話焼き");
+  const careful = findByTrait(party, "personality", "慎重");
+  const shield = findByTrait(party, "job", "見習い盾役");
+  const logs = [];
+
+  const holderName = (itemId) => {
+    for (const advId of Object.keys(adventurerItemIds)) {
+      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
+        const adv = getAdventurer(advId);
+        if (adv) return getDisplayName(adv);
+      }
+    }
+    const human = humanMembers(party)[0];
+    return human ? getDisplayName(human) : getDisplayName(party[0]);
+  };
+
+  logs.push(pick([
+    `夕市の片付けが始まる頃、依頼人の親子と合流した。荷物は思ったより多かった。`,
+    `夕市の端で親子を待ち受けた。買い物袋は二つあり、子どもは少し疲れていた。`
+  ]));
+
+  logs.push(pick([
+    `帰り道と荷物の持ち方を確認し、暗くなる前に着く見込みを伝えた。`,
+    `親は荷物の中身を簡単に説明し、町外れの家までの道を指さした。`
+  ]));
+
+  logs.push(pick([
+    `夕暮れの街道は人の姿が少なくなり、店の灯りだけが遠くに残っていた。`,
+    `空はまだ明るいが、路地の影は早く深くなっていた。`,
+    { text: `風のない夕方、街道は思ったより静かだった。`, maxTension: 55 }
+  ]));
+
+  if (weather === "小雨" || weather === "霧") {
+    logs.push(pick([
+      `小雨で石畳が滑りやすく、親は子どもの手を強く握った。`,
+      `霧で先の曲がり角が見えにくかったが、人の声はまだ聞こえていた。`
+    ]));
+  }
+
+  const work = [];
+  if (mina) work.push(`${nm(mina)}は帰り道の分岐を確認し、人通りの残っている道を選んだ。`);
+  else if (scout && isHumanAdventurer(scout)) work.push(`${nm(scout)}は分岐を確かめ、人の気配が残る道を選んだ。`);
+
+  if (row) work.push(`${nm(row)}は親子の少し前を歩き、道幅が狭くなる場所では足を止めて待った。`);
+  else if (shield && isHumanAdventurer(shield)) work.push(`${nm(shield)}は親子より半歩前を歩き、狭い道では先に足場を確かめた。`);
+
+  if (gadd) work.push(`${nm(gadd)}は重い買い物袋を引き受けた。子どもはその大きな背中の後ろを歩いた。`);
+  else if (row && isHumanAdventurer(row)) work.push(`${nm(row)}は重い袋を引き受け、子どもがつまずかないよう歩幅を合わせた。`);
+
+  if (elne) work.push(`${nm(elne)}は子どもの歩幅に合わせ、急がせないように声をかけた。`);
+  else if (caregiver && isHumanAdventurer(caregiver)) work.push(`${nm(caregiver)}は子どもの歩幅に合わせ、休みどころをこまめに確かめた。`);
+
+  if (careful && isHumanAdventurer(careful) && !work.some((line) => line.includes(nm(careful)))) {
+    work.push(`${nm(careful)}は暗くなる前に危ない坂を避け、明るい道を優先した。`);
+  }
+
+  while (work.length > 3) work.splice(Math.floor(rng() * work.length), 1);
+  work.forEach((line) => logs.push(line));
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは親子の少し後ろを歩き、子どもが立ち止まるたびに振り返った。`,
+      `エルシーは子どものそばを小走りに進み、門の前まで離れなかった。`,
+      `エルシーは夕暮れの足音に耳を立てながら、親子の後ろをついていった。`
+    ]));
+  }
+
+  const isDim = timeOfDay === "夕方" || timeOfDay === "夜";
+  if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && (isDim || weather === "霧")) {
+    logs.push(`ランタンを灯すと、ぬかるみと石段が見えやすくなった。`);
+  }
+  if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
+    logs.push(`${holderName("item_map")}は古地図で近道と安全な道を照らし合わせ、明るい方を選んだ。`);
+  }
+  if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
+    logs.push(pick([
+      `笛は使わずに済んだが、合図の手段があるだけで親は少し安心したようだった。`,
+      `${holderName("item_whistle")}は笛を手元に持ったまま歩いたが、鳴らす必要はなかった。`
+    ]));
+  }
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather) && rng() < 0.45) {
+    logs.push(`${holderName("item_bandage")}は子どもの擦れた膝に包帯を当て、歩きやすくしてから先へ進んだ。`);
+  }
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather) && rng() < 0.40) {
+    logs.push(`${holderName("item_pot")}は道端で携帯鍋を使い、子どもに温かい飲み物を渡した。`);
+  }
+
+  logs.push(pick([
+    `町外れの家が見えてきた。戸口の灯りが一つだけ点いていた。`,
+    `家の前の石段が見えた。親は荷物の数を数え直し、一つも欠けていないことを確かめた。`
+  ]));
+
+  return logs;
+}
+
+function steleRubbingOutcomeText(outcome, party, rng) {
+  const variants = {
+    拓本完了: {
+      result: "拓本完了",
+      summary: "石碑の拓本を取り、読める範囲の文字を記録した。",
+      line: `拓本には、今は使われていない古い地名が一つだけ残っていた。`,
+      after: `報告書には「判読不能箇所は無理に補わず」と記されている。`,
+      history: "古い石碑の拓本。読める範囲を記録。"
+    },
+    一部判読: {
+      result: "一部判読",
+      summary: "文字の一部は欠けていたが、旧街道に関する地名を確認できた。",
+      line: `欠けた文字はそのまま残し、読めた地名だけを報告書に書き留めた。`,
+      after: `読めなかった文字を、読めないまま残した。それも記録だ。`,
+      history: "古い石碑の拓本。一部判読、旧街道の地名を確認。"
+    },
+    保存優先: {
+      result: "保存優先",
+      summary: "石碑を傷めないため、無理な清掃は避けた。読める範囲のみ記録した。",
+      line: `苔は削らず、石碑の表面も無理に触らない範囲で拓本を取った。`,
+      after: `石碑はまだそこにある。報告書には、そう書かれていた。`,
+      history: "古い石碑の拓本。保存優先、読める範囲のみ記録。"
+    }
+  };
+  return variants[outcome] ?? variants["拓本完了"];
+}
+
+function generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const weather = context.departConditions?.weather ?? "晴れ";
+  const timeOfDay = context.departConditions?.timeOfDay ?? "昼";
+  const tensionValue = context.tensionValue ?? 50;
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const row = party.find((a) => a.id === "adv_row");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const mina = party.find((a) => a.id === "adv_mina");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const scout = findByTrait(party, "job", "斥候");
+  const herbalist = findByTrait(party, "job", "薬草師");
+  const careful = findByTrait(party, "personality", "慎重");
+  const logs = [];
+
+  const holderName = (itemId) => {
+    for (const advId of Object.keys(adventurerItemIds)) {
+      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
+        const adv = getAdventurer(advId);
+        if (adv) return getDisplayName(adv);
+      }
+    }
+    const human = humanMembers(party)[0];
+    return human ? getDisplayName(human) : getDisplayName(party[0]);
+  };
+
+  logs.push(pick([
+    `${quest.area}に着いた。石碑は旧街道の分岐から少し外れた場所に立っていた。`,
+    `旧街道脇の石碑は、半分ほど苔に覆われていた。`
+  ]));
+
+  logs.push(pick([
+    `文字は残っていたが、端の数文字は欠けて読めなかった。`,
+    `石碑の表面は湿気を帯びており、苔の下に浅い刻みが隠れていた。`,
+    `風化した文字の一部は、もう判読できないほど薄れていた。`
+  ]));
+
+  logs.push(pick([
+    `拓本用の紙を当てる前に、石碑の向きと周囲の地面を確認した。`,
+    `無理に削らないよう、読める範囲だけを写し取る方針で作業を始めた。`
+  ]));
+
+  const work = [];
+  if (mina) work.push(`${nm(mina)}は石碑の向きと、旧街道の分岐を地図と照合した。`);
+  else if (scout && isHumanAdventurer(scout)) work.push(`${nm(scout)}は石碑の位置と旧街道の分岐を確かめ、地図の記載と照合した。`);
+
+  if (elne) work.push(`${nm(elne)}は苔を無理に削らず、読める部分だけを丁寧に写し取った。`);
+  else if (herbalist && isHumanAdventurer(herbalist)) work.push(`${nm(herbalist)}は苔に触れすぎず、読める文字だけを拓本に写した。`);
+
+  if (row) work.push(`${nm(row)}は紙が風でずれないよう、石碑の下側を押さえていた。`);
+  else if (careful && isHumanAdventurer(careful)) work.push(`${nm(careful)}は紙の端を押さえ、風で拓本がずれないよう支えた。`);
+
+  if (gadd) work.push(`${nm(gadd)}は「削った方が早い」と言いかけたが、石が崩れそうなのを見て黙って手を引いた。`);
+
+  if (careful && isHumanAdventurer(careful) && !work.some((line) => line.includes(nm(careful)))) {
+    work.push(`${nm(careful)}は欠けた文字を補わず、読める範囲だけを報告書に残すよう促した。`);
+  }
+
+  while (work.length > 3) work.splice(Math.floor(rng() * work.length), 1);
+  work.forEach((line) => logs.push(line));
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは石碑の足元を嗅いでから、道の方を見て耳を立てた。`,
+      `エルシーは拓本作業のあいだ、石碑のそばで伏せて待っていた。`,
+      `エルシーは旧街道の分岐を見て、一度だけ低く唸った。`
+    ]));
+  }
+
+  if (itemIds.includes("item_obs_sheet") && canUseItemInQuest(quest, "item_obs_sheet", weather)) {
+    logs.push(`${holderName("item_obs_sheet")}は観察記録票に、石碑の位置と文字の欠け方だけを書き留めた。`);
+  }
+  if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
+    logs.push(`${holderName("item_map")}は古地図で旧街道と石碑の位置を照合し、地名の読みを確かめた。`);
+  }
+  if (itemIds.includes("item_oilcase") && canUseItemInQuest(quest, "item_oilcase", weather)) {
+    if (weather === "小雨" || weather === "雨") {
+      logs.push(`油紙の手紙入れに写しをしまったため、小雨でも紙は濡れずに済んだ。`);
+    } else {
+      logs.push(`${holderName("item_oilcase")}は油紙の手紙入れに拓本とメモをしまい、湿気から守った。`);
+    }
+  }
+  const isDim = timeOfDay === "夕方" || timeOfDay === "夜";
+  if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && (isDim || weather === "霧")) {
+    logs.push(`ランタンの光を斜めから当てると、昼には見えなかった浅い刻みが浮かび上がった。`);
+  }
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather)) {
+    logs.push(pick([
+      `${holderName("item_bandage")}は風ではがれそうな紙の端を包帯で仮止めした。`,
+      `${holderName("item_bandage")}は石に擦れた指に包帯を当て、作業を続けた。`
+    ]));
+  }
+  if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather) && weather === "霧") {
+    logs.push(`${holderName("item_whistle")}は霧の中でも合流できるよう、短く笛を吹いた。`);
+  }
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather) && rng() < 0.35) {
+    logs.push(`${holderName("item_pot")}は作業の合間に携帯鍋で薄いお湯を沸かし、冷えた手を温めた。`);
+  }
+
+  logs.push(pick([
+    `拓本を乾かしながら、読めなかった箇所には何も書き足さなかった。`,
+    `石碑の前に立ち直し、苔を削らなかったことだけをもう一度確かめた。`
+  ]));
+
+  return logs;
+}
+
 function generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng) {
   const logs = [];
   const isNight = departTimeOfDay === "夜";
@@ -3757,6 +4239,42 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
       `診療所の受領印は、少し滲んでいたが確かに押されていた。`
     ];
     if (elneName) lines.push(`${elneName}は納品が終わるまで、一度も包みから目を離さなかった。`);
+    return pickOne(lines, rng);
+  }
+
+  if (quest.id === "quest_missing_herbalist") {
+    const mina = party.find((a) => a.id === "adv_mina");
+    const minaName = mina ? getDisplayName(mina) : null;
+    const lines = [
+      `エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`,
+      `報告書には、無事という二文字がいつもより大きく見えた。`
+    ];
+    if (minaName) lines.push(`${minaName}は最後まで足跡を見失わなかった。`);
+    if (result === "発見" || result === "保護") lines.push(`帰還した時、薬草採りは自分の袋だけは離さず持っていた。`);
+    return pickOne(lines, rng);
+  }
+
+  if (quest.id === "quest_evening_market_escort") {
+    const row = party.find((a) => a.id === "adv_row");
+    const rowName = row ? getDisplayName(row) : null;
+    const lines = [
+      `何も起きなかった。それが今回の一番良い報告だった。`,
+      `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`
+    ];
+    if (rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
+    if (partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
+    return pickOne(lines, rng);
+  }
+
+  if (quest.id === "quest_old_stele_rubbing") {
+    const elne = party.find((a) => a.id === "adv_elne");
+    const elneName = elne ? getDisplayName(elne) : null;
+    const lines = [
+      `読めなかった文字を、読めないまま残した。それも記録だ。`,
+      `拓本には、今は使われていない地名が一つだけ残っていた。`,
+      `石碑はまだそこにある。報告書には、そう書かれていた。`
+    ];
+    if (elneName) lines.push(`${elneName}は最後まで、欠けた文字を勝手に補わなかった。`);
     return pickOne(lines, rng);
   }
 
@@ -4087,6 +4605,178 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
       hiddenTags: { transport: true, outcome, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
+      createdAt: new Date().toISOString()
+    }, quest, party, rng);
+  }
+
+  // 救助依頼：帰ってこない薬草採りの確認
+  if (quest.id === "quest_missing_herbalist") {
+    let outcome = pickOne(["保護", "発見", "痕跡確認"], rng);
+    if (hasPartyTrait(party, "job", "斥候") && rng() < 0.45) outcome = pickOne(["保護", "発見"], rng);
+    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.4) outcome = pickOne(["発見", "保護"], rng);
+    if (!itemIds.includes("item_whistle") && rng() < 0.35) outcome = pickOne(["痕跡確認", "発見"], rng);
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const rescueSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${rescueSupplyDesc.length > 0 ? rescueSupplyDesc.join(" / ") : "なし"}。`);
+
+    const rescueLogs = generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, outcome });
+    rescueLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = missingHerbalistOutcomeText(outcome, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
+        : adv.job === "斥候" ? "足跡追跡で" : adv.job === "薬草師" ? "痕跡判断で"
+          : adv.job === "見習い盾役" ? "帰路確認で" : adv.job === "戦士" ? "呼びかけと支援で"
+            : adv.personality === "慎重" ? "慎重な捜索で" : "救助補助で";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return withElsieLog({
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes: null,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: { rescue: true, outcome, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
+      createdAt: new Date().toISOString()
+    }, quest, party, rng);
+  }
+
+  // 護衛依頼：夕市帰りの親子の付き添い
+  if (quest.id === "quest_evening_market_escort") {
+    let outcome = pickOne(["無事帰宅", "安全確認", "遠回り帰宅"], rng);
+    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["安全確認", "無事帰宅"], rng);
+    if (itemIds.includes("item_map") && rng() < 0.4) outcome = pickOne(["遠回り帰宅", "安全確認", "無事帰宅"], rng);
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const escortSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${escortSupplyDesc.length > 0 ? escortSupplyDesc.join(" / ") : "なし"}。`);
+
+    const escortLogs = generateEveningEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
+    escortLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = eveningEscortOutcomeText(outcome, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.id === "adv_elsie" ? "鼻と付き添いで"
+        : adv.job === "見習い盾役" ? "前衛と足場確認で" : adv.job === "斥候" ? "道選びで"
+          : adv.job === "戦士" ? "荷物運搬で" : adv.job === "薬草師" ? "気配りと付き添いで"
+            : adv.personality === "慎重" ? "安全な道選びで" : "護衛補助で";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return withElsieLog({
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes: null,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: { escort: true, outcome, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
+      createdAt: new Date().toISOString()
+    }, quest, party, rng);
+  }
+
+  // 記録依頼：古い石碑の拓本
+  if (quest.id === "quest_old_stele_rubbing") {
+    let outcome = pickOne(["拓本完了", "一部判読", "保存優先"], rng);
+    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["保存優先", "拓本完了"], rng);
+    if (hasPartyTrait(party, "job", "薬草師") && rng() < 0.45) outcome = pickOne(["拓本完了", "一部判読"], rng);
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const steleSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${steleSupplyDesc.length > 0 ? steleSupplyDesc.join(" / ") : "なし"}。`);
+
+    const steleLogs = generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
+    steleLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = steleRubbingOutcomeText(outcome, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
+        : adv.job === "斥候" ? "位置照合で" : adv.job === "薬草師" ? "拓本と判読で"
+          : adv.job === "見習い盾役" ? "紙の固定で" : adv.job === "戦士" ? "作業補助で"
+            : adv.personality === "慎重" ? "保存優先の判断で" : "記録補助で";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return withElsieLog({
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes: null,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: { record: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
