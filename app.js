@@ -242,6 +242,17 @@ const masterQuests = [
     summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
   },
   {
+    id: "quest_barn_bite",
+    title: "納屋に巣食う噛みつく「なにか」の討伐",
+    category: "戦闘",
+    danger: "中",
+    area: "古い納屋",
+    recommended: ["戦士", "豪胆", "観察"],
+    tags: ["戦闘", "討伐", "未同定", "納屋"],
+    observationTarget: "嚙みつく「なにか」",
+    summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
+  },
+  {
     id: "quest_lingering_light",
     title: "夜道に残る灯りの調査",
     category: "調査",
@@ -1901,6 +1912,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_herb: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
     quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
     quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"],
+    quest_barn_bite: ["item_bandage", "item_whistle", "item_lantern", "item_obs_sheet"],
     quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"]
   };
   const allowed = allowedByQuest[quest.id];
@@ -2357,7 +2369,12 @@ function battleSupplyEventText(quest, party, adventurerItemIds, rng) {
     lines.push(`${holderName("item_bandage")}は包帯を取り出し、畑の柵で擦った手を簡単に確かめた。処置は軽く済んだ。`);
   }
   if (usableItems.includes("item_whistle")) {
-    lines.push(`${holderName("item_whistle")}は笛を短く鳴らし、「なにか」を畑の外側へ追いやった。音に驚いた影は畝から離れた。`);
+    lines.push(pickOne([
+      `${holderName("item_whistle")}は笛を短く鳴らし、「なにか」を畑の外側へ追いやった。音に驚いた影は畝から離れた。`,
+      `${holderName("item_whistle")}は笛を吹いた。音に驚いた「なにか」は外へ逃げた。`,
+      `${holderName("item_whistle")}は笛を鳴らした。影は一瞬こちらへ向き直り、畝の向こうに引き寄せられたように見えた。`,
+      `${holderName("item_whistle")}は笛を短く吹いたが、「なにか」は驚いて畑の端へ走り出した。`
+    ], rng));
   }
 
   return lines.length > 0 ? pickOne(lines, rng) : null;
@@ -2371,14 +2388,65 @@ function battleEncounterText(rng) {
   ], rng);
 }
 
-function battleOpponentEventText(rng) {
-  return pickOne([
-    `「なにか」は苗の間を低く跳ね、こちらを見るたびに向きを変えた。`,
-    `「なにか」は畑の土を蹴り、畝を越えたり戻ったりしていた。`,
-    `小さな影は何度か振り返りながら、荒らした畝の近くを離れようとしなかった。`,
-    `「なにか」は畝の陰に身を低くし、近づくたびに横へ飛んで場所を変えた。`,
-    `「なにか」は大きさの割に素早く、何度か向きを変えながら畝の間を移動し続けた。`
-  ], rng);
+function pickMysteryBehavior(rng) {
+  return pickOne(["flee", "intimidate", "protect", "watch", "lure"], rng);
+}
+
+function battleOpponentEventText(behavior, rng) {
+  const pools = {
+    flee: [
+      `「なにか」はこちらに気づくと、すぐ畝の陰へ身を寄せた。逃げ腰の動きだった。`,
+      `小さな影は距離を取りながら、畑の端ばかりをちらちら見ていた。`,
+      `「なにか」は近づくたびに一歩下がり、畑の外へ逃げる準備をしているようだった。`
+    ],
+    intimidate: [
+      `「なにか」は低く身を伏せ、こちらへ向かって威嚇するように毛を逆立てた。`,
+      `「なにか」は畝の上で足を止め、一歩も下がらずこちらを睨んでいた。`,
+      `小さな影は畑の端まで踏み込むこちらに向かい、威嚇するように低い声を出した。`
+    ],
+    protect: [
+      `「なにか」は荒らした畝の上を行き来し、踏み荒らされた苗の近くを離れなかった。`,
+      `「なにか」は作物の間を低く跳ね、畝を守るようにこちらと距離を保っていた。`,
+      `「なにか」は荒らした畝の上で足を止め、こちらが近づくたびに苗の方へ身を寄せた。`
+    ],
+    watch: [
+      `「なにか」は逃げも威嚇もせず、こちらの動きだけを追うように姿勢を変えた。`,
+      `「なにか」は畝の端で足を止め、こちらを観察しているかのように動きを減らした。`,
+      `小さな影は距離を保ったまま、こちらの位置と動きだけを追っていた。`
+    ],
+    lure: [
+      `「なにか」は畑の奥へ下がりながら、こちらを引き込むように畝の間をあけていた。`,
+      `「なにか」は一歩下がるたびに奥へ逃げ道を見せ、こちらを畑の中へ誘い込もうとしていた。`,
+      `「なにか」は畝の奥へ下がり、こちらが追いかけたくなる隙だけを残していた。`
+    ]
+  };
+  return pickOne(pools[behavior] ?? pools.flee, rng);
+}
+
+function battleOpponentPushText(behavior, rng) {
+  const pools = {
+    flee: [
+      `押し返すたび「なにか」は畝の陰へ身を縮め、外側ばかりを向いた。`,
+      `「なにか」は抵抗を続けたが、逃げ腰の動きは畑の端へ向かっていた。`
+    ],
+    intimidate: [
+      `「なにか」は低い仕草で威嚇してきたが、圧をかけられると位置を後退させた。`,
+      `威嚇は続いたが、「なにか」の足は少しずつ畑の外側へ向いていた。`
+    ],
+    protect: [
+      `「なにか」は荒らした畝の上で足を止め、こちらが近づくたびに苗を押し返すように動いた。`,
+      `作物の近くでは「なにか」の動きが強くなり、追い払いは一歩ずつ進んだ。`
+    ],
+    watch: [
+      `「なにか」は逃げずにこちらの動きだけを追い、一歩遅れて位置を変えた。`,
+      `牽制の最中も「なにか」はこちらを観察するように、動きを小さく保っていた。`
+    ],
+    lure: [
+      `「なにか」は畑の奥へ下がりながら、こちらを引き込むように畝の間を開けた。`,
+      `追い返すたび「なにか」は一度奥へ下がり、畑の中で距離を稼いだ。`
+    ]
+  };
+  return pickOne(pools[behavior] ?? pools.flee, rng);
 }
 
 function battleWeaponPushLine(adv, rng) {
@@ -2420,23 +2488,70 @@ function battleWeaponPushLine(adv, rng) {
   ], rng);
 }
 
-function battleOpponentRetreatText(rng) {
+function battleOpponentRetreatText(behavior, rng) {
+  const pools = {
+    flee: [
+      `「なにか」は畑の端へ向かう動きが強くなり、すぐ外へ消えかけた。`,
+      `逃げ腰の影は、ついに畝から離れて畑の外側へ出た。`
+    ],
+    intimidate: [
+      `威嚇は続いたが、「なにか」は外側へ開いた道を選び始めた。`,
+      `「なにか」は最後に一歩踏み込もうとしたが、畑の外へ逃げる方角へ向きを変えた。`
+    ],
+    protect: [
+      `「なにか」は畝から離れ、荒らした場所を振り返ってから畑の外へ出た。`,
+      `作物の上から下りた「なにか」は、畑の端へ向かう動きに変わった。`
+    ],
+    watch: [
+      `「なにか」は最後までこちらを見てから、畑の外へ消えた。`,
+      `観察するように動いていた「なにか」は、ついに外側の逃げ道を選んだ。`
+    ],
+    lure: [
+      `「なにか」は一度畑の奥へ引いたが、追い返されて外側の逃げ道を選んだ。`,
+      `誘い込もうとする動きは続いたが、「なにか」は畑の端へ向かう方向も見せ始めた。`
+    ]
+  };
+  return pickOne(pools[behavior] ?? pools.flee, rng);
+}
+
+function battleLanternOpponentText(party, adventurerItemIds, itemIds, isDim, rng) {
+  if (!isDim || !itemIds.includes("item_lantern") || rng() < 0.55) return null;
+  const holder = party.find((adv) => getAdvItemIds(adventurerItemIds, adv.id).includes("item_lantern")) ?? party[0];
+  const name = getDisplayName(holder);
   return pickOne([
-    `「なにか」は何度か振り返ったが、畑の端へ向かう動きが強くなった。`,
-    `小さな影は畝から離れ、畑の外側へ逃げ道を探し始めた。`,
-    `「なにか」は抵抗を続けたが、畑の外へ逃げる方角ばかり向くようになった。`
+    `${name}がランタンを掲げると、「なにか」の輪郭が一瞬はっきり見えた。耳の先が黒い。`,
+    `薄暗い畑の中、ランタンの光で「なにか」の背中の線だけが浮かび上がった。`,
+    `ランタンの明かりが当たった瞬間、「なにか」は思わず動きを止め、輪郭だけがはっきりした。`
+  ], rng);
+}
+
+function battleObsSheetMidBattleText(party, adventurerItemIds, behavior, rng) {
+  const holder = party.find((adv) => getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet"));
+  if (!holder || rng() < 0.65) return null;
+  const name = getDisplayName(holder);
+  if (behavior === "watch") {
+    return `${name}は観察記録票を開き、「なにか」がこちらを見る間だけ動きを書き留めた。`;
+  }
+  if (behavior === "intimidate") {
+    return `${name}は観察記録票に、「なにか」の威嚇の仕草だけを短く書き留めた。`;
+  }
+  return pickOne([
+    `${name}は観察記録票を開き、「なにか」の足跡の向きだけを書き留めた。`,
+    `${name}は戦いの最中も観察記録票を手元に置き、影の大きさだけを控えめに記録した。`
   ], rng);
 }
 
 // 押し合い・牽制・追い払い（最大2行）
-function battlePushRepelText(quest, party, adventurerItemIds, rng) {
+function battlePushRepelText(quest, party, adventurerItemIds, behavior, rng) {
   const lines = [];
+  lines.push(battleOpponentPushText(behavior, rng));
+
   const roles = battleRoleDivisionText(party, rng);
   if (roles.length > 0) lines.push(roles[0]);
 
   const pusher = bestByStat(party, "courage");
   const weaponLine = battleWeaponPushLine(pusher, rng);
-  if (weaponLine) lines.push(weaponLine);
+  if (weaponLine && lines.length < 2) lines.push(weaponLine);
 
   if (lines.length < 2) {
     const supply = battleSupplyEventText(quest, party, adventurerItemIds, rng);
@@ -2621,12 +2736,35 @@ function battleObservationRecordText(party, adventurerItemIds, rng) {
   ], rng);
 }
 
-function battleOutcomeLines(party, adventurerItemIds, rng) {
+function battleOutcomeLines(party, adventurerItemIds, behavior, rng) {
   const solo = isSoloParty(party);
   const subject = partySubject(party);
   const hasObsSheet = party.some((adv) =>
     getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet")
   );
+
+  // 挙動に応じた結果（優先度：lure / watch を先に）
+  if (behavior === "lure" && rng() < 0.55) {
+    return pickOne([
+      [`「なにか」は畑の奥まで一度引き込まれてから、外へ抜けていった。`, `追い払いはできたが、奥の畝にも新しい足跡が残っている。`],
+      [`${subject}は誘い込みに乗らず、端から追い返した。「なにか」は畑の外へ出た。`, `畑の被害はそこで止まっている。`]
+    ], rng);
+  }
+  if (behavior === "watch" && rng() < 0.50) {
+    return pickOne([
+      [`「なにか」は畑の外へ消えた。`, `正体は掴めないままだ。観察されていた側があるのか、報告書には見落としがあった気配だけが残っている。`],
+      [`「なにか」は逃げ去った。`, hasObsSheet
+        ? `観察記録票には動きは残ったが、正体を特定する情報は足りなかった。`
+        : `こちらを見ていた相手の正体は、結局はっきりしなかった。`]
+    ], rng);
+  }
+  if (behavior === "flee" && rng() < 0.45) {
+    const actor = solo ? getDisplayName(party[0]) : subject;
+    return pickOne([
+      [`「なにか」は逃げ腰のまま、畑の外へ消えていった。`, `畑の被害はそこで止まっている。依頼は無事に片づいた。`],
+      [`${actor}は逃げ腰の「なにか」を畑の外まで追い払った。`, `畑の被害はそこで止まっている。`]
+    ], rng);
+  }
 
   // 最も高いパラメータで結果パターンを選ぶ
   const stats = ["caution", "courage", "memory", "curiosity", "kindness"];
@@ -2709,26 +2847,123 @@ function battleWithdrawalText(party, rng) {
   return pickOne(lines[stat], rng);
 }
 
-function generateBattleLogs(quest, party, adventurerItemIds, rng) {
+function generateBattleLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const behavior = pickMysteryBehavior(rng);
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const isNight = context.departConditions?.timeOfDay === "夜";
+  const isDim = isNight || ["霧", "小雨"].includes(context.departConditions?.weather);
+
   const logs = [];
   // 1. 遭遇
   logs.push(battleEncounterText(rng));
   // 2. 相手の様子
-  logs.push(battleOpponentEventText(rng));
+  logs.push(battleOpponentEventText(behavior, rng));
+  const lanternLine = battleLanternOpponentText(party, adventurerItemIds, itemIds, isDim, rng);
+  if (lanternLine) logs.push(lanternLine);
   // 3. 冒険者の対応
   logs.push(battleStatEventText(party, rng));
   // 4. 押し合い・牽制・追い払い
-  battlePushRepelText(quest, party, adventurerItemIds, rng).forEach((line) => logs.push(line));
+  battlePushRepelText(quest, party, adventurerItemIds, behavior, rng).forEach((line) => logs.push(line));
+  const obsMid = battleObsSheetMidBattleText(party, adventurerItemIds, behavior, rng);
+  if (obsMid) logs.push(obsMid);
   // 4→5. 相手が退き始める
-  logs.push(battleOpponentRetreatText(rng));
+  logs.push(battleOpponentRetreatText(behavior, rng));
   // 5. 切り上げ判断
   const withdrawal = battleWithdrawalText(party, rng);
   if (withdrawal) logs.push(withdrawal);
   // 6. 結果
-  const outcomeLines = battleOutcomeLines(party, adventurerItemIds, rng);
+  const outcomeLines = battleOutcomeLines(party, adventurerItemIds, behavior, rng);
   outcomeLines.forEach((line) => logs.push(line));
   const observation = battleObservationRecordText(party, adventurerItemIds, rng);
   if (observation) logs.push(observation);
+  return logs;
+}
+
+// 納屋の討伐依頼専用ログ（現場確認→敵の痕跡→遭遇→交戦→討伐判断→結果）
+function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const solo = isSoloParty(party);
+  const subject = partySubject(party);
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const hasLantern = itemIds.includes("item_lantern");
+  const hasBandage = itemIds.includes("item_bandage");
+  const hasWhistle = itemIds.includes("item_whistle");
+  const logs = [];
+
+  // 1. 現場確認
+  logs.push(pickOne([
+    `納屋の戸を開けると、藁の山と古い飼葉桶の陰に、引っかいたような傷跡が残っていた。`,
+    `依頼人に案内された納屋は薄暗く、隅の木材には鋭い歯形がいくつも残っていた。`
+  ], rng));
+
+  // 2. 敵の痕跡
+  logs.push(hasLantern
+    ? pickOne([
+        `ランタンの明かりを当てると、藁の上に乾いた跡と小さな足跡が浮かび上がった。`,
+        `灯りで照らすと、飼葉桶の縁に細かい歯形がはっきり見えた。`
+      ], rng)
+    : pickOne([
+        `薄暗い納屋の中では、足跡の細部までは見分けられなかった。気配だけが濃く残っていた。`,
+        `手探りで確かめると、木材の表面がささくれるほど噛まれていた。`
+      ], rng));
+
+  // 3. 遭遇
+  logs.push(pickOne([
+    `藁の山が大きく揺れ、「なにか」が低い唸り声とともに飛び出した。`,
+    `飼葉桶の陰から、「なにか」が牙をむき出しにして姿を見せた。`,
+    `物音に気づいた「なにか」が、こちらへ向き直り低く身構えた。`
+  ], rng));
+
+  // 4. 交戦
+  const fighter = bestByStat(party, "courage");
+  const fname = getDisplayName(fighter);
+  const weapon = fighter.weapon;
+  if (weapon) {
+    const isRanged = weapon.range === "中距離";
+    const isBlunt = weapon.type?.includes("鈍器");
+    const isShield = weapon.type?.includes("盾");
+    const isStaff = weapon.type?.includes("杖");
+    if (isRanged) {
+      logs.push(`${fname}は${weapon.name}で間合いを取り、飛びかかってくる「なにか」を牽制した。`);
+    } else if (isBlunt) {
+      logs.push(`${fname}は${weapon.name}を振るい、「なにか」の突進を真正面から受け止めた。`);
+    } else if (isShield) {
+      logs.push(`${fname}は${weapon.name}で身を守りながら、「なにか」の牙を弾き返した。`);
+    } else if (isStaff) {
+      logs.push(`${fname}は${weapon.name}を構え、「なにか」の動きを止めようと足元を突いた。`);
+    } else {
+      logs.push(`${fname}は${weapon.name}を構え、「なにか」と正面から渡り合った。`);
+    }
+  } else {
+    logs.push(`${fname}は怯まず前に出て、「なにか」と取っ組み合った。`);
+  }
+  if (hasBandage && rng() < 0.5) {
+    logs.push(`牙が掠めた腕に、すぐ包帯が巻かれた。傷は浅かった。`);
+  }
+  if (!solo) {
+    const mina = party.find((a) => a.id === "adv_mina");
+    const gadd = party.find((a) => a.id === "adv_gadd");
+    const elne = party.find((a) => a.id === "adv_elne");
+    const row = party.find((a) => a.id === "adv_row");
+    const nm = (adv) => (adv ? getDisplayName(adv) : null);
+    const roleCandidates = [];
+    if (gadd && row) roleCandidates.push(`${nm(gadd)}が正面で「なにか」を抑え、${nm(row)}は逃げ場をふさぐように戸口側へ回った。`);
+    if (gadd && mina) roleCandidates.push(`${nm(gadd)}が押さえつけるあいだ、${nm(mina)}は隙を見て隙間を狙った。`);
+    if (gadd && elne) roleCandidates.push(`${nm(gadd)}が前で受け止め、${nm(elne)}はすぐ手当てできるよう位置を整えた。`);
+    if (row && elne) roleCandidates.push(`${nm(row)}が戸口をふさぎ、${nm(elne)}は仲間に怪我がないか確かめた。`);
+    if (roleCandidates.length > 0) logs.push(pickOne(roleCandidates, rng));
+  }
+  if (hasWhistle && rng() < 0.4) {
+    logs.push(`${solo ? fname : "誰か"}が短く笛を鳴らし、「なにか」の動きを一瞬乱した。`);
+  }
+
+  // 5. 討伐判断
+  logs.push(solo
+    ? `${fname}は追い払うだけでは依頼を終えられないと判断し、最後まで仕留めることを選んだ。`
+    : `${subject}は「ここで終わらせる」と判断し、追い払いではなく仕留める方を選んだ。`);
+
+  // 6. 結果
+  logs.push(`「なにか」の動きが止まった。正体は分からないままだが、納屋を脅かしていた気配は消えた。`);
+
   return logs;
 }
 
@@ -2864,13 +3099,16 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
 
   // 戦闘依頼（夜以外）
   if (isBattle) {
+    const isDefeat = result === "討伐";
     const lines = [
       `${frontName}は怯まず前に出た。それが今回の遠征で一番はっきりしたことだ。`,
-      `追い払いは成功した。ただし正体は、まだ誰も知らない。`
+      isDefeat ? `「なにか」は仕留められた。ただし正体は、まだ誰も知らない。` : `追い払いは成功した。ただし正体は、まだ誰も知らない。`
     ];
     if (frontWeapon) {
-      lines.push(`${frontName}は${frontWeapon.name}を構え、畑の入口から最後まで動かなかった。`);
-      lines.push(`${frontWeapon.name}が「なにか」の退路を畑の外へ向けた。それで十分だった。`);
+      lines.push(`${frontName}は${frontWeapon.name}を構え、${quest.area}の入口から最後まで動かなかった。`);
+      lines.push(isDefeat
+        ? `${frontWeapon.name}が「なにか」の動きを止めた。それで十分だった。`
+        : `${frontWeapon.name}が「なにか」の退路を${quest.area}の外へ向けた。それで十分だった。`);
     }
     if (acc) lines.push(`${accName}の${acc.name}は、帰還後もしばらくその手元にあった。`);
     // 執着：positiveLine（行動として出た面）
@@ -2992,7 +3230,7 @@ function generateReport(expedition) {
   }
 
   if (quest.id === "quest_field_mystery") {
-    const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng);
+    const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions });
     battleLogs.forEach((text, index) => add(index === battleLogs.length - 1 ? "afterglow" : "action", text));
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
     const adventurerHistoryLines = {};
@@ -3021,6 +3259,40 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, "追い払い", rng),
       hiddenTags: { combat: true, target: "「なにか」", recordDensityGain: 1 + logs.length },
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  if (quest.id === "quest_barn_bite") {
+    const huntLogs = generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions });
+    huntLogs.forEach((text, index) => add(index === huntLogs.length - 1 ? "afterglow" : "action", text));
+    const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に";
+      adventurerHistoryLines[adv.id] = `${quest.title}：討伐。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return {
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: "討伐",
+      summary: "納屋に巣食っていた未同定の相手を仕留めた。正体はまだ不明。",
+      historyLine: "納屋の「なにか」を討伐。未同定のまま、特徴のみ記録。",
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, "討伐", rng),
+      hiddenTags: { combat: true, target: "嚙みつく「なにか」", recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
   }
