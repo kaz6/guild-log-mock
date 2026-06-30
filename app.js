@@ -3601,9 +3601,9 @@ function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context 
   }
 
   logs.push(pick([
-    `応急処置のあと、荷車はまだ難しいが、人が歩いて渡れる幅は確保できた。`,
-    `修理後、通行人が試しに渡り、板の沈みは許容範囲に収まった。`,
-    `手すりを握ったまま、最後の確認をしてから作業を切り上げた。`
+    `最後にもう一度、橋板の浮きと手すりの揺れを確認した。`,
+    `作業を終えたあと、荷車を通す前に徒歩での確認を行った。`,
+    `報告書用に、危ない板の位置だけ印をつけておいた。`
   ]));
 
   return logs;
@@ -3862,11 +3862,7 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   }
 
   if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
-    if (outcome === "保護" || outcome === "発見") {
-      logs.push(`笛を短く鳴らすと、森の奥から弱い返事が返ってきた。`);
-    } else {
-      logs.push(`${holderName("item_whistle")}は笛を何度か吹いたが、返事は森の奥からは返ってこなかった。`);
-    }
+    logs.push(`${holderName("item_whistle")}は森の中で笛を短く鳴らし、返事があるかしばらく待って確認した。`);
   }
   const isDim = timeOfDay === "夕方" || timeOfDay === "夜";
   if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && (isDim || weather === "霧")) {
@@ -3875,11 +3871,11 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
     logs.push(`${holderName("item_map")}は古地図で採草地と帰り道を確かめ、浅瀬への近道を避けた。`);
   }
-  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather) && (outcome === "保護" || outcome === "発見")) {
-    logs.push(`${holderName("item_bandage")}は見つかった薬草採りの擦れた膝に包帯を当て、歩行を楽にした。`);
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather)) {
+    logs.push(`${holderName("item_bandage")}は包帯をすぐ使えるよう、取り出しやすい位置に移しておいた。`);
   }
-  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather) && (outcome === "保護" || outcome === "発見")) {
-    logs.push(`${holderName("item_pot")}は携帯鍋で薄いお湯を沸かし、冷えた手を温めてから帰路についた。`);
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather)) {
+    logs.push(`${holderName("item_pot")}は休ませる場所を確保するため、携帯鍋で湯を沸かす準備だけしておいた。`);
   }
   if (itemIds.includes("item_obs_sheet") && canUseItemInQuest(quest, "item_obs_sheet", weather)) {
     logs.push(`${holderName("item_obs_sheet")}は観察記録票に、足跡の向きと落とし物の位置だけを書き留めた。`);
