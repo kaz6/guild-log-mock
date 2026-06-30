@@ -296,6 +296,19 @@ const masterQuests = [
     summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
   },
   {
+    id: "quest_old_bridge_repair",
+    title: "古い小橋の応急修理",
+    category: "保全",
+    danger: "低",
+    area: "村はずれの小川",
+    recommended: ["戦士", "慎重", "見習い盾役"],
+    tags: ["保全", "修繕", "水辺", "足場", "応急処置", "地域"],
+    observationTarget: "なし",
+    tensionBase: 30,
+    tensionRange: 20,
+    summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。"
+  },
+  {
     id: "quest_lingering_light",
     title: "夜道に残る灯りの調査",
     category: "調査",
@@ -549,6 +562,14 @@ function elsiePartyLogText(quest, party, rng) {
       "エルシーは古い家の前で鼻を鳴らし、扉の隙間をしばらく嗅いでいた。",
       "エルシーは封筒を持つ手元を見上げ、歩き出すまで静かに待っていた。",
       "宛先の家が空き家だと分かると、エルシーは玄関先で一度だけ耳を立てた。"
+    );
+  }
+
+  if (quest.id === "quest_old_bridge_repair") {
+    pool.push(
+      "エルシーは橋のたもとで耳を立て、水音と足音のする方を交互に見ていた。",
+      "エルシーは岸の草むらで鼻を鳴らし、小川の匂いをしばらく追っていた。",
+      "エルシーは橋のたもとで伏せ、作業の合図があるまで動かなかった。"
     );
   }
 
@@ -2194,7 +2215,8 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
     quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"],
     quest_barn_bite: ["item_bandage", "item_whistle", "item_lantern", "item_obs_sheet"],
-    quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"]
+    quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"],
+    quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"]
   };
   const allowed = allowedByQuest[quest.id];
   if (!allowed) return true;
@@ -3358,6 +3380,140 @@ function lightObservationRecordText(party, adventurerItemIds, rng) {
   ], rng);
 }
 
+function bridgeRepairOutcomeText(outcome, party, rng) {
+  const subject = partySubject(party);
+  const variants = {
+    応急修理: {
+      result: "応急修理",
+      summary: "板の緩みを直し、徒歩での通行は可能になった。本修理は後日必要。",
+      line: `応急修理の後、荷車はまだ難しいが、人が歩いて渡るには十分だと判断された。`,
+      after: `報告書には「本修理は後日必要。徒歩通行は可」と記されている。`,
+      history: "古い小橋の応急修理。徒歩通行可、本修理は後日。"
+    },
+    通行可: {
+      result: "通行可",
+      summary: "手すりと足場を補強し、村人が安全に渡れる状態になった。",
+      line: `手すりと足場の補強が終わり、${subject}は通行人に一時立ち止まるよう声をかけてから、試し渡りを確認した。`,
+      after: `修理済みの板には、まだ新しい足跡が一つだけ残っていた。`,
+      history: "古い小橋の応急修理。手すりと足場を補強し通行可。"
+    },
+    一部保留: {
+      result: "一部保留",
+      summary: "応急処置は完了したが、荷車の通行は危険と判断された。",
+      line: `板の緩みは直したが、中央の沈みは完全には消えなかった。荷車の通行は危険と判断し、迂回路の案内を残した。`,
+      after: `報告書には「徒歩は可、荷運びは不可」とだけ書いてある。`,
+      history: "古い小橋の応急修理。徒歩は可、荷車通行は保留。"
+    }
+  };
+  return variants[outcome] ?? variants["応急修理"];
+}
+
+function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const weather = context.departConditions?.weather ?? "晴れ";
+  const tensionValue = context.tensionValue ?? 50;
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const row = party.find((a) => a.id === "adv_row");
+  const gadd = party.find((a) => a.id === "adv_gadd");
+  const mina = party.find((a) => a.id === "adv_mina");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const warrior = findByTrait(party, "job", "戦士");
+  const scout = findByTrait(party, "job", "斥候");
+  const caregiver = findByTrait(party, "personality", "世話焼き");
+  const careful = findByTrait(party, "personality", "慎重");
+  const logs = [];
+
+  const holderName = (itemId) => {
+    for (const advId of Object.keys(adventurerItemIds)) {
+      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
+        const adv = getAdventurer(advId);
+        if (adv) return getDisplayName(adv);
+      }
+    }
+    const human = humanMembers(party)[0];
+    return human ? getDisplayName(human) : getDisplayName(party[0]);
+  };
+
+  logs.push(pick([
+    `村はずれの小川に着くと、古い小橋の板が一枚浮いていた。`,
+    `${quest.area}に着いた。古い小橋は手すりの一部が緩み、中央の板が沈んでいた。`
+  ]));
+
+  logs.push(pick([
+    `水音は穏やかだったが、橋の中央だけ踏むと少し沈む。`,
+    `小川の水音は低く、橋脚の根元にはぬかるんだ足跡が残っていた。`,
+    `手すりの釘が二本抜けており、板の端が水面に近い。`
+  ]));
+
+  if (weather === "小雨" || weather === "雨") {
+    logs.push(pick([
+      `小雨で板が滑りやすく、岸のぬかるみも深かった。足場を確かめてから作業を始めた。`,
+      `雨で手すりが濡れ、釘の緩みが目立った。急がず、一か所ずつ確認することにした。`
+    ]));
+  } else if (weather === "風が強い") {
+    logs.push(`風で古い手すりがきしむ。板を叩く前に、橋全体の揺れを確かめた。`);
+  }
+
+  const work = [];
+  if (row) work.push(`${nm(row)}は先に橋へ乗らず、岸側から板の緩みを確かめた。`);
+  else if (warrior && isHumanAdventurer(warrior)) work.push(`${nm(warrior)}は先に橋へ乗らず、岸側から板の緩みを確かめた。`);
+
+  if (gadd) work.push(`${nm(gadd)}は傷んだ板を外し、使える釘だけを別に集めた。`);
+  else if (warrior && isHumanAdventurer(warrior)) work.push(`${nm(warrior)}は傷んだ板を外し、手元の釘を確かめながら交換を進めた。`);
+
+  if (mina) work.push(`${nm(mina)}は迂回路と通行人の足跡を確認し、修理中に人が渡らないよう声をかけた。`);
+  else if (scout && isHumanAdventurer(scout)) work.push(`${nm(scout)}は迂回路と足跡を確かめ、作業中に橋へ近づかないよう手で制した。`);
+
+  if (elne) work.push(`${nm(elne)}は作業後、手を擦った者がいないか確かめてから道具を片付けた。`);
+  else if (caregiver && isHumanAdventurer(caregiver)) work.push(`${nm(caregiver)}は作業のあいだ、手すりに触れた者の手を確かめ、擦れがないか見た。`);
+
+  if (careful && isHumanAdventurer(careful) && !work.some((line) => line.includes(nm(careful)))) {
+    work.push(`${nm(careful)}は釘の抜けと板の反りを一つずつ記録しながら、足場の危ない場所に印を付けた。`);
+  }
+
+  while (work.length > 3) work.splice(Math.floor(rng() * work.length), 1);
+  work.forEach((line) => logs.push(line));
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは橋のたもとで耳を立て、水音と足音のする方を交互に見ていた。`,
+      `エルシーは岸の草むらで鼻を鳴らし、小川の匂いをしばらく追っていた。`,
+      `エルシーは橋のたもとで伏せ、作業の合図があるまで動かなかった。`
+    ]));
+  }
+
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather)) {
+    const h = holderName("item_bandage");
+    logs.push(pick([
+      `${h}は包帯を板の仮止めに使い、緩んだ端を結んで目印にした。`,
+      `${h}が持っていた包帯を手すりの当たりに巻き、作業中の目印に使った。`
+    ]));
+  }
+  if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
+    logs.push(`${holderName("item_whistle")}は笛を短く吹き、通行人に橋を渡らないよう合図した。`);
+  }
+  if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
+    logs.push(`${holderName("item_map")}は古地図で旧道と迂回路を確かめ、修理中の誘導先を決めた。`);
+  }
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather)) {
+    logs.push(`${holderName("item_pot")}は携帯鍋で薄いお湯を沸かし、冷えた手を温めてから作業を再開した。`);
+  }
+  const isDim = context.departConditions?.timeOfDay === "夕方" || context.departConditions?.timeOfDay === "夜";
+  if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && (isDim || weather === "霧")) {
+    logs.push(`${holderName("item_lantern")}はランタンを橋下に落とし、腐った板の桁を照らして確認した。`);
+  }
+
+  logs.push(pick([
+    `応急処置のあと、荷車はまだ難しいが、人が歩いて渡れる幅は確保できた。`,
+    `修理後、通行人が試しに渡り、板の沈みは許容範囲に収まった。`,
+    `手すりを握ったまま、最後の確認をしてから作業を切り上げた。`
+  ]));
+
+  return logs;
+}
+
 function generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng) {
   const logs = [];
   const isNight = departTimeOfDay === "夜";
@@ -3416,6 +3572,17 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
   const obsAdv = obsAdvs.length > 0 ? obsAdvs[Math.floor(rng() * obsAdvs.length)] : null;
   const obsName = obsAdv ? getDisplayName(obsAdv) : null;
   const obs = obsAdv?.obsession ?? null;
+
+  if (quest.id === "quest_old_bridge_repair") {
+    const row = party.find((a) => a.id === "adv_row");
+    const rowName = row ? getDisplayName(row) : null;
+    const lines = [
+      `古い小橋は、少なくとも今夜は誰も落とさずに済みそうだ。`,
+      `修理済みの板には、まだ新しい足跡が一つだけ残っていた。`
+    ];
+    if (rowName) lines.push(`${rowName}は最後にもう一度だけ橋板を踏み、沈まないことを確かめてから帰還した。`);
+    return pickOne(lines, rng);
+  }
 
   // 夜の戦闘・調査依頼
   if (isNight && (isBattle || isInvestigation)) {
@@ -3630,6 +3797,62 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, "討伐", rng),
       hiddenTags: { combat: true, target: "嚙みつく「なにか」", recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
+      createdAt: new Date().toISOString()
+    }, quest, party, rng);
+  }
+
+  // 保全依頼：古い小橋の応急修理
+  if (quest.id === "quest_old_bridge_repair") {
+    let outcome = pickOne(["応急修理", "通行可", "一部保留"], rng);
+    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["通行可", "応急修理"], rng);
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const bridgeSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${bridgeSupplyDesc.length > 0 ? bridgeSupplyDesc.join(" / ") : "なし"}。`);
+
+    const bridgeLogs = generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
+    bridgeLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = bridgeRepairOutcomeText(outcome, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      const displayName = getDisplayName(adv);
+      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
+        : adv.job === "戦士" ? "足場と板の交換で" : adv.job === "見習い盾役" ? "岸からの確認で"
+          : adv.job === "斥候" ? "迂回路と通行確認で" : adv.job === "薬草師" ? "手当と片付けで"
+            : adv.personality === "慎重" ? "丁寧な確認で" : "作業補助で";
+      adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
+    });
+
+    return withElsieLog({
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines,
+      logs,
+      observationUpdates: [],
+      observationText: [],
+      observationNotes: null,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: { preservation: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
