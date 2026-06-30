@@ -217,6 +217,8 @@ const masterQuests = [
     recommended: ["世話焼き", "郵便配達人", "豪胆"],
     tags: ["生活", "祝宴", "運搬", "案内", "地域"],
     observationTarget: "なし",
+    tensionBase: 15,
+    tensionRange: 15,
     summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。"
   },
   {
@@ -239,6 +241,8 @@ const masterQuests = [
     recommended: ["戦士", "慎重", "観察"],
     tags: ["戦闘", "追い払い", "未同定", "畑"],
     observationTarget: "「なにか」",
+    tensionBase: 45,
+    tensionRange: 15,
     summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
   },
   {
@@ -250,6 +254,8 @@ const masterQuests = [
     recommended: ["戦士", "豪胆", "観察"],
     tags: ["戦闘", "討伐", "未同定", "納屋"],
     observationTarget: "嚙みつく「なにか」",
+    tensionBase: 72,
+    tensionRange: 18,
     summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
   },
   {
@@ -1180,6 +1186,7 @@ function renderReportDetail(reportId) {
           <span>編成</span><strong>${escapeHtml(party)}</strong>
           <span>支給品</span><strong>${escapeHtml(items)}</strong>
           ${report.departConditions ? `<span>出発時</span><strong>${escapeHtml(report.departConditions.timeOfDay)} / ${escapeHtml(report.departConditions.weather)}</strong>` : ""}
+          ${report.tensionLevel != null ? `<span>緊張度</span><strong>${report.tensionLevel}/5</strong>` : ""}
           <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>
         </div>
         ${report.highlight ? `
@@ -1395,6 +1402,52 @@ function makeRng(seed) {
 function pickOne(list, rng) {
   if (!list || list.length === 0) return null;
   return list[Math.floor(rng() * list.length)];
+}
+
+function clampTension(value) {
+  return Math.min(100, Math.max(0, value));
+}
+
+function computeTensionValue(quest, rng) {
+  const base = quest.tensionBase ?? 50;
+  const range = quest.tensionRange ?? 0;
+  return clampTension(base + Math.floor(rng() * (range + 1)));
+}
+
+function tensionToLevel(value) {
+  if (value < 20) return 1;
+  if (value < 40) return 2;
+  if (value < 60) return 3;
+  if (value < 80) return 4;
+  return 5;
+}
+
+function candidateText(entry) {
+  return typeof entry === "string" ? entry : entry.text;
+}
+
+function tensionCandidateInRange(entry, tensionValue) {
+  if (typeof entry === "string") return true;
+  const min = entry.minTension ?? 0;
+  const max = entry.maxTension ?? 100;
+  return tensionValue >= min && tensionValue <= max;
+}
+
+function pickTensionOne(candidates, tensionValue, rng) {
+  if (!candidates || candidates.length === 0) return null;
+  const pool = candidates.filter((entry) => tensionCandidateInRange(entry, tensionValue));
+  const entry = pickOne(pool.length > 0 ? pool : candidates, rng);
+  return entry ? candidateText(entry) : null;
+}
+
+function pickTensionLines(candidates, tensionValue, rng) {
+  if (!candidates || candidates.length === 0) return null;
+  const pool = candidates.filter((entry) => tensionCandidateInRange(entry, tensionValue));
+  const entry = pickOne(pool.length > 0 ? pool : candidates, rng);
+  if (!entry) return null;
+  if (Array.isArray(entry)) return entry;
+  if (entry.lines) return entry.lines;
+  return [candidateText(entry)];
 }
 
 function pickMany(list, count, rng) {
@@ -1716,7 +1769,7 @@ function personalEventText(quest, party, rng) {
   return pickOne(candidates, rng);
 }
 
-function lifeQuestPersonalEventText(quest, party, rng) {
+function lifeQuestPersonalEventText(quest, party, rng, tensionValue = 50) {
   const solo = party.length === 1;
   const candidates = [];
   party.forEach((adv) => {
@@ -1727,6 +1780,7 @@ function lifeQuestPersonalEventText(quest, party, rng) {
         candidates.push(solo
           ? `${name}は急いで雑にするより丁寧にやる方がよいと判断し、作業の順番を整えた。`
           : `${name}は「急いで雑にするより、ゆっくり丁寧にやった方が後が楽です」と言って、作業の順番を整えた。`);
+        candidates.push({ text: `${name}は飾り付けの花びらを袖から払い、今日は何事もなく終わればいいと思った。`, maxTension: 35 });
       } else {
         candidates.push(`${name}は片付けた場所に何があったかを逐一メモした。捨てる前の記録が、依頼人の確認作業を助けた。`);
         candidates.push(solo
@@ -1738,6 +1792,7 @@ function lifeQuestPersonalEventText(quest, party, rng) {
       if (quest.id === "quest_wedding_support") {
         candidates.push(`${name}は重い荷物を率先して引き受けた。こういう場所での控え方を、どこかで覚えてきたらしい。`);
         candidates.push(`${name}は段取りに口を出さず、言われたことを黙ってやり続けた。派手さはないが、確実だった。`);
+        candidates.push({ text: `${name}は厨房の匂いに顔をほころばせ、「今日は戦いじゃない」と言って笑った。`, maxTension: 30 });
       } else {
         candidates.push(solo
           ? `${name}は重い家具を次々と外へ運んだ。ひとりでも手を止めず、黙々と続けた。`
@@ -1749,6 +1804,7 @@ function lifeQuestPersonalEventText(quest, party, rng) {
       if (quest.id === "quest_wedding_support") {
         candidates.push(`${name}は会場全体を見渡し、困っている人がいないかを常に気にしていた。依頼書に書かれた仕事の外まで、自然と手が伸びていた。`);
         if (!solo) candidates.push(`${name}は仲間が一息ついた時、「少し飲んでいいですよ」と水を渡した。自分が飲んだのは全員の後だった。`);
+        candidates.push({ text: `${name}は招待客の笑い声を聞いて、肩の力が抜けた。`, maxTension: 28 });
       } else {
         candidates.push(`${name}は作業中も住民の話に耳を傾けた。報告書に書くほどのことではないが、依頼人が安心できる言葉をかけていた。`);
         candidates.push(solo
@@ -1768,7 +1824,15 @@ function lifeQuestPersonalEventText(quest, party, rng) {
       }
     }
   });
-  return pickOne(candidates, rng);
+  if (quest.id === "quest_wedding_support") {
+    candidates.push(
+      { text: `会場の空気は軽く、誰も剣の話をしなかった。`, maxTension: 32 },
+      { text: `作業の合間に、遠くで笑い声が聞こえた。`, maxTension: 35 }
+    );
+  }
+  return quest.tensionBase != null
+    ? pickTensionOne(candidates, tensionValue, rng)
+    : pickOne(candidates, rng);
 }
 
 function statsPersonalityLog(party, rng) {
@@ -1813,7 +1877,7 @@ function statsPersonalityLog(party, rng) {
   return pickOne(lines[chosen], rng);
 }
 
-function partyInteractionLog(party, quest, rng) {
+function partyInteractionLog(party, quest, rng, tensionValue = 50) {
   if (party.length < 2) return [];
 
   const mina  = party.find((a) => a.id === "adv_mina");
@@ -1871,6 +1935,8 @@ function partyInteractionLog(party, quest, rng) {
     if (mina && elne) contextual.push(`${nm(mina)}が席順を確認し、${nm(elne)}が配膳の順番を整えた。`);
     if (mina && gadd) contextual.push(`${nm(gadd)}が重い荷物を運び、${nm(mina)}は置き場所を一つずつ確認した。`);
     if (elne && gadd) contextual.push(`${nm(gadd)}が長椅子を運ぶあいだ、${nm(elne)}は通り道に残った小物を拾い集めた。`);
+    if (gadd && mina) contextual.push({ text: `${nm(gadd)}が酒樽を運びながら「今日は楽勝だ」と言い、${nm(mina)}は笑って受け流した。`, maxTension: 32 });
+    if (mina && elne) contextual.push({ text: `${nm(mina)}が花の飾りを直し、${nm(elne)}はそれを見て小さく頷いた。`, maxTension: 35 });
   }
   if (quest.id === "quest_old_house_cleanup") {
     if (mina && gadd) contextual.push(`${nm(gadd)}が棚を動かし、${nm(mina)}は後ろに隠れていたものを取り出して確認した。`);
@@ -1895,11 +1961,14 @@ function partyInteractionLog(party, quest, rng) {
 
   // 依頼固有を先に1つ（60%）、汎用を後に1つ（70%）まで追加
   const result = [];
+  const pickLine = (list) => (quest.tensionBase != null ? pickTensionOne(list, tensionValue, rng) : pickOne(list, rng));
   if (contextual.length > 0 && rng() < 0.60) {
-    result.push(pickOne(contextual, rng));
+    const line = pickLine(contextual);
+    if (line) result.push(line);
   }
   if (general.length > 0 && result.length < 2 && rng() < 0.70) {
-    result.push(pickOne(general, rng));
+    const line = pickLine(general);
+    if (line) result.push(line);
   }
   return result;
 }
@@ -2736,7 +2805,7 @@ function battleObservationRecordText(party, adventurerItemIds, rng) {
   ], rng);
 }
 
-function battleOutcomeLines(party, adventurerItemIds, behavior, rng) {
+function battleOutcomeLines(party, adventurerItemIds, behavior, rng, tensionValue = 50) {
   const solo = isSoloParty(party);
   const subject = partySubject(party);
   const hasObsSheet = party.some((adv) =>
@@ -2802,13 +2871,14 @@ function battleOutcomeLines(party, adventurerItemIds, behavior, rng) {
   }
 
   // パターン3：深追いせず・安全確認優先（caution or kindness 優位）
-  return pickOne([
+  return pickTensionLines([
     [`${subject}は畑の外まで追い払ったところで足を止めた。`, `依頼は達成したが、巣や出どころの確認は次回に回された。`],
-    [`「なにか」は畑の外へ出た。${solo ? "深追いはしなかった。" : `${subject}は深追いせず、その場で状況を確認した。`}`, `畑の被害はそこで止まっている。`]
-  ], rng);
+    [`「なにか」は畑の外へ出た。${solo ? "深追いはしなかった。" : `${subject}は深追いせず、その場で状況を確認した。`}`, `畑の被害はそこで止まっている。`],
+    { lines: [`「なにか」は畑の外へ消えた。`, `深追いはせず、畑の奥の確認は次回に回された。`], minTension: 40, maxTension: 70 }
+  ], tensionValue, rng);
 }
 
-function battleWithdrawalText(party, rng) {
+function battleWithdrawalText(party, rng, tensionValue = 50) {
   if (rng() < 0.12) return null; // 約88%の確率で出す
   const stat = pickOne(["caution", "courage", "kindness", "memory", "curiosity"], rng);
   const adv = bestByStat(party, stat);
@@ -2819,7 +2889,8 @@ function battleWithdrawalText(party, rng) {
   const lines = {
     caution: [
       `${name}は深追いせず、「なにか」が畑の外へ出たところで足を止めた。`,
-      `${name}は退路を確認してから引き返した。畑の中で見失うよりも、安全を取る判断だ。`
+      `${name}は退路を確認してから引き返した。畑の中で見失うよりも、安全を取る判断だ。`,
+      { text: `${name}は畝の奥まで踏み込まないよう、自分の位置を引き戻した。`, minTension: 40, maxTension: 70 }
     ],
     courage: [
       `${name}はもう一歩前に出ようとしたが、依頼は追い払いだと思い直してその場で止まった。`,
@@ -2840,16 +2911,30 @@ function battleWithdrawalText(party, rng) {
     ],
     curiosity: [
       `${name}は追いたがったが、今回の依頼は畑の被害を止めることだと思い直した。`,
-      `${name}は「なにか」の正体が気になったが、それは次回の仕事だとメモだけ残した。`
+      `${name}は「なにか」の正体が気になったが、それは次回の仕事だとメモだけ残した。`,
+      { text: `${name}は正体を確かめたかったが、畑の奥へ誘い込まれる動きには乗らなかった。`, minTension: 45, maxTension: 75 }
     ]
   };
 
-  return pickOne(lines[stat], rng);
+  return pickTensionOne(lines[stat], tensionValue, rng);
+}
+
+function battleTensionReactionText(party, tensionValue, rng) {
+  if (rng() < 0.45) return null;
+  const adv = bestByStat(party, tensionValue >= 55 ? "caution" : "courage");
+  const name = getDisplayName(adv);
+  return pickTensionOne([
+    { text: `${name}は畝の間で位置を取り直し、依頼人の背後を空けた。`, minTension: 35, maxTension: 65 },
+    { text: `${name}は短く息を吐き、次の一歩を決めた。`, minTension: 50, maxTension: 80 },
+    { text: `${name}は冗談を言う余裕はなかった。`, minTension: 75 },
+    { text: `${name}は笑う暇もなく、影の動きだけを追った。`, minTension: 80 }
+  ], tensionValue, rng);
 }
 
 function generateBattleLogs(quest, party, adventurerItemIds, rng, context = {}) {
   const behavior = pickMysteryBehavior(rng);
   const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const tensionValue = context.tensionValue ?? 50;
   const isNight = context.departConditions?.timeOfDay === "夜";
   const isDim = isNight || ["霧", "小雨"].includes(context.departConditions?.weather);
 
@@ -2862,6 +2947,8 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng, context = {}) 
   if (lanternLine) logs.push(lanternLine);
   // 3. 冒険者の対応
   logs.push(battleStatEventText(party, rng));
+  const tensionLine = battleTensionReactionText(party, tensionValue, rng);
+  if (tensionLine) logs.push(tensionLine);
   // 4. 押し合い・牽制・追い払い
   battlePushRepelText(quest, party, adventurerItemIds, behavior, rng).forEach((line) => logs.push(line));
   const obsMid = battleObsSheetMidBattleText(party, adventurerItemIds, behavior, rng);
@@ -2869,10 +2956,10 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng, context = {}) 
   // 4→5. 相手が退き始める
   logs.push(battleOpponentRetreatText(behavior, rng));
   // 5. 切り上げ判断
-  const withdrawal = battleWithdrawalText(party, rng);
+  const withdrawal = battleWithdrawalText(party, rng, tensionValue);
   if (withdrawal) logs.push(withdrawal);
   // 6. 結果
-  const outcomeLines = battleOutcomeLines(party, adventurerItemIds, behavior, rng);
+  const outcomeLines = battleOutcomeLines(party, adventurerItemIds, behavior, rng, tensionValue);
   outcomeLines.forEach((line) => logs.push(line));
   const observation = battleObservationRecordText(party, adventurerItemIds, rng);
   if (observation) logs.push(observation);
@@ -2884,6 +2971,7 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   const solo = isSoloParty(party);
   const subject = partySubject(party);
   const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const tensionValue = context.tensionValue ?? 50;
   const hasLantern = itemIds.includes("item_lantern");
   const hasBandage = itemIds.includes("item_bandage");
   const hasWhistle = itemIds.includes("item_whistle");
@@ -2907,11 +2995,13 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
       ], rng));
 
   // 3. 遭遇
-  logs.push(pickOne([
+  logs.push(pickTensionOne([
     `藁の山が大きく揺れ、「なにか」が低い唸り声とともに飛び出した。`,
     `飼葉桶の陰から、「なにか」が牙をむき出しにして姿を見せた。`,
-    `物音に気づいた「なにか」が、こちらへ向き直り低く身構えた。`
-  ], rng));
+    `物音に気づいた「なにか」が、こちらへ向き直り低く身構えた。`,
+    { text: `唸り声だけが先に聞こえ、次の一瞬で「なにか」が飛び出した。`, minTension: 70 },
+    { text: `暗い納屋の中で、牙の光だけが一瞬見えた。`, minTension: 80 }
+  ], tensionValue, rng));
 
   // 4. 交戦
   const fighter = bestByStat(party, "courage");
@@ -2936,6 +3026,11 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   } else {
     logs.push(`${fname}は怯まず前に出て、「なにか」と取っ組み合った。`);
   }
+  const barnTensionLine = pickTensionOne([
+    { text: `${fname}は言葉を減らし、武器だけを構え直した。`, minTension: 65 },
+    { text: `誰も叫ばなかった。納屋の中は牙と息だけが残っていた。`, minTension: 80 }
+  ], tensionValue, rng);
+  if (barnTensionLine) logs.push(barnTensionLine);
   if (hasBandage && rng() < 0.5) {
     logs.push(`牙が掠めた腕に、すぐ包帯が巻かれた。傷は浅かった。`);
   }
@@ -2957,12 +3052,24 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   }
 
   // 5. 討伐判断
-  logs.push(solo
-    ? `${fname}は追い払うだけでは依頼を終えられないと判断し、最後まで仕留めることを選んだ。`
-    : `${subject}は「ここで終わらせる」と判断し、追い払いではなく仕留める方を選んだ。`);
+  logs.push(pickTensionOne([
+    solo
+      ? `${fname}は追い払うだけでは依頼を終えられないと判断し、最後まで仕留めることを選んだ。`
+      : `${subject}は「ここで終わらせる」と判断し、追い払いではなく仕留める方を選んだ。`,
+    { text: solo
+        ? `${fname}は一言も増やさず、最後の一撃だけを選んだ。`
+        : `${subject}は短く合図を交わし、ここで終わらせる方を選んだ。`, minTension: 70 },
+    { text: solo
+        ? `${fname}は退路を確認してから、仕留める手だけを残した。`
+        : `${subject}は退路を確かめたうえで、仕留める判断に踏み切った。`, minTension: 80 }
+  ], tensionValue, rng));
 
   // 6. 結果
-  logs.push(`「なにか」の動きが止まった。正体は分からないままだが、納屋を脅かしていた気配は消えた。`);
+  logs.push(pickTensionOne([
+    `「なにか」の動きが止まった。正体は分からないままだが、納屋を脅かしていた気配は消えた。`,
+    { text: `「なにか」の動きが止まった。納屋に残っていた気配だけが、静かに薄れていった。`, minTension: 65 },
+    { text: `動きが止まった。誰も正体までは言わなかった。`, minTension: 80 }
+  ], tensionValue, rng));
 
   return logs;
 }
@@ -3187,6 +3294,9 @@ function generateReport(expedition) {
   const itemIds = getAllItemIds(adventurerItemIds);
   const items = itemIds.map(getItem).filter(Boolean);
   const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
+  const tensionValue = quest.tensionBase != null ? computeTensionValue(quest, rng) : null;
+  const tensionLevel = tensionValue != null ? tensionToLevel(tensionValue) : null;
+  const tensionMeta = tensionLevel != null ? { tensionValue, tensionLevel } : {};
   const logs = [];
   const add = (kind, text) => logs.push({ kind, text });
 
@@ -3230,7 +3340,7 @@ function generateReport(expedition) {
   }
 
   if (quest.id === "quest_field_mystery") {
-    const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions });
+    const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     battleLogs.forEach((text, index) => add(index === battleLogs.length - 1 ? "afterglow" : "action", text));
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
     const adventurerHistoryLines = {};
@@ -3259,12 +3369,13 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, "追い払い", rng),
       hiddenTags: { combat: true, target: "「なにか」", recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
       createdAt: new Date().toISOString()
     };
   }
 
   if (quest.id === "quest_barn_bite") {
-    const huntLogs = generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions });
+    const huntLogs = generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     huntLogs.forEach((text, index) => add(index === huntLogs.length - 1 ? "afterglow" : "action", text));
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
     const adventurerHistoryLines = {};
@@ -3293,6 +3404,7 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, "討伐", rng),
       hiddenTags: { combat: true, target: "嚙みつく「なにか」", recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
       createdAt: new Date().toISOString()
     };
   }
@@ -3307,10 +3419,10 @@ function generateReport(expedition) {
     if (quest.id === "quest_old_house_cleanup" && hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["成功", "整理完了"], rng);
 
     const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
-    const personal = lifeQuestPersonalEventText(quest, party, rng);
+    const personal = lifeQuestPersonalEventText(quest, party, rng, tensionValue ?? 50);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
     const statsLog = statsPersonalityLog(party, rng);
-    const interactions = partyInteractionLog(party, quest, rng);
+    const interactions = partyInteractionLog(party, quest, rng, tensionValue ?? 50);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
     const arrivalLines = {
@@ -3367,6 +3479,7 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
       hiddenTags: { workEvents, outcome, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
       createdAt: new Date().toISOString()
     };
   }
