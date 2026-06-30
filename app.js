@@ -369,6 +369,8 @@ const masterQuests = [
     recommended: ["慎重", "記録", "観察"],
     tags: ["調査", "夜道", "怪異", "記録"],
     observationTarget: "残る灯り",
+    tensionBase: 62,
+    tensionRange: 28,
     summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。"
   }
 ];
@@ -586,10 +588,13 @@ function elsiePartyLogText(quest, party, rng) {
   const pool = [
     "エルシーは誰かの足元を小走りに駆け、先を睨みながら進んだ。",
     "エルシーは風の匂いを拾うと耳を立て、しばらくその方角を見ていた。",
-    "エルシーは負傷者のそばを離れず、袖口をくわえて引いた。",
     "帰り道、エルシーは何度も振り返りながら、最後は先頭で門をくぐった。",
     "エルシーの白い毛には草の種がいくつもついていたが、本人はどこか満足そうだった。"
   ];
+
+  if (quest.id !== "quest_wedding_support" && quest.id !== "quest_old_house_cleanup") {
+    pool.push("エルシーは負傷者のそばを離れず、袖口をくわえて引いた。");
+  }
 
   if (isCompanionParty(party)) {
     const hname = getDisplayName(humanMembers(party)[0]);
@@ -2225,18 +2230,20 @@ function partyInteractionLog(party, quest, rng, tensionValue = 50) {
     general.push(`${nm(elne)}は${nm(gadd)}の手元を見て、包帯を使うほどではない傷だと判断した。`);
     general.push(`${nm(gadd)}が先に動き始め、${nm(elne)}がその後ろで小さな荷物をまとめた。`);
   }
-  if (row && mina) {
+  if (row && mina && quest.id !== "quest_wedding_support" && quest.id !== "quest_old_house_cleanup") {
     general.push(`${nm(row)}が前に立つ位置を選び、${nm(mina)}は退路がふさがっていないことを確認した。`);
   }
   if (row && gadd) {
     general.push(`${nm(gadd)}が先に動こうとしたとき、${nm(row)}は少し遅れてから同じ方向へ足をそろえた。`);
   }
-  if (row && elne) {
+  if (row && elne && quest.id !== "quest_wedding_support" && quest.id !== "quest_old_house_cleanup") {
     general.push(`${nm(row)}が荷物の前に立ち、${nm(elne)}は周囲に怪我人がいないかを確かめた。`);
   }
   if (careful && brave && careful.id !== brave.id) {
     general.push(`${nm(careful)}が確認を一つ増やすよう提案すると、${nm(brave)}は少しだけ足を止めた。`);
-    general.push(`${nm(brave)}が先に進もうとしたとき、${nm(careful)}が静かに制した。結果的にその判断が正しかった。`);
+    if (quest.id !== "quest_wedding_support" && quest.id !== "quest_old_house_cleanup") {
+      general.push(`${nm(brave)}が先に進もうとしたとき、${nm(careful)}が静かに制した。結果的にその判断が正しかった。`);
+    }
   }
   if (caregiver && brave && caregiver.id !== brave.id) {
     general.push(`${nm(caregiver)}が${nm(brave)}の荷物の重さを気にして声をかけた。${nm(brave)}は「平気だ」と言いながら、少し荷を下げた。`);
@@ -3878,12 +3885,6 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
     logs.push(`${holderName("item_obs_sheet")}は観察記録票に、足跡の向きと落とし物の位置だけを書き留めた。`);
   }
 
-  if (elsie && outcome === "保護") {
-    logs.push(`帰り道、エルシーは何度も振り返りながら、保護した村人の歩みに合わせて進んだ。`);
-  } else if (elsie && outcome === "発見") {
-    logs.push(`帰り道、エルシーは何度も振り返りながら、見つけた村人のそばを離れなかった。`);
-  }
-
   return logs;
 }
 
@@ -4422,6 +4423,7 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし", rng),
       hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
   }
@@ -4528,7 +4530,7 @@ function generateReport(expedition) {
       adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
     });
 
-    return withElsieLog({
+    return {
       id: `report_${Date.now()}`,
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
@@ -4549,7 +4551,7 @@ function generateReport(expedition) {
       hiddenTags: { preservation: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
-    }, quest, party, rng);
+    };
   }
 
   // 輸送依頼：薬草包みの納品
@@ -4586,7 +4588,7 @@ function generateReport(expedition) {
       adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
     });
 
-    return withElsieLog({
+    return {
       id: `report_${Date.now()}`,
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
@@ -4607,7 +4609,7 @@ function generateReport(expedition) {
       hiddenTags: { transport: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
-    }, quest, party, rng);
+    };
   }
 
   // 救助依頼：帰ってこない薬草採りの確認
@@ -4632,6 +4634,11 @@ function generateReport(expedition) {
 
     const outcomeInfo = missingHerbalistOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
+    if (partyHasElsie(party) && (outcome === "保護" || outcome === "発見")) {
+      add("action", outcome === "保護"
+        ? `帰り道、エルシーは何度も振り返りながら、保護した村人の歩みに合わせて進んだ。`
+        : `帰り道、エルシーは何度も振り返りながら、見つけた村人のそばを離れなかった。`);
+    }
     add("afterglow", outcomeInfo.after);
 
     const adventurerHistoryLines = {};
@@ -4644,7 +4651,7 @@ function generateReport(expedition) {
       adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
     });
 
-    return withElsieLog({
+    return {
       id: `report_${Date.now()}`,
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
@@ -4665,7 +4672,7 @@ function generateReport(expedition) {
       hiddenTags: { rescue: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
-    }, quest, party, rng);
+    };
   }
 
   // 護衛依頼：夕市帰りの親子の付き添い
@@ -4701,7 +4708,7 @@ function generateReport(expedition) {
       adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
     });
 
-    return withElsieLog({
+    return {
       id: `report_${Date.now()}`,
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
@@ -4722,7 +4729,7 @@ function generateReport(expedition) {
       hiddenTags: { escort: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
-    }, quest, party, rng);
+    };
   }
 
   // 記録依頼：古い石碑の拓本
@@ -4758,7 +4765,7 @@ function generateReport(expedition) {
       adventurerHistoryLines[adv.id] = `${quest.title}：${outcomeInfo.result}。${displayName}は${roleNote}記録に残った。`;
     });
 
-    return withElsieLog({
+    return {
       id: `report_${Date.now()}`,
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
@@ -4779,7 +4786,7 @@ function generateReport(expedition) {
       hiddenTags: { record: true, outcome, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
-    }, quest, party, rng);
+    };
   }
 
   // 生活依頼（lifeQuestEventPools に登録されているもの）は専用フローで生成
