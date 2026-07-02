@@ -8,6 +8,8 @@ window.masterQuests = [
     recommended: ["斥候", "薬草師"],
     tags: ["探索", "採集", "観察"],
     observationTarget: "森喰い兎",
+    tensionBase: 25,
+    tensionRange: 20,
     summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。"
   },
   {
@@ -19,6 +21,8 @@ window.masterQuests = [
     recommended: ["斥候"],
     tags: ["探索", "街道", "記録"],
     observationTarget: "なし",
+    tensionBase: 18,
+    tensionRange: 16,
     summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。"
   },
   {
@@ -30,6 +34,8 @@ window.masterQuests = [
     recommended: ["慎重", "郵便配達人"],
     tags: ["生活", "配達", "記録"],
     observationTarget: "なし",
+    tensionBase: 16,
+    tensionRange: 14,
     summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。"
   },
   {
@@ -54,6 +60,8 @@ window.masterQuests = [
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
+    tensionBase: 28,
+    tensionRange: 20,
     summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。"
   },
   {
