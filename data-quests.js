@@ -104,6 +104,19 @@ window.masterQuests = [
     summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。"
   },
   {
+    id: "quest_church_patrol",
+    title: "辺境教会周辺の定期巡回",
+    category: "保全",
+    danger: "低",
+    area: "辺境教会の外縁",
+    recommended: ["斥候", "慎重", "見習い盾役"],
+    tags: ["保全", "巡回", "安全確認", "定期", "地域", "辺境教会", "祈り場"],
+    observationTarget: "なし",
+    tensionBase: 20,
+    tensionRange: 15,
+    summary: "辺境教会の外縁を巡回し、柵、灯り、鐘楼、墓地、巡礼路、裏手の林に異常がないかを確認する定期任務。"
+  },
+  {
     id: "quest_herb_delivery",
     title: "薬草包みの納品",
     category: "輸送",

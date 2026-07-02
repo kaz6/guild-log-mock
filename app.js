@@ -1479,6 +1479,11 @@ const questEventPools = {
     weather: ["晴れ", "小雨", "霧", "強風", "雨上がり"],
     roadEvents: ["道標の傾き", "苔に隠れた文字", "旧道の分岐", "壊れた橋", "通行人の証言", "根元のゆるみ"],
     outcomes: ["成功", "応急処置", "照合保留", "再確認"]
+  },
+  quest_church_patrol: {
+    weather: ["晴れ", "小雨", "霧", "雨上がり"],
+    roadEvents: ["柵の緩み", "鐘楼の確認", "墓地の灯り", "巡礼路の草", "礼拝堂の気配", "裏手の林"],
+    outcomes: ["成功", "異常なし", "軽微な対処", "再確認"]
   }
 };
 
@@ -1926,6 +1931,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_barn_bite: ["item_bandage", "item_whistle", "item_lantern", "item_obs_sheet"],
     quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"],
     quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"],
+    quest_church_patrol: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot"],
     quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"],
     quest_missing_herbalist: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot", "item_obs_sheet"],
     quest_evening_market_escort: ["item_lantern", "item_whistle", "item_map", "item_bandage", "item_pot"],
@@ -2095,6 +2101,40 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
         line: `${getDisplayName(scout)}はあえて荷袋を少し離して置き、森喰い兎の反応を観察した。危険は小さいが、記録としては有用。`,
         after: `報告書には、歯形の向きと噛み跡の深さまで書かれていた。こういう細かさが後で効く。`,
         history: "森の薬草採集で、森喰い兎の反応を重点観察。"
+      }
+    };
+    return variants[outcome] ?? variants.成功;
+  }
+
+  if (quest.id === "quest_church_patrol") {
+    const variants = {
+      成功: {
+        result: "成功",
+        summary: "外縁の巡回を完了した。柵・灯り・鐘楼・墓地・巡礼路に大きな異常はなかった。",
+        line: `${getDisplayName(scout) ?? subject}は柵から鐘楼、墓地、巡礼路まで順に確認し、礼拝堂の気配だけを遠くから確かめた。`,
+        after: `帰り道、風に花の匂いが一度だけ混じった。誰も鐘を鳴らす者はいなかった。`,
+        history: "辺境教会周辺の定期巡回で、外縁に異常なし。"
+      },
+      異常なし: {
+        result: "異常なし",
+        summary: "定期巡回を終え、外縁に異常は見つからなかった。",
+        line: `${subject}は裏手の林まで回り、落ち葉と古い足跡だけを記録した。新しい痕跡はなかった。`,
+        after: `礼拝堂の灯りは、いつも通り静かに見えた。それで十分だった。`,
+        history: "辺境教会周辺の定期巡回で、異常なし。"
+      },
+      軽微な対処: {
+        result: "軽微な対処",
+        summary: "柵の一本が緩んでいたが、応急で固定した。",
+        line: `巡礼路の柵が一本ゆるんでいた。${subject}は落ちないよう縄で結び、次の巡回まで持つようにした。`,
+        after: `大きな問題ではない。けれど、見逃さなかった記録としてはちゃんと残る。`,
+        history: "辺境教会周辺の定期巡回で、柵を軽微に処置。"
+      },
+      再確認: {
+        result: "再確認",
+        summary: "鐘楼の足元に古い擦れ跡があった。今回は記録のみ。",
+        line: `鐘楼の足元に、最近ついたとは思えない擦れ跡があった。${subject}は無理に追わず、位置だけを報告書に残した。`,
+        after: `報告書の余白には「次回、雨天以外で再確認」とある。`,
+        history: "辺境教会周辺の定期巡回で、擦れ跡を記録し再確認扱い。"
       }
     };
     return variants[outcome] ?? variants.成功;
