@@ -120,8 +120,129 @@ function mergeAdventurerList(masterList, savedList = []) {
     savedKeys.forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(saved, key)) savedFields[key] = saved[key];
     });
-    return { ...masterItem, ...savedFields };
+    return {
+      ...masterItem,
+      ...savedFields,
+      stats: { ...masterItem.stats, ...(saved.stats ?? {}) }
+    };
   });
+}
+
+const GROWTH_STAT_BY_CATEGORY = {
+  戦闘: "combat",
+  探索: "exploration",
+  調査: "investigation",
+  輸送: "exploration",
+  保全: "support",
+  生活: "negotiation",
+  救助: "support",
+  護衛: "survival",
+  記録: "investigation"
+};
+
+const GROWTH_STAT_LABELS = {
+  combat: "戦い方",
+  exploration: "探索",
+  investigation: "調査",
+  negotiation: "住民対応",
+  support: "仲間を支えること",
+  survival: "帰り道を確かめること"
+};
+
+const GROWTH_STAT_MAX = 5;
+
+function growthStatForCategory(category) {
+  return GROWTH_STAT_BY_CATEGORY[category] ?? "exploration";
+}
+
+function humanGrowthLogText(name, statKey) {
+  const templates = {
+    combat: `${name}は今回の遠征で、戦い方の勘を少しつかんだ。`,
+    exploration: `${name}は今回の遠征で、探索の経験を少し積んだ。`,
+    investigation: `${name}は今回の依頼で、調査の勘を少しつかんだ。`,
+    negotiation: `${name}は今回の依頼で、住民対応の勘を少しつかんだ。`,
+    support: `${name}は今回の依頼で、仲間を支える経験を少し積んだ。`,
+    survival: `${name}は帰り道を確かめる経験を重ねた。`
+  };
+  return templates[statKey] ?? `${name}は今回の遠征で、${GROWTH_STAT_LABELS[statKey] ?? "遠征"}の経験を少し積んだ。`;
+}
+
+function elsieGrowthLogText(category, rng) {
+  const pools = {
+    戦闘: [
+      "エルシーは低く唸るタイミングを、少し覚えた。",
+      "エルシーは前に出る者の陰で、警戒を続ける経験を重ねた。"
+    ],
+    探索: [
+      "エルシーは草の匂いの違いを追う経験を重ねた。",
+      "エルシーは足跡の匂いを確かめる時間が、少し長くなった。"
+    ],
+    調査: [
+      "エルシーは違和感のある匂いで、耳を立てる経験を重ねた。",
+      "エルシーは静かな場所で、風の向きを確かめる時間が増えた。"
+    ],
+    輸送: [
+      "エルシーは荷物の匂いを離さず、同行を続ける経験を重ねた。",
+      "エルシーは止まる合図を待つ時間が、少し長くなった。"
+    ],
+    保全: [
+      "エルシーは作業中、周囲の足音だけを確かめる経験を重ねた。",
+      "エルシーは人の動きに合わせて、待つ位置を覚えた。"
+    ],
+    生活: [
+      "エルシーは人の笑い声の近くで、静かに伏せる経験を重ねた。",
+      "エルシーは賑やかな場所でも、迷わず足元に寄る経験を重ねた。"
+    ],
+    救助: [
+      "エルシーは弱い匂いを追う時間が、少し長くなった。",
+      "エルシーは止まった場所で、鼻先を低く保つ経験を重ねた。"
+    ],
+    護衛: [
+      "エルシーは帰り道の足音を確かめる経験を重ねた。",
+      "エルシーは同行者より半歩後ろで、振り返る回数が増えた。"
+    ],
+    記録: [
+      "エルシーは長く同じ場所にいる間、警戒を怠らなかった。",
+      "エルシーは静かな作業のそばで、伏せ続ける経験を重ねた。"
+    ]
+  };
+  const fallback = [
+    "エルシーは今回の遠征で、警戒の勘を少し研ぎ澄ました。",
+    "エルシーは帰還の合図に、少し早く反応するようになった。",
+    "エルシーは同行中、追跡と帰還を助ける経験を重ねた。"
+  ];
+  return pickOne(pools[category] ?? fallback, rng);
+}
+
+function incrementGrowthStat(adv, statKey) {
+  if (!adv.stats) adv.stats = {};
+  const current = adv.stats[statKey] ?? 1;
+  if (current < GROWTH_STAT_MAX) adv.stats[statKey] = current + 1;
+}
+
+function appendGrowthLogToReport(report, expedition) {
+  const quest = getQuest(expedition.questId);
+  if (!quest || !report?.logs) return;
+  const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  if (party.length === 0) return;
+
+  const rng = makeRng((expedition.seed ?? 1) + 991);
+  const chosen = pickOne(party, rng);
+  const statKey = growthStatForCategory(quest.category);
+  let line;
+
+  if (chosen.species === "dog") {
+    line = elsieGrowthLogText(quest.category, rng);
+    incrementGrowthStat(chosen, statKey === "combat" ? "survival" : statKey);
+  } else {
+    incrementGrowthStat(chosen, statKey);
+    line = humanGrowthLogText(getDisplayName(chosen), statKey);
+  }
+
+  const logs = [...report.logs];
+  const insertAt = logs.length > 0 && logs[logs.length - 1].kind === "afterglow" ? logs.length - 1 : logs.length;
+  logs.splice(insertAt, 0, { kind: "drama", text: line });
+  report.logs = logs;
 }
 
 function saveState() {
@@ -183,6 +304,20 @@ function humanMembers(party) {
   return party.filter(isHumanAdventurer);
 }
 
+function supplyItemHolderAdv(party, adventurerItemIds, itemId) {
+  for (const advId of Object.keys(adventurerItemIds)) {
+    if (!getAdvItemIds(adventurerItemIds, advId).includes(itemId)) continue;
+    const adv = getAdventurer(advId);
+    if (adv && isHumanAdventurer(adv)) return adv;
+  }
+  return humanMembers(party)[0] ?? null;
+}
+
+function supplyItemHolderName(party, adventurerItemIds, itemId) {
+  const adv = supplyItemHolderAdv(party, adventurerItemIds, itemId);
+  return adv ? getDisplayName(adv) : getDisplayName(humanMembers(party)[0] ?? party[0]);
+}
+
 function partyHasElsie(party) {
   return party.some((a) => a.id === "adv_elsie");
 }
@@ -200,7 +335,7 @@ function expeditionBlockedMessage(adventurerIds) {
   return null;
 }
 
-function elsiePartyLogText(quest, party, rng) {
+function elsiePartyLogText(quest, party, rng, reportResult = null) {
   if (!partyHasElsie(party) || rng() > 0.70) return null;
 
   const pool = [
@@ -210,7 +345,7 @@ function elsiePartyLogText(quest, party, rng) {
     "エルシーの白い毛には草の種がいくつもついていたが、本人はどこか満足そうだった。"
   ];
 
-  if (quest.id !== "quest_wedding_support" && quest.id !== "quest_old_house_cleanup") {
+  if (quest.category === "救助" || reportResult === "保護" || reportResult === "発見") {
     pool.push("エルシーは負傷者のそばを離れず、袖口をくわえて引いた。");
   }
 
@@ -317,7 +452,7 @@ function elsiePartyLogText(quest, party, rng) {
 
 function withElsieLog(report, quest, party, rng) {
   if (!report || !partyHasElsie(party)) return report;
-  const line = elsiePartyLogText(quest, party, rng);
+  const line = elsiePartyLogText(quest, party, rng, report.result);
   if (!line) return report;
   const logs = [...report.logs];
   const insertAt = logs.length > 0 && logs[logs.length - 1].kind === "afterglow" ? logs.length - 1 : logs.length;
@@ -352,6 +487,7 @@ function checkExpeditionCompletion() {
   if (elapsed < state.expedition.durationMs) return;
 
   const report = generateReport(state.expedition);
+  appendGrowthLogToReport(report, state.expedition);
   state.reports.unshift(report);
   state.expedition.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
@@ -1946,14 +2082,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
 function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
   const solo = isSoloHumanParty(party);
   const has = (id) => getAllItemIds(adventurerItemIds).includes(id);
-  const holderAdv = (itemId) => {
-    for (const advId of Object.keys(adventurerItemIds)) {
-      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
-        return getAdventurer(advId) ?? party[0];
-      }
-    }
-    return party[0];
-  };
+  const holderAdv = (itemId) => supplyItemHolderAdv(party, adventurerItemIds, itemId) ?? humanMembers(party)[0] ?? party[0];
   const h = (itemId) => getDisplayName(holderAdv(itemId));
 
   // 所持者以外に長けた冒険者がいれば表示名を返す。いなければ null
@@ -2419,11 +2548,7 @@ function bestByStat(party, statKey) {
 
 function battleSupplyEventText(quest, party, adventurerItemIds, rng) {
   const usableItems = getAllItemIds(adventurerItemIds).filter((itemId) => canUseItemInQuest(quest, itemId));
-  const holderName = (itemId) => {
-    const adv = party.find((member) => isHumanAdventurer(member) && getAdvItemIds(adventurerItemIds, member.id).includes(itemId))
-      ?? humanMembers(party)[0] ?? party[0];
-    return getDisplayName(adv);
-  };
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
   const lines = [];
 
   if (usableItems.includes("item_bandage")) {
@@ -3178,16 +3303,7 @@ function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context 
   const careful = findByTrait(party, "personality", "慎重");
   const logs = [];
 
-  const holderName = (itemId) => {
-    for (const advId of Object.keys(adventurerItemIds)) {
-      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
-        const adv = getAdventurer(advId);
-        if (adv) return getDisplayName(adv);
-      }
-    }
-    const human = humanMembers(party)[0];
-    return human ? getDisplayName(human) : getDisplayName(party[0]);
-  };
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
 
   logs.push(pick([
     `村はずれの小川に着くと、古い小橋の板が一枚浮いていた。`,
@@ -3312,16 +3428,7 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
   const warrior = findByTrait(party, "job", "戦士");
   const logs = [];
 
-  const holderName = (itemId) => {
-    for (const advId of Object.keys(adventurerItemIds)) {
-      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
-        const adv = getAdventurer(advId);
-        if (adv) return getDisplayName(adv);
-      }
-    }
-    const human = humanMembers(party)[0];
-    return human ? getDisplayName(human) : getDisplayName(party[0]);
-  };
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
 
   logs.push(pick([
     `調合所で受け取った薬草包みは、思ったより軽かったが、強く揺らすと中身が崩れそうだった。`,
@@ -3455,16 +3562,7 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   const careful = findByTrait(party, "personality", "慎重");
   const logs = [];
 
-  const holderName = (itemId) => {
-    for (const advId of Object.keys(adventurerItemIds)) {
-      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
-        const adv = getAdventurer(advId);
-        if (adv) return getDisplayName(adv);
-      }
-    }
-    const human = humanMembers(party)[0];
-    return human ? getDisplayName(human) : getDisplayName(party[0]);
-  };
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
 
   logs.push(pick([
     `依頼人は、薬草採りが朝から戻っていないとだけ言った。持っていた袋の色と、向かった森の入口が報告書に記された。`,
@@ -3590,16 +3688,7 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   const shield = findByTrait(party, "job", "見習い盾役");
   const logs = [];
 
-  const holderName = (itemId) => {
-    for (const advId of Object.keys(adventurerItemIds)) {
-      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
-        const adv = getAdventurer(advId);
-        if (adv) return getDisplayName(adv);
-      }
-    }
-    const human = humanMembers(party)[0];
-    return human ? getDisplayName(human) : getDisplayName(party[0]);
-  };
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
 
   logs.push(pick([
     `夕市の片付けが始まる頃、依頼人の親子と合流した。荷物は思ったより多かった。`,
@@ -3724,16 +3813,7 @@ function generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, context 
   const careful = findByTrait(party, "personality", "慎重");
   const logs = [];
 
-  const holderName = (itemId) => {
-    for (const advId of Object.keys(adventurerItemIds)) {
-      if (getAdvItemIds(adventurerItemIds, advId).includes(itemId)) {
-        const adv = getAdventurer(advId);
-        if (adv) return getDisplayName(adv);
-      }
-    }
-    const human = humanMembers(party)[0];
-    return human ? getDisplayName(human) : getDisplayName(party[0]);
-  };
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
 
   logs.push(pick([
     `${quest.area}に着いた。石碑は旧街道の分岐から少し外れた場所に立っていた。`,
