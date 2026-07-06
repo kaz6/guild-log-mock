@@ -199,6 +199,96 @@ function appendGrowthLogToReport(report, expedition) {
   report.logs = logs;
 }
 
+function pickTwoHumans(party, rng) {
+  const humans = humanMembers(party);
+  if (humans.length < 2) return null;
+  const pool = [...humans];
+  const first = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+  const second = pickOne(pool, rng);
+  return [first, second];
+}
+
+function banterCategoryKey(quest) {
+  const category = quest.category;
+  if (category === "輸送") return "探索";
+  if (category === "記録") return "調査";
+  return category;
+}
+
+function generatePartyBanterLog(party, quest, tensionValue, rng) {
+  const pair = pickTwoHumans(party, rng);
+  if (!pair || rng() > 0.65) return null;
+
+  const [a, b] = pair;
+  const na = getDisplayName(a);
+  const nb = getDisplayName(b);
+  const key = banterCategoryKey(quest);
+
+  const pools = {
+    探索: [
+      `${na}が足跡を指すと、${nb}は少し先の草の倒れ方を見てうなずいた。`,
+      `${na}が道の分岐で立ち止まると、${nb}は無言で先を見た。`,
+      `${na}が目印を確かめると、${nb}は少し遅れて同じ方向へ足をそろえた。`
+    ],
+    保全: [
+      `${na}が荷の位置を直すと、${nb}は「そっちの方が運びやすいな」と笑った。`,
+      `${na}が作業の順番を口にすると、${nb}は頷いてから手を動かした。`,
+      `${na}が足場を確かめると、${nb}はその間だけ周囲を見回した。`
+    ],
+    生活: [
+      `${na}が荷の持ち方を変えると、${nb}は「そっちの方が楽だ」と短く言った。`,
+      `${na}が段取りを確認すると、${nb}は黙って頷いた。`,
+      `${na}が置き場所を指すと、${nb}は荷物をそちらへ寄せた。`
+    ],
+    調査: [
+      `${na}が手元を確かめると、${nb}はその間だけ周囲の音を聞いていた。`,
+      `${na}が立ち位置を変えると、${nb}は背後の物音に耳を澄ました。`,
+      `${na}が少し先を見て足を止めると、${nb}は同じ方角を確かめた。`
+    ],
+    戦闘: [
+      `${na}が前に出ようとすると、${nb}は短く「距離を残せ」と声をかけた。`,
+      `${na}が間合いを詰めようとしたとき、${nb}は手のひらで制止した。`,
+      `${na}が先へ踏み出すと、${nb}は横から足元だけを確かめた。`
+    ],
+    救助: [
+      `${na}が足跡を指すと、${nb}はその先の草むらを見た。`,
+      `${na}が立ち止まって耳を澄ますと、${nb}は周囲の動きを確かめた。`,
+      `${na}がゆっくり進むと、${nb}は後方から同じ間隔を保った。`
+    ],
+    護衛: [
+      `${na}が歩幅を合わせると、${nb}は少し外側の道を選んだ。`,
+      `${na}が立ち止まって後方を見ると、${nb}はそのまま前を見続けた。`,
+      `${na}が道の曲がり角で足を止めると、${nb}は先を短く確かめた。`
+    ]
+  };
+
+  const lines = pools[key] ?? pools["探索"];
+  return quest.tensionBase != null && tensionValue != null
+    ? pickTensionOne(lines, tensionValue, rng)
+    : pickOne(lines, rng);
+}
+
+function insertDramaBeforeOutcome(logs, line) {
+  let insertAt = logs.length;
+  for (let i = logs.length - 1; i >= 0; i--) {
+    if (logs[i].kind === "afterglow") insertAt = i;
+  }
+  if (insertAt > 0) insertAt -= 1;
+  logs.splice(insertAt, 0, { kind: "drama", text: line });
+}
+
+function appendPartyBanterToReport(report, expedition) {
+  const quest = getQuest(expedition.questId);
+  if (!quest || !report?.logs) return;
+  const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  const rng = makeRng((expedition.seed ?? 1) + 553);
+  const line = generatePartyBanterLog(party, quest, report.tensionValue ?? null, rng);
+  if (!line) return;
+  const logs = [...report.logs];
+  insertDramaBeforeOutcome(logs, line);
+  report.logs = logs;
+}
+
 function saveState() {
   state.selectedQuestId = selectedQuestId;
   state.selectedAdventurerIds = selectedAdventurerIds;
@@ -441,6 +531,7 @@ function checkExpeditionCompletion() {
   if (elapsed < state.expedition.durationMs) return;
 
   const report = generateReport(state.expedition);
+  appendPartyBanterToReport(report, state.expedition);
   appendGrowthLogToReport(report, state.expedition);
   state.reports.unshift(report);
   state.expedition.adventurerIds.forEach((id) => {
@@ -4507,7 +4598,6 @@ function generateReport(expedition) {
     const personal = lifeQuestPersonalEventText(quest, party, rng, tensionValue ?? 50);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
     const statsLog = statsPersonalityLog(party, rng);
-    const interactions = partyInteractionLog(party, quest, rng, tensionValue ?? 50);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
     const arrivalLines = {
@@ -4534,7 +4624,6 @@ function generateReport(expedition) {
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
     if (statsLog) add("drama", statsLog);
-    interactions.forEach((line) => add("drama", line));
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -4591,7 +4680,6 @@ function generateReport(expedition) {
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng);
-  const interactions = partyInteractionLog(party, quest, rng);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
   const soloAdv = isSoloHumanParty(party);
@@ -4609,7 +4697,6 @@ function generateReport(expedition) {
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
   if (statsLog) add("drama", statsLog);
-  interactions.forEach((line) => add("drama", line));
   add("action", outcomeInfo.line);
   add("afterglow", outcomeInfo.after);
 
