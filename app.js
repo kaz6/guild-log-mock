@@ -155,7 +155,13 @@ function growthStatForCategory(category) {
   return GROWTH_STAT_BY_CATEGORY[category] ?? "exploration";
 }
 
-function humanGrowthLogText(name, statKey) {
+function humanGrowthLogText(name, statKey, rng) {
+  if (statKey === "investigation") {
+    return pickOne([
+      `${name}は今回の依頼で、調査の勘を少しつかんだ。`,
+      `${name}は、違和感を見落とさない目を少し養った。`
+    ], rng);
+  }
   const templates = {
     combat: `${name}は今回の遠征で、戦い方の勘を少しつかんだ。`,
     exploration: `${name}は今回の遠征で、探索の経験を少し積んだ。`,
@@ -165,53 +171,6 @@ function humanGrowthLogText(name, statKey) {
     survival: `${name}は帰り道を確かめる経験を重ねた。`
   };
   return templates[statKey] ?? `${name}は今回の遠征で、${GROWTH_STAT_LABELS[statKey] ?? "遠征"}の経験を少し積んだ。`;
-}
-
-function elsieGrowthLogText(category, rng) {
-  const pools = {
-    戦闘: [
-      "エルシーは低く唸るタイミングを、少し覚えた。",
-      "エルシーは前に出る者の陰で、警戒を続ける経験を重ねた。"
-    ],
-    探索: [
-      "エルシーは草の匂いの違いを追う経験を重ねた。",
-      "エルシーは足跡の匂いを確かめる時間が、少し長くなった。"
-    ],
-    調査: [
-      "エルシーは違和感のある匂いで、耳を立てる経験を重ねた。",
-      "エルシーは静かな場所で、風の向きを確かめる時間が増えた。"
-    ],
-    輸送: [
-      "エルシーは荷物の匂いを離さず、同行を続ける経験を重ねた。",
-      "エルシーは止まる合図を待つ時間が、少し長くなった。"
-    ],
-    保全: [
-      "エルシーは作業中、周囲の足音だけを確かめる経験を重ねた。",
-      "エルシーは人の動きに合わせて、待つ位置を覚えた。"
-    ],
-    生活: [
-      "エルシーは人の笑い声の近くで、静かに伏せる経験を重ねた。",
-      "エルシーは賑やかな場所でも、迷わず足元に寄る経験を重ねた。"
-    ],
-    救助: [
-      "エルシーは弱い匂いを追う時間が、少し長くなった。",
-      "エルシーは止まった場所で、鼻先を低く保つ経験を重ねた。"
-    ],
-    護衛: [
-      "エルシーは帰り道の足音を確かめる経験を重ねた。",
-      "エルシーは同行者より半歩後ろで、振り返る回数が増えた。"
-    ],
-    記録: [
-      "エルシーは長く同じ場所にいる間、警戒を怠らなかった。",
-      "エルシーは静かな作業のそばで、伏せ続ける経験を重ねた。"
-    ]
-  };
-  const fallback = [
-    "エルシーは今回の遠征で、警戒の勘を少し研ぎ澄ました。",
-    "エルシーは帰還の合図に、少し早く反応するようになった。",
-    "エルシーは同行中、追跡と帰還を助ける経験を重ねた。"
-  ];
-  return pickOne(pools[category] ?? fallback, rng);
 }
 
 function incrementGrowthStat(adv, statKey) {
@@ -224,20 +183,15 @@ function appendGrowthLogToReport(report, expedition) {
   const quest = getQuest(expedition.questId);
   if (!quest || !report?.logs) return;
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
-  if (party.length === 0) return;
+  const humans = humanMembers(party);
+  if (humans.length === 0) return;
 
   const rng = makeRng((expedition.seed ?? 1) + 991);
-  const chosen = pickOne(party, rng);
+  const chosen = pickOne(humans, rng);
   const statKey = growthStatForCategory(quest.category);
-  let line;
 
-  if (chosen.species === "dog") {
-    line = elsieGrowthLogText(quest.category, rng);
-    incrementGrowthStat(chosen, statKey === "combat" ? "survival" : statKey);
-  } else {
-    incrementGrowthStat(chosen, statKey);
-    line = humanGrowthLogText(getDisplayName(chosen), statKey);
-  }
+  incrementGrowthStat(chosen, statKey);
+  const line = humanGrowthLogText(getDisplayName(chosen), statKey, rng);
 
   const logs = [...report.logs];
   const insertAt = logs.length > 0 && logs[logs.length - 1].kind === "afterglow" ? logs.length - 1 : logs.length;
@@ -865,6 +819,7 @@ function adventurerListCardHtml(adventurer) {
         <span class="tag">${escapeHtml(adventurer.species === "dog" ? "犬" : adventurer.personality)}</span>
         <span class="tag">${escapeHtml(adventurer.background)}</span>
       </div>
+      <p class="muted">${escapeHtml(adventurerRosterStatsLine(adventurer))}</p>
     </article>
   `;
 }
@@ -873,6 +828,22 @@ function traitsDisplayText(adventurer) {
   const traits = adventurer.traits ?? [];
   if (traits.length === 0) return adventurer.personality ?? "なし";
   return traits.map((trait) => trait.name).join(" / ");
+}
+
+const ROSTER_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
+const ROSTER_STAT_LABELS = {
+  combat: "戦闘",
+  exploration: "探索",
+  investigation: "調査",
+  negotiation: "交渉",
+  support: "支援",
+  survival: "生存"
+};
+
+function adventurerRosterStatsLine(adventurer) {
+  const stats = adventurer.stats ?? {};
+  const parts = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${stats[key] ?? 1}`);
+  return `任務能力：${parts.join(" / ")}`;
 }
 
 function adventurerEditorHtml(adventurer) {
