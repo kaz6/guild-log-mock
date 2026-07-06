@@ -289,6 +289,96 @@ function appendPartyBanterToReport(report, expedition) {
   report.logs = logs;
 }
 
+function memberMentionCounts(party, logs) {
+  return party.map((adv) => {
+    const names = [getDisplayName(adv), adv.name].filter((n) => n && n.length > 0);
+    let count = 0;
+    for (const entry of logs) {
+      const text = entry.text ?? "";
+      if (names.some((n) => text.includes(n))) count += 1;
+    }
+    return { adv, count };
+  });
+}
+
+function pickUnderrepresentedMember(party, logs, rng) {
+  if (party.length < 2) return null;
+  const tallies = memberMentionCounts(party, logs);
+  const minCount = Math.min(...tallies.map((t) => t.count));
+  const maxCount = Math.max(...tallies.map((t) => t.count));
+  if (minCount === maxCount && minCount > 0) return null;
+  const pool = tallies.filter((t) => t.count === minCount).map((t) => t.adv);
+  return pickOne(pool, rng);
+}
+
+function generatePresenceLog(adv, quest, rng) {
+  const name = getDisplayName(adv);
+  if (adv.species === "dog") {
+    return pickOne([
+      `${name}は足元で鼻を鳴らし、帰り道の方を何度も振り返った。`,
+      `${name}は同行者の足音に合わせ、少し後方を歩いていた。`,
+      `${name}は立ち止まって風の匂いを確かめ、また足元に鼻先を寄せた。`,
+      `${name}は門の方角を見て、しっぽを小さく振った。`
+    ], rng);
+  }
+
+  const pools = {
+    探索: [
+      `${name}は一行の最後尾で、帰り道の足場を見ていた。`,
+      `${name}は少し離れた場所で、足元の目印を確かめていた。`
+    ],
+    輸送: [
+      `${name}は荷の振れ方を確かめ、紐の緩みがないか見ていた。`,
+      `${name}は少し離れた場所で、足元の段差を確かめていた。`
+    ],
+    保全: [
+      `${name}は荷の紐を結び直し、崩れないように肩へかけ直した。`,
+      `${name}は作業の合間、周囲の音だけを静かに聞いていた。`
+    ],
+    生活: [
+      `${name}は荷物の位置を直し、通り道を少し空けた。`,
+      `${name}は少し離れた場所で、荷の持ち方を確かめていた。`
+    ],
+    調査: [
+      `${name}は少し離れた場所で、手元の確認を続けていた。`,
+      `${name}は一行の端で、周囲の静けさだけを確かめていた。`
+    ],
+    記録: [
+      `${name}は少し離れた場所で、紙の乾き具合を確かめていた。`,
+      `${name}は作業の合間、手元を一度だけ確かめていた。`
+    ],
+    戦闘: [
+      `${name}は一行の後方で、退路の方を短く確かめていた。`,
+      `${name}は武器の位置を直し、無言で間合いを保っていた。`
+    ],
+    救助: [
+      `${name}は少し離れた場所で、足跡の向きだけを見ていた。`,
+      `${name}は一行の端で、周囲の物音に耳を澄ました。`
+    ],
+    護衛: [
+      `${name}は一行の外側を歩き、帰り道の曲がり角を確かめていた。`,
+      `${name}は声を出さず、後方の足音だけを聞いていた。`
+    ]
+  };
+
+  const lines = pools[quest.category] ?? pools["探索"];
+  return pickOne(lines, rng);
+}
+
+function appendPresenceLogToReport(report, expedition) {
+  const quest = getQuest(expedition.questId);
+  if (!quest || !report?.logs) return;
+  const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  const rng = makeRng((expedition.seed ?? 1) + 317);
+  const adv = pickUnderrepresentedMember(party, report.logs, rng);
+  if (!adv) return;
+  const line = generatePresenceLog(adv, quest, rng);
+  if (!line) return;
+  const logs = [...report.logs];
+  insertDramaBeforeOutcome(logs, line);
+  report.logs = logs;
+}
+
 function saveState() {
   state.selectedQuestId = selectedQuestId;
   state.selectedAdventurerIds = selectedAdventurerIds;
@@ -531,6 +621,7 @@ function checkExpeditionCompletion() {
   if (elapsed < state.expedition.durationMs) return;
 
   const report = generateReport(state.expedition);
+  appendPresenceLogToReport(report, state.expedition);
   appendPartyBanterToReport(report, state.expedition);
   appendGrowthLogToReport(report, state.expedition);
   state.reports.unshift(report);
