@@ -10,7 +10,7 @@ window.masterAdventurers = [
     memo: "道をよく覚えている。無理をしない判断ができる。手紙配達系の依頼に向いていそう。",
     status: "待機中",
     history: [],
-    stats: { memory: 5, caution: 4, courage: 3, kindness: 3, curiosity: 4 },
+    stats: { memory: 5, caution: 4, courage: 3, kindness: 3, curiosity: 4, combat: 1, exploration: 2, investigation: 1, negotiation: 1, support: 1, survival: 2 },
     weapon: {
       name: "短弓と配達短剣",
       type: "弓 / 短剣",
@@ -52,7 +52,7 @@ window.masterAdventurers = [
     memo: "前に出る癖がある。危険度が低い依頼でも、念のため包帯を持たせたい。",
     status: "待機中",
     history: [],
-    stats: { memory: 2, caution: 2, courage: 5, kindness: 4, curiosity: 2 },
+    stats: { memory: 2, caution: 2, courage: 5, kindness: 4, curiosity: 2, combat: 2, exploration: 1, investigation: 1, negotiation: 2, support: 1, survival: 1 },
     weapon: {
       name: "鉄鍋槌",
       type: "鈍器",
@@ -94,7 +94,7 @@ window.masterAdventurers = [
     memo: "採集依頼で頼りになる。休憩時の観察が細かい。",
     status: "待機中",
     history: [],
-    stats: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3 },
+    stats: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3, combat: 1, exploration: 1, investigation: 2, negotiation: 1, support: 2, survival: 1 },
     weapon: {
       name: "薬草師の杖",
       type: "杖",
@@ -136,7 +136,7 @@ window.masterAdventurers = [
     memo: "判断は少し遅いが、一度決めると粘る。仲間の前に立ち、退路をふさがない位置を気にする。",
     status: "待機中",
     history: [],
-    stats: { memory: 3, caution: 3, courage: 4, kindness: 3, curiosity: 2 },
+    stats: { memory: 3, caution: 3, courage: 4, kindness: 3, curiosity: 2, combat: 2, exploration: 1, investigation: 1, negotiation: 1, support: 1, survival: 2 },
     weapon: {
       name: "見習い盾と短槍",
       type: "盾 / 槍",
@@ -181,7 +181,7 @@ window.masterAdventurers = [
     memo: "小柄で立ち耳のギルド犬。ふさふさの尾を振りおだやかな雰囲気だが、嗅覚と警戒に長け追跡や帰還を助ける。戦闘の主力にはならない。",
     status: "待機中",
     history: [],
-    stats: { memory: 3, caution: 4, courage: 1, kindness: 4, curiosity: 3 },
+    stats: { memory: 3, caution: 4, courage: 1, kindness: 4, curiosity: 3, combat: 1, exploration: 1, investigation: 1, negotiation: 1, support: 2, survival: 2 },
     accessory: {
       name: "専用ハーネス",
       effect: "carry_support_item",

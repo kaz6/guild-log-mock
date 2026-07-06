@@ -118,6 +118,62 @@
 - importance
 - tensionLevel
 
+## 冒険者パラメータ設計
+
+冒険者は単なるユニットではなく、任務経験・判断傾向・過去の出来事を持つ存在として扱う。
+
+### stats：任務能力
+
+任務の経験・成長・将来の判定補正に使う。
+
+- combat：戦闘対応力
+- exploration：地形・道・痕跡を読む力
+- investigation：情報収集・違和感発見
+- negotiation：住民対応・会話
+- support：仲間支援・応急処置
+- survival：生還力・悪条件対応
+
+### tendencies：判断傾向
+
+将来、撤退判断・ログ分岐・性格のにじみに使う。
+
+- caution：慎重さ
+- courage：勇敢さ
+- curiosity：好奇心
+- kindness：優しさ
+- memory：記憶力
+
+※ 現在の traits は性格ラベル配列として使用中のため、数値パラメータには使わない。
+
+### traits：性格ラベル
+
+表示・ログ文・キャラ付けに使う。
+positive 2つ + flaw 1つを基本とする。
+
+### specialties：得意分野・持ち札
+
+元職、経験、得意分野を表すタグ。
+判定補正だけでなく、ログ文や報告書のフックとして使う。
+
+例：
+森道 / 痕跡 / 夜間行動 / 野営 / 応急処置 / 住民対応 / 保全 / 動物の気配 / 怪異察知 / 配達経験 / 料理 / 酒場経験 / 元役人
+
+### history：履歴・記憶
+
+冒険者が経験した出来事を記録する。
+
+- sorties：遠征回数
+- injuries：負傷回数
+- successfulRetreats：撤退成功回数
+- usedSupplies：活用した支給品
+- memorableEvents：印象的な出来事
+
+### MVP方針
+
+最初は stats のみ追加し、遠征後に成長ログを1行表示する。
+stats を成功判定に使うのは後回しにする。
+tendencies / specialties / history の本格利用は後回しにする。
+
 ## Highlight / 今回のハイライト
 
 遠征終了時に表示する印象的な1文。
