@@ -4256,6 +4256,155 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
   return pickOne(fallback, rng);
 }
 
+// --- 新規依頼追加用ヘルパー（既存依頼ブロックは未使用） ---
+
+function buildSupplyDescLines(party, adventurerItemIds) {
+  return party.map((adv) => {
+    const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+    return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+  }).filter(Boolean);
+}
+
+function defaultNewQuestRoleNote(quest, adv) {
+  const category = quest.category;
+  if (category === "保全") {
+    if (adv.job === "戦士") return "足場と板の交換で";
+    if (adv.job === "見習い盾役") return "周囲からの確認で";
+    if (adv.job === "斥候") return "巡回と通行確認で";
+    if (adv.job === "薬草師") return "手当と片付けで";
+    if (adv.personality === "慎重") return "丁寧な確認で";
+    return "作業補助で";
+  }
+  if (category === "輸送") {
+    if (adv.job === "薬草師") return "包みの管理で";
+    if (adv.job === "斥候") return "道順と宛先確認で";
+    if (adv.job === "見習い盾役") return "足場確認で";
+    if (adv.job === "戦士") return "荷運びで";
+    if (adv.personality === "慎重") return "丁寧な運搬で";
+    return "輸送補助で";
+  }
+  if (category === "救助") {
+    if (adv.job === "斥候") return "足跡追跡で";
+    if (adv.job === "薬草師") return "痕跡判断で";
+    if (adv.job === "見習い盾役") return "帰路確認で";
+    if (adv.job === "戦士") return "呼びかけと支援で";
+    if (adv.personality === "慎重") return "慎重な捜索で";
+    return "救助補助で";
+  }
+  if (category === "護衛") {
+    if (adv.job === "見習い盾役") return "前衛と足場確認で";
+    if (adv.job === "斥候") return "道選びで";
+    if (adv.job === "戦士") return "荷物運搬で";
+    if (adv.job === "薬草師") return "気配りと付き添いで";
+    if (adv.personality === "慎重") return "安全な道選びで";
+    return "護衛補助で";
+  }
+  if (category === "記録") {
+    if (adv.job === "薬草師") return "拓本と乾燥確認で";
+    if (adv.job === "斥候") return "周囲警戒で";
+    if (adv.personality === "慎重") return "丁寧な記録で";
+    return "記録補助で";
+  }
+  if (category === "生活") {
+    if (adv.personality === "世話焼き") return "気配りと補助で";
+    if (adv.personality === "慎重") return "丁寧な確認で";
+    if (adv.personality === "豪胆") return "力仕事で";
+    return "一員として";
+  }
+  if (category === "戦闘") {
+    if (adv.stats?.courage >= 4) return "前に出る判断で";
+    if (adv.stats?.caution >= 4) return "慎重な距離取りで";
+    if (adv.stats?.kindness >= 4) return "周囲への気配りで";
+    return "戦闘に";
+  }
+  if (category === "調査") {
+    if (adv.stats?.caution >= 4) return "慎重な距離取りで";
+    if (adv.stats?.memory >= 4) return "記録役として";
+    if (adv.stats?.kindness >= 4) return "周囲への気配りで";
+    return "調査に";
+  }
+  if (adv.job === "斥候") return "確認役として";
+  if (adv.job === "薬草師") return "採集と手当で";
+  if (adv.job === "戦士") return "荷運びと警戒で";
+  if (adv.personality === "慎重") return "丁寧な確認で";
+  return "一行の一員として";
+}
+
+function buildSafeAdventurerHistoryLines(party, quest, context = {}) {
+  const resultLabel = context.result ?? context.resultLabel ?? "";
+  const elsieRoleNote = context.elsieRoleNote ?? (quest.category === "護衛" ? "鼻と付き添いで" : "鼻と警戒で");
+  const roleNoteFor = context.roleNoteFor ?? ((adv) => defaultNewQuestRoleNote(quest, adv));
+  const lines = {};
+  party.forEach((adv) => {
+    const displayName = getDisplayName(adv);
+    const roleNote = adv.id === "adv_elsie" ? elsieRoleNote : roleNoteFor(adv);
+    lines[adv.id] = `${quest.title}：${resultLabel}。${displayName}は${roleNote}記録に残った。`;
+  });
+  return lines;
+}
+
+function finalizeQuestReport(options) {
+  const {
+    expedition,
+    quest,
+    party,
+    logs,
+    result,
+    summary,
+    historyLine,
+    adventurerHistoryLines,
+    departConditions = expedition.departTimeOfDay
+      ? { timeOfDay: expedition.departTimeOfDay, weather: expedition.departWeather }
+      : null,
+    adventurerItemIds = expedition.adventurerItemIds ??
+      Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId])),
+    itemIds = getAllItemIds(
+      expedition.adventurerItemIds ??
+        Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]))
+    ),
+    observationUpdates = [],
+    observationText = [],
+    observationNotes = null,
+    hiddenTags = {},
+    highlight = null,
+    tensionValue = null,
+    tensionLevel = null,
+    rng = null,
+    wrapElsie = false
+  } = options;
+
+  const report = {
+    id: `report_${Date.now()}`,
+    questId: quest.id,
+    adventurerIds: expedition.adventurerIds,
+    adventurerItemIds,
+    itemIds,
+    opened: false,
+    applied: false,
+    result,
+    summary,
+    historyLine,
+    adventurerHistoryLines: adventurerHistoryLines ?? {},
+    logs,
+    observationUpdates,
+    observationText,
+    observationNotes,
+    departConditions,
+    highlight: highlight ?? (rng ? generateHighlight(quest, party, itemIds, departConditions, result, rng) : null),
+    hiddenTags: {
+      recordDensityGain: 1 + logs.length + observationText.length,
+      ...hiddenTags
+    },
+    createdAt: new Date().toISOString()
+  };
+
+  if (tensionValue != null) report.tensionValue = tensionValue;
+  if (tensionLevel != null) report.tensionLevel = tensionLevel;
+
+  if (wrapElsie && rng) return withElsieLog(report, quest, party, rng);
+  return report;
+}
+
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
