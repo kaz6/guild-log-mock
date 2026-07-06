@@ -4285,7 +4285,8 @@ function generateReport(expedition) {
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
       const displayName = getDisplayName(adv);
-      const roleNote = adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に";
+      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
+        : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に";
       adventurerHistoryLines[adv.id] = `${quest.title}：${isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認"}。${displayName}は${roleNote}記録に残った。`;
     });
 
@@ -4322,7 +4323,8 @@ function generateReport(expedition) {
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
       const displayName = getDisplayName(adv);
-      const roleNote = adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに";
+      const roleNote = adv.id === "adv_elsie" ? "吠えと警戒で"
+        : adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに";
       adventurerHistoryLines[adv.id] = `${quest.title}：追い払い。${displayName}は${roleNote}記録に残った。`;
     });
 
@@ -4357,7 +4359,8 @@ function generateReport(expedition) {
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
       const displayName = getDisplayName(adv);
-      const roleNote = adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に";
+      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
+        : adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に";
       adventurerHistoryLines[adv.id] = `${quest.title}：討伐。${displayName}は${roleNote}記録に残った。`;
     });
 
