@@ -359,6 +359,98 @@ button {
   margin: 0 0 8px;
 }
 
+.adventurer-detail-section {
+  margin-bottom: 16px;
+}
+
+#adventurerEditor .meta-label {
+  color: #e8cfa0;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+
+#adventurerEditor .adventurer-detail-intro,
+#adventurerEditor .adventurer-tale-line {
+  margin: 0;
+  color: #f0e4cc;
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+#adventurerEditor .card-title .muted {
+  color: #cdb896;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+#adventurerEditor .muted {
+  color: #cdb896;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+#adventurerEditor .kv {
+  color: #d4bc98;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+#adventurerEditor .kv strong {
+  color: #f2e6d0;
+  font-weight: 600;
+}
+
+#adventurerEditor .adventurer-detail-stats .kv,
+#adventurerEditor .adventurer-detail-gear .kv,
+#adventurerEditor .adventurer-detail-obsession .kv {
+  margin-top: 0;
+}
+
+#adventurerEditor .adventurer-detail-traits {
+  margin-top: 0;
+}
+
+#adventurerEditor .adventurer-detail-traits .tag {
+  color: #e8dcc4;
+  border-color: rgba(255, 238, 205, 0.34);
+  background: rgba(255, 238, 205, 0.08);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#adventurerEditor .tag.trait-positive {
+  border-color: rgba(146, 186, 125, 0.58);
+  color: #e4edd9;
+  background: rgba(146, 186, 125, 0.1);
+}
+
+#adventurerEditor .tag.trait-flaw {
+  border-color: rgba(217, 138, 100, 0.58);
+  color: #f0ddd4;
+  background: rgba(217, 138, 100, 0.08);
+}
+
+#adventurerEditor .empty {
+  color: #c9b08a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+#adventurerEditor .form-row label {
+  color: #d9c29a;
+  font-size: 14px;
+}
+
+#adventurerEditor .adventurer-detail-history .log-line {
+  color: #f0e4cc;
+  line-height: 1.8;
+}
+
+.adventurer-detail-history {
+  display: grid;
+  gap: 8px;
+}
+
 .tags {
   display: flex;
   flex-wrap: wrap;

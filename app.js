@@ -1038,47 +1038,183 @@ function adventurerRosterStatsLine(adventurer) {
   return `任務能力：${parts.join(" / ")}`;
 }
 
+const TENDENCY_STAT_KEYS = ["memory", "caution", "courage", "kindness", "curiosity"];
+const TENDENCY_STAT_LABELS = {
+  memory: "記憶",
+  caution: "慎重",
+  courage: "胆力",
+  kindness: "面倒見",
+  curiosity: "好奇心"
+};
+
+function adventurerRoleIntro(adventurer) {
+  if (adventurer.memo?.trim()) return adventurer.memo.trim();
+  if (adventurer.species === "dog") return "ギルド所属の犬。嗅覚と警戒で一行を支える。";
+  const job = adventurer.job ?? "冒険者";
+  const bg = adventurer.background ?? "";
+  return bg ? `${job}。元は${bg}。` : job;
+}
+
+function adventurerTraitsDetailHtml(adventurer) {
+  const traits = adventurer.traits ?? [];
+  if (traits.length === 0) {
+    return `<p class="muted">${escapeHtml(adventurer.personality ?? "なし")}</p>`;
+  }
+  return `
+    <div class="tags adventurer-detail-traits">
+      ${traits.map((trait) => `
+        <span class="tag trait-${escapeHtml(trait.type ?? "neutral")}">${escapeHtml(trait.name)}</span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function adventurerStatsDetailHtml(adventurer) {
+  const stats = adventurer.stats ?? {};
+  const tendency = TENDENCY_STAT_KEYS.map((key) => `${TENDENCY_STAT_LABELS[key]}${stats[key] ?? "—"}`).join(" / ");
+  const mission = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${stats[key] ?? 1}`).join(" / ");
+  return `
+    <div class="kv adventurer-detail-stats">
+      <span>傾向</span><strong>${escapeHtml(tendency)}</strong>
+      <span>任務能力</span><strong>${escapeHtml(mission)}</strong>
+    </div>
+  `;
+}
+
+function adventurerWeaponDetailHtml(adventurer) {
+  if (adventurer.species === "dog") {
+    return `<p class="muted">なし（ギルド犬。同行・警戒・嗅覚が主な役割）</p>`;
+  }
+  const weapon = adventurer.weapon;
+  if (!weapon) return `<p class="muted">なし</p>`;
+  const tags = (weapon.tags ?? []).join(" / ");
+  return `
+    <div class="kv adventurer-detail-gear">
+      <span>名称</span><strong>${escapeHtml(weapon.name ?? "なし")}</strong>
+      <span>種別</span><strong>${escapeHtml(weapon.type ?? "—")}</strong>
+      <span>距離</span><strong>${escapeHtml(weapon.range ?? "—")}</strong>
+      ${tags ? `<span>特徴</span><strong>${escapeHtml(tags)}</strong>` : ""}
+    </div>
+  `;
+}
+
+function adventurerAccessoryDetailHtml(adventurer) {
+  const accessory = adventurer.accessory;
+  if (!accessory) return `<p class="muted">なし</p>`;
+  const tags = (accessory.tags ?? []).join(" / ");
+  return `
+    <div class="kv adventurer-detail-gear">
+      <span>名称</span><strong>${escapeHtml(accessory.name ?? "なし")}</strong>
+      <span>効果</span><strong>${escapeHtml(accessory.effect ?? "—")}</strong>
+      ${tags ? `<span>特徴</span><strong>${escapeHtml(tags)}</strong>` : ""}
+    </div>
+  `;
+}
+
+function adventurerObsessionDetailHtml(adventurer) {
+  const obsession = adventurer.obsession;
+  if (!obsession) return `<p class="muted">なし</p>`;
+  return `
+    <div class="kv adventurer-detail-obsession">
+      <span>執着</span><strong>${escapeHtml(obsession.label ?? "なし")}</strong>
+      <span>根底</span><strong>${escapeHtml(obsession.core ?? "—")}</strong>
+    </div>
+  `;
+}
+
+function adventurerTaleHtml(adventurer) {
+  if (adventurer.species === "dog") {
+    const line = adventurer.obsession?.idleLine;
+    return line
+      ? `<p class="adventurer-tale-line">${escapeHtml(line)}</p>`
+      : `<p class="muted">いまは誰かの足元で、出発を待っている。</p>`;
+  }
+  const line = adventurer.obsession?.positiveLine;
+  return line ? `<p class="adventurer-tale-line">${escapeHtml(line)}</p>` : "";
+}
+
+function adventurerHistoryDetailHtml(adventurer) {
+  const history = adventurer.history ?? [];
+  if (history.length === 0) {
+    return `<div class="empty">まだ遠征記録はありません。</div>`;
+  }
+  return `
+    <div class="log-list adventurer-detail-history">
+      ${history.slice(0, 8).map((line) => `<div class="log-line afterglow">${escapeHtml(line)}</div>`).join("")}
+    </div>
+  `;
+}
+
 function adventurerEditorHtml(adventurer) {
+  const roleLabel = adventurer.species === "dog" ? "紹介" : "役割・紹介";
+  const roleText = adventurer.species === "dog"
+    ? adventurerRoleIntro(adventurer)
+    : `${adventurer.job ?? "冒険者"} / ${adventurer.background ?? "—"} — ${adventurer.memo?.trim() || "記録係メモはまだありません。"}`;
+
   return `
     <div class="card-title">
       <div>
-        <p class="eyebrow">Record Makeup</p>
+        <p class="eyebrow">Adventurer Detail v0.1</p>
         <h3>${escapeHtml(getDisplayName(adventurer))}</h3>
+        <p class="muted">本名：${escapeHtml(adventurer.name)}</p>
       </div>
       <button class="small-button" onclick="toggleFavorite('${adventurer.id}')">${adventurer.favorite ? "★ お気に入り" : "☆ お気に入り"}</button>
     </div>
 
-    <div class="kv">
-      <span>本名</span><strong>${escapeHtml(adventurer.name)}</strong>
-      <span>職業</span><strong>${escapeHtml(adventurer.job)}</strong>
-      <span>性格</span><strong>${escapeHtml(traitsDisplayText(adventurer))}</strong>
-      <span>${adventurer.species === "dog" ? "種族" : "前職"}</span><strong>${escapeHtml(adventurer.species === "dog" ? "犬" : adventurer.background)}</strong>
-      <span>固有武器</span><strong>${escapeHtml(adventurer.weapon?.name ?? "なし")}</strong>
-      <span>アクセサリー</span><strong>${escapeHtml(adventurer.accessory?.name ?? "なし")}</strong>
-      <span>執着</span><strong>${escapeHtml(adventurer.obsession?.label ?? "なし")}</strong>
-    </div>
+    <section class="adventurer-detail-section">
+      <p class="meta-label">${roleLabel}</p>
+      <p class="adventurer-detail-intro">${escapeHtml(roleText)}</p>
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">traits</p>
+      ${adventurerTraitsDetailHtml(adventurer)}
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">obsession</p>
+      ${adventurerObsessionDetailHtml(adventurer)}
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">stats</p>
+      ${adventurerStatsDetailHtml(adventurer)}
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">武器</p>
+      ${adventurerWeaponDetailHtml(adventurer)}
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">アクセサリー</p>
+      ${adventurerAccessoryDetailHtml(adventurer)}
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">${adventurer.species === "dog" ? "いまの様子" : "冒険譚"}</p>
+      ${adventurerTaleHtml(adventurer)}
+    </section>
+
+    <section class="adventurer-detail-section">
+      <p class="meta-label">履歴</p>
+      ${adventurerHistoryDetailHtml(adventurer)}
+    </section>
 
     <hr class="soft" />
 
+    <p class="meta-label">記録係メモ</p>
     <div class="form-row">
       <label for="nicknameInput">あだ名</label>
-      <input id="nicknameInput" value="${escapeHtml(adventurer.nickname)}" placeholder="例：ミナ、鉄鍋" />
+      <input id="nicknameInput" value="${escapeHtml(adventurer.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
     </div>
     <div class="form-row">
-      <label for="memoInput">記録係メモ</label>
-      <textarea id="memoInput" placeholder="この冒険者について覚えておきたいこと">${escapeHtml(adventurer.memo)}</textarea>
+      <label for="memoInput">メモ</label>
+      <textarea id="memoInput" placeholder="この冒険者について覚えておきたいこと">${escapeHtml(adventurer.memo ?? "")}</textarea>
     </div>
     <div class="button-row">
       <button class="primary-button" onclick="saveAdventurerMemo('${adventurer.id}')">記録を保存</button>
     </div>
-
-    <hr class="soft" />
-    <p class="meta-label">最近の記録</p>
-    ${adventurer.history.length === 0 ? `<div class="empty">まだ遠征記録はありません。</div>` : `
-      <div class="log-list">
-        ${adventurer.history.slice(0, 5).map((line) => `<div class="log-line afterglow">${escapeHtml(line)}</div>`).join("")}
-      </div>
-    `}
   `;
 }
 
