@@ -517,6 +517,16 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     );
   }
 
+  if (quest.id === "quest_church_patrol") {
+    pool.push(
+      "エルシーは花壇の前で鼻を低くし、礼拝堂の方角だけを見ていた。",
+      "エルシーは鐘楼の下で足を止め、風に揺れる鐘の音だけを耳にしていた。",
+      "エルシーは礼拝堂の扉の方を一度見て、すぐに同行者のそばへ戻った。",
+      "エルシーは境界の外側で立ち止まり、足跡の匂いを短く確かめた。",
+      "エルシーは小さな灯りの方を見上げたが、吠えずに振り返った。"
+    );
+  }
+
   if (quest.id === "quest_herb_delivery") {
     pool.push(
       "エルシーは薬草の匂いが気になるのか、包みの近くで一度だけ鼻を鳴らした。",
@@ -1772,7 +1782,7 @@ const questEventPools = {
   quest_church_patrol: {
     weather: ["晴れ", "小雨", "霧", "雨上がり"],
     roadEvents: ["柵の緩み", "鐘楼の確認", "墓地の灯り", "巡礼路の草", "礼拝堂の気配", "裏手の林"],
-    outcomes: ["成功", "異常なし", "軽微な対処", "再確認"]
+    outcomes: ["異常なし", "軽微な対処", "要再確認", "小さな違和感"]
   }
 };
 
@@ -2390,36 +2400,36 @@ function outcomeText(quest, party, itemIds, outcome, rng) {
 
   if (quest.id === "quest_church_patrol") {
     const variants = {
-      成功: {
-        result: "成功",
-        summary: "外縁の巡回を完了した。柵・灯り・鐘楼・墓地・巡礼路に大きな異常はなかった。",
-        line: `${getDisplayName(scout) ?? subject}は柵から鐘楼、墓地、巡礼路まで順に確認し、礼拝堂の気配だけを遠くから確かめた。`,
-        after: `帰り道、風に花の匂いが一度だけ混じった。誰も鐘を鳴らす者はいなかった。`,
-        history: "辺境教会周辺の定期巡回で、外縁に異常なし。"
-      },
       異常なし: {
         result: "異常なし",
         summary: "定期巡回を終え、外縁に異常は見つからなかった。",
-        line: `${subject}は裏手の林まで回り、落ち葉と古い足跡だけを記録した。新しい痕跡はなかった。`,
-        after: `礼拝堂の灯りは、いつも通り静かに見えた。それで十分だった。`,
+        line: `${subject}は柵から鐘楼、花壇、礼拝堂外縁まで順に回り、新しい痕跡はなかった。`,
+        after: `礼拝堂の灯りは、いつも通り静かに見えた。誰も鐘を鳴らす者はいなかった。`,
         history: "辺境教会周辺の定期巡回で、異常なし。"
       },
       軽微な対処: {
         result: "軽微な対処",
-        summary: "柵の一本が緩んでいたが、応急で固定した。",
+        summary: "巡礼路の柵が一本緩んでいたが、応急で固定した。",
         line: `巡礼路の柵が一本ゆるんでいた。${subject}は落ちないよう縄で結び、次の巡回まで持つようにした。`,
         after: `大きな問題ではない。けれど、見逃さなかった記録としてはちゃんと残る。`,
         history: "辺境教会周辺の定期巡回で、柵を軽微に処置。"
       },
-      再確認: {
-        result: "再確認",
-        summary: "鐘楼の足元に古い擦れ跡があった。今回は記録のみ。",
+      要再確認: {
+        result: "要再確認",
+        summary: "鐘楼の足元に擦れ跡があった。今回は記録のみで、次回の巡回に回した。",
         line: `鐘楼の足元に、最近ついたとは思えない擦れ跡があった。${subject}は無理に追わず、位置だけを報告書に残した。`,
         after: `報告書の余白には「次回、雨天以外で再確認」とある。`,
-        history: "辺境教会周辺の定期巡回で、擦れ跡を記録し再確認扱い。"
+        history: "辺境教会周辺の定期巡回で、擦れ跡を記録し要再確認。"
+      },
+      小さな違和感: {
+        result: "小さな違和感",
+        summary: "礼拝堂の外縁で消えかけた灯りを確認したが、接近せず記録にとどめた。",
+        line: `${getDisplayName(scout) ?? subject}は外縁の道で、夜明け前に見えたという小さな灯りの痕跡だけを確かめた。接近はしなかった。`,
+        after: `風に花の匂いが一度だけ混じり、また静けさだけが戻った。`,
+        history: "辺境教会周辺の定期巡回で、小さな違和感を記録。"
       }
     };
-    return variants[outcome] ?? variants.成功;
+    return variants[outcome] ?? variants.異常なし;
   }
 
   const variants = {
@@ -3437,6 +3447,104 @@ function bridgeRepairOutcomeText(outcome, party, rng) {
     }
   };
   return variants[outcome] ?? variants["応急修理"];
+}
+
+function churchPatrolOutcomeText(outcome, party, rng) {
+  return outcomeText({ id: "quest_church_patrol", category: "保全" }, party, [], outcome, rng);
+}
+
+function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const weather = context.departConditions?.weather ?? "晴れ";
+  const timeOfDay = context.departConditions?.timeOfDay ?? "昼";
+  const tensionValue = context.tensionValue ?? 35;
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => adv ? getDisplayName(adv) : null;
+  const subject = partySubject(party);
+  const scout = findByTrait(party, "job", "斥候");
+  const row = party.find((a) => a.id === "adv_row");
+  const mina = party.find((a) => a.id === "adv_mina");
+  const elne = party.find((a) => a.id === "adv_elne");
+  const careful = findByTrait(party, "personality", "慎重");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
+  const logs = [];
+
+  logs.push(pick([
+    `${quest.area}に着いた。道端の花壇は手入れされ、祈りの跡だけが静かに残っていた。`,
+    `辺境教会の外縁へ向かうと、風に鐘の音が一度だけ届き、すぐに静けさに戻った。`,
+    `${subject}は礼拝堂の扉を遠くから確かめ、柵の向こうから巡回を始めた。`
+  ]));
+
+  logs.push(pick([
+    `花壇の土は湿り気がなく、最近まで水をやった跡が残っていた。`,
+    `巡礼路の石畳には、古い足跡より新しい轍は見当たらなかった。`,
+    `境界の外側には、野獣の足跡だけが薄く残っていた。`
+  ]));
+
+  if (weather === "小雨" || weather === "雨") {
+    logs.push(pick([
+      `小雨で巡礼路が滑りやすく、鐘楼の足元だけ念入りに確かめた。`,
+      `雨に濡れた花壇の縁に、人の足跡は新しく残っていなかった。`
+    ]));
+  } else if (weather === "霧") {
+    logs.push(`霧の向こうで礼拝堂の灯りだけが、いつもより長く見えた。`);
+  }
+
+  const work = [];
+  if (mina && isHumanAdventurer(mina)) work.push(`${nm(mina)}は柵の緩みと巡礼路の段差を順に確かめた。`);
+  else if (scout && isHumanAdventurer(scout)) work.push(`${nm(scout)}は柵の緩みと巡礼路の段差を順に確かめた。`);
+
+  if (row && isHumanAdventurer(row)) work.push(`${nm(row)}は鐘楼の足元と礼拝堂外縁の足場を見回った。`);
+  else if (careful && isHumanAdventurer(careful) && !work.some((line) => line.includes(nm(careful)))) {
+    work.push(`${nm(careful)}は鐘楼の足元と礼拝堂外縁の足場を見回った。`);
+  }
+
+  if (elne && isHumanAdventurer(elne)) work.push(`${nm(elne)}は花壇の周りと祈りの跡を、無理に触れずに確かめた。`);
+
+  while (work.length > 2) work.splice(Math.floor(rng() * work.length), 1);
+  work.forEach((line) => logs.push(line));
+
+  if (timeOfDay === "夜" || timeOfDay === "夕方" || weather === "霧") {
+    logs.push(pick([
+      `外縁の道で、消えかけた灯りのような揺れが一度だけ見えた。近づく前に消えた。`,
+      `夜明け前に見えたという話の場所で、${subject}は足元と帰り道だけを確かめた。`
+    ]));
+  }
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは花壇の前で足を止め、礼拝堂の方角だけを見ていた。`,
+      `エルシーは鐘楼の下で立ち止まり、風に揺れる鐘の音だけを耳にしていた。`,
+      `エルシーは境界の外側で鼻を低くし、足跡の匂いを短く確かめた。`,
+      `エルシーは小さな灯りの方を見上げたが、吠えずに振り返った。`
+    ]));
+  }
+
+  if (itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map", weather)) {
+    logs.push(`${holderName("item_map")}は地図で巡礼路と裏手の林の境界を確かめ、巡回順を決めた。`);
+  }
+  if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
+    logs.push(`${holderName("item_whistle")}は笛を短く吹き、外縁で迷子がいないか周囲に合図した。`);
+  }
+  if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather)) {
+    logs.push(`${holderName("item_bandage")}は柵の縛り目に包帯を巻き、緩みの目印にした。`);
+  }
+  if (itemIds.includes("item_pot") && canUseItemInQuest(quest, "item_pot", weather)) {
+    logs.push(`${holderName("item_pot")}は花壇の脇で水を汲み、乾きかけた土を一度だけ潤した。`);
+  }
+  const isDim = timeOfDay === "夕方" || timeOfDay === "夜";
+  if (itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern", weather) && (isDim || weather === "霧")) {
+    logs.push(`${holderName("item_lantern")}はランタンで巡礼路の段差と柵の緩みを照らし、無理に近づかず確認した。`);
+  }
+
+  logs.push(pick([
+    `最後にもう一度、礼拝堂外縁と帰り道だけを確かめた。`,
+    `何も起きなかった静かな巡回だった。それでも、記録としては十分だった。`,
+    `鐘は鳴らず、花の匂いだけが残ったまま、一行は門へ戻った。`
+  ]));
+
+  return logs;
 }
 
 function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -4535,6 +4643,46 @@ function generateReport(expedition) {
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
+  }
+
+  // 保全依頼：辺境教会周辺の定期巡回
+  if (quest.id === "quest_church_patrol") {
+    let outcome = pickOne(["異常なし", "軽微な対処", "要再確認", "小さな違和感"], rng);
+    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.45) outcome = pickOne(["異常なし", "軽微な対処"], rng);
+    if (itemIds.includes("item_map") && rng() < 0.35) outcome = pickOne(["異常なし", "要再確認"], rng);
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const supplyDesc = buildSupplyDescLines(party, adventurerItemIds);
+    add("", `支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
+
+    const patrolLogs = generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
+    patrolLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = churchPatrolOutcomeText(outcome, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    return finalizeQuestReport({
+      expedition,
+      quest,
+      party,
+      logs,
+      rng,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, { result: outcomeInfo.result }),
+      departConditions,
+      adventurerItemIds,
+      itemIds,
+      tensionValue,
+      tensionLevel,
+      hiddenTags: { preservation: true, outcome },
+      wrapElsie: true
+    });
   }
 
   // 保全依頼：古い小橋の応急修理

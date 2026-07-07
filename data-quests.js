@@ -114,7 +114,7 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 20,
     tensionRange: 15,
-    summary: "辺境教会の外縁を巡回し、柵、灯り、鐘楼、墓地、巡礼路、裏手の林に異常がないかを確認する定期任務。"
+    summary: "辺境教会の周辺を巡回し、道、柵、鐘楼、花壇、礼拝堂外縁に異常がないか確認する。最近、夜明け前に小さな灯りを見たという話がある。"
   },
   {
     id: "quest_herb_delivery",
