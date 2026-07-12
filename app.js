@@ -203,6 +203,7 @@ function appendGrowthLogToReport(report, expedition) {
 
   incrementGrowthStat(chosen, statKey);
   const line = humanGrowthLogText(getDisplayName(chosen), statKey, rng);
+  report.growth = { advId: chosen.id, statKey };
 
   const logs = [...report.logs];
   const insertAt = logs.length > 0 && logs[logs.length - 1].kind === "afterglow" ? logs.length - 1 : logs.length;
@@ -646,6 +647,7 @@ function checkExpeditionCompletion() {
   appendPartyBanterToReport(report, state.expedition);
   appendGrowthLogToReport(report, state.expedition);
   state.reports.unshift(report);
+  state.activeResultReportId = report.id;
   state.expedition.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv) adv.status = "待機中";
@@ -671,7 +673,8 @@ function render() {
     adventurers: "冒険者名簿",
     observations: "報告メモ",
     beastlog: "いきもの図鑑",
-    report: "報告書"
+    report: "報告書",
+    result: "帰還報告"
   };
   viewTitle.textContent = titles[route] ?? "ギルド";
 
@@ -681,6 +684,7 @@ function render() {
   if (route === "observations") renderObservations();
   if (route === "beastlog") renderBeastLog();
   if (route === "report") renderReportDetail(state.activeReportId);
+  if (route === "result") renderResult(state.activeResultReportId);
 }
 
 function renderInterview() {
@@ -1675,6 +1679,50 @@ function renderReportDetail(reportId) {
   `;
 }
 
+function renderResult(reportId) {
+  const report = state.reports.find((item) => item.id === reportId);
+  if (!report) {
+    setRoute("home");
+    return;
+  }
+  const quest = getQuest(report.questId);
+  const party = report.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
+  const branch = report.hiddenTags?.branch;
+  const safetyLine = branch === "great_wound" || branch === "fail" ? "負傷者あり" : "全員無事に帰還";
+  const growth = report.growth;
+  const growthAdv = growth ? getAdventurer(growth.advId) : null;
+
+  app.innerHTML = `
+    <section class="card">
+      <div class="card-body">
+        <div class="card-title">
+          <div>
+            <p class="eyebrow">Homecoming</p>
+            <h3>${escapeHtml(quest?.title ?? "帰還報告")}</h3>
+          </div>
+          <span class="status-pill good">帰還</span>
+        </div>
+        <div class="kv">
+          <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>
+          <span>概況</span><strong>${escapeHtml(report.summary)}</strong>
+          <span>編成</span><strong>${escapeHtml(party)}</strong>
+          <span>安否</span><strong>${escapeHtml(safetyLine)}</strong>
+          ${growthAdv ? `<span>成長</span><strong>${escapeHtml(getDisplayName(growthAdv))} が ${escapeHtml(GROWTH_STAT_LABELS[growth.statKey] ?? growth.statKey)} の経験を積んだ</strong>` : ""}
+        </div>
+        ${report.highlight ? `
+        <div class="highlight-box">
+          <p class="eyebrow">今回のハイライト</p>
+          <p class="highlight-text">「${escapeHtml(report.highlight)}」</p>
+        </div>` : ""}
+        <div class="button-row" style="margin-top: 18px;">
+          <button class="primary-button" onclick="openReport('${report.id}')">報告書を読む</button>
+          <button class="secondary-button" onclick="setRoute('home')">ギルドへ戻る</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function selectQuest(id) {
   selectedQuestId = id;
   saveState();
@@ -1749,7 +1797,12 @@ function advanceTimeForMock() {
   if (!state.expedition) return;
   state.expedition.startTime = Date.now() - state.expedition.durationMs;
   saveState();
-  render();
+  checkExpeditionCompletion();
+  if (state.activeResultReportId) {
+    setRoute("result");
+  } else {
+    render();
+  }
 }
 
 function openReport(id) {
