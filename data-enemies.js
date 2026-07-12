@@ -4,5 +4,11 @@ window.masterEnemies = [
     name: "納屋に巣食う噛みつく「なにか」",
     hp: 140,
     threat: 26
+  },
+  {
+    id: "enemy_road_raiders",
+    name: "街道の外れに現れた徒党",
+    hp: 170,
+    threat: 30
   }
 ];

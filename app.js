@@ -2370,6 +2370,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"],
     quest_missing_herbalist: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot", "item_obs_sheet"],
     quest_evening_market_escort: ["item_lantern", "item_whistle", "item_map", "item_bandage", "item_pot"],
+    quest_caravan_escort: ["item_bandage", "item_smoke", "item_whistle", "item_map", "item_lantern"],
     quest_old_stele_rubbing: ["item_obs_sheet", "item_map", "item_oilcase", "item_lantern", "item_bandage", "item_whistle", "item_pot"]
   };
   const allowed = allowedByQuest[quest.id];
@@ -4166,6 +4167,128 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   return logs;
 }
 
+// 隊商護衛（掴み体験）：戦闘エンジンの結果を3分岐のドラマ型ログに翻訳する。
+function caravanEscortOutcomeText(branch, party, rng) {
+  const variants = {
+    great_unhurt: {
+      result: "護衛成功",
+      summary: "隊商を狙う徒党を正面から退け、荷を欠かさず外縁の先まで送り届けた。負傷者なし。",
+      line: `徒党は間合いを詰めきれず、荷馬車は止まることなく街道を抜けた。`,
+      after: `報告書には「隊商、無事通過。負傷者なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。強行突破で無傷、隊商を送り届けた。"
+    },
+    great_wound: {
+      result: "護衛成功（負傷）",
+      summary: "徒党の襲撃を受け止め、負傷しながらも押し返して隊商を通した。荷は守り切った。",
+      line: `幾人かは傷を負ったが、隊商は止まらずに外縁の先へ抜けた。`,
+      after: `報告書には「隊商通過。護衛に負傷あり、荷の損失なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。負傷しつつ強行突破、隊商を送り届けた。"
+    },
+    evade: {
+      result: "離脱・完遂",
+      summary: "正面からの突破は避け、煙幕で視界を奪って隊商を先に行かせ、戦わずに離脱した。",
+      line: `煙の中で徒党の足が止まった隙に、隊商は街道の先へ抜けていった。`,
+      after: `報告書には「交戦回避。煙幕により隊商を離脱させ、被害なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。煙幕で離脱回避、被害なく隊商を通した。"
+    },
+    fail: {
+      result: "護衛失敗",
+      summary: "徒党の数に押し込まれ、隊商を護り切れないまま街道から退いた。",
+      line: `隊商とははぐれ、荷馬車は徒党の側へ取り残された。`,
+      after: `報告書には「隊商を護り切れず。後日の捜索が要る」と短く記されている。`,
+      history: "街道の外れを行く隊商の護衛。護り切れず撤退、後日の捜索へ。"
+    }
+  };
+  return variants[branch] ?? variants.fail;
+}
+
+function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  const tensionValue = context.tensionValue ?? 55;
+  const battle = context.battle ?? null;
+  const branch = context.branch ?? "fail";
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => (adv ? getDisplayName(adv) : null);
+  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId) || "一行の誰か";
+  const scout = findByTrait(party, "job", "斥候");
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const frontName = battle ? (battle.members.find((m) => m.id === battle.frontId)?.name ?? null) : null;
+  const wounded = battle ? battle.members.filter((m) => m.downed || m.hp < m.maxHp * 0.6).map((m) => m.name) : [];
+  const hasSmoke = itemIds.includes("item_smoke");
+  const hasBandage = itemIds.includes("item_bandage");
+  const logs = [];
+
+  logs.push(pick([
+    `荷馬車の脇で隊商と合流した。商人は生活圏の外縁を抜ける道を指し、暗くなる前に通り抜けたいと言った。`,
+    `隊商の荷は重く、外縁の街道は普段より人の姿が少なかった。商人は先を急ぎたがっていた。`
+  ]));
+
+  if (scout && isHumanAdventurer(scout)) {
+    logs.push(`${nm(scout)}が少し先行し、道の曲がりと茂みの陰を先に確かめた。`);
+  } else {
+    logs.push(pick([
+      `街道は外縁に近づくほど、両脇の茂みが深くなった。`,
+      `外縁の風は乾いていて、遠くの物音がよく通った。`
+    ]));
+  }
+
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは荷馬車の前を歩きながら、途中で一度足を止めて茂みの奥へ鼻を向けた。`,
+      `エルシーは低く唸り、街道の先の気配に耳を立てた。`
+    ]));
+  }
+
+  logs.push(pick([
+    `茂みが揺れ、街道の外れから徒党が現れて行く手を塞いだ。`,
+    `荷を狙う徒党が、数を頼みに街道へ出てきた。`
+  ]));
+
+  if (branch === "great_unhurt") {
+    logs.push(frontName
+      ? `${frontName}が荷馬車の前に立ち、最初の一撃を正面から受け止めた。`
+      : `一行は荷馬車の前に立ち、最初の一撃を正面から受け止めた。`);
+    logs.push(pick([
+      `間合いを詰めさせず、徒党は荷に手をかける前に押し返された。`,
+      `数の圧はあったが、前衛が崩れず、徒党は間合いを保てなかった。`
+    ]));
+    if (hasBandage && rng() < 0.5) logs.push(`${holderName("item_bandage")}は念のため包帯を手に構えたが、使う場面はなかった。`);
+  } else if (branch === "great_wound") {
+    logs.push(frontName
+      ? `${frontName}が前で受け続けたが、徒党は数を頼みに横から回り込もうとした。`
+      : `前衛が受け続けたが、徒党は数を頼みに横から回り込もうとした。`);
+    logs.push(pick([
+      `打ち合いは長引き、幾人かが傷を負いながらも、荷馬車の前を空けなかった。`,
+      `押し込まれかけたが、粘って徒党を退け、隊商の前を守り抜いた。`
+    ]));
+    if (hasBandage) logs.push(`${holderName("item_bandage")}は${wounded.length > 0 ? wounded[0] + "の" : ""}傷に手早く包帯を巻き、隊商を止めずに歩かせた。`);
+    else if (wounded.length > 0) logs.push(`${wounded[0]}は傷を庇いながらも、隊商の前を離れなかった。`);
+  } else if (branch === "evade") {
+    const smokeHolder = hasSmoke ? holderName("item_smoke") : "一行";
+    logs.push(`${smokeHolder}が煙幕を焚くと、街道は白く覆われ、徒党は間合いを見失った。`);
+    logs.push(pick([
+      `煙の中で、隊商だけを先に街道の先へ行かせた。交戦は避けられた。`,
+      `視界の切れた隙に荷馬車を通し、一行はその後を追って離脱した。`
+    ]));
+  } else {
+    logs.push(frontName
+      ? `${frontName}が前で受けたが、徒党の数は途切れず、じりじりと押し込まれた。`
+      : `前衛が受けたが、徒党の数は途切れず、じりじりと押し込まれた。`);
+    if (elsie) {
+      logs.push(pick([
+        `エルシーが徒党の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
+        `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
+      ]));
+    }
+    logs.push(pick([
+      `荷馬車は徒党の側へ取り残され、一行は隊商を護り切れないまま退いた。`,
+      `数に押され、隊商を残して街道を退くほかなかった。`
+    ]));
+  }
+
+  return logs;
+}
+
 function steleRubbingOutcomeText(outcome, party, rng) {
   const variants = {
     拓本完了: {
@@ -4675,12 +4798,11 @@ function generateReport(expedition) {
     const isNight = departTimeOfDay === "夜";
     const observationNotes = isNight ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null;
     const hasLantern = itemIds.includes("item_lantern");
-    const adventurerHistoryLines = {};
-    party.forEach((adv) => {
-      const displayName = getDisplayName(adv);
-      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
-        : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に";
-      adventurerHistoryLines[adv.id] = `${quest.title}：${isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認"}。${displayName}は${roleNote}記録に残った。`;
+    const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
+      result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
+      elsieRoleNote: "鼻と警戒で",
+      roleNoteFor: (adv) =>
+        adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に"
     });
 
     return withElsieLog({
@@ -4713,12 +4835,11 @@ function generateReport(expedition) {
     const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     battleLogs.forEach((text, index) => add(index === battleLogs.length - 1 ? "afterglow" : "action", text));
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
-    const adventurerHistoryLines = {};
-    party.forEach((adv) => {
-      const displayName = getDisplayName(adv);
-      const roleNote = adv.id === "adv_elsie" ? "吠えと警戒で"
-        : adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに";
-      adventurerHistoryLines[adv.id] = `${quest.title}：追い払い。${displayName}は${roleNote}記録に残った。`;
+    const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
+      result: "追い払い",
+      elsieRoleNote: "吠えと警戒で",
+      roleNoteFor: (adv) =>
+        adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに"
     });
 
     return withElsieLog({
@@ -4749,12 +4870,11 @@ function generateReport(expedition) {
     const huntLogs = generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     huntLogs.forEach((text, index) => add(index === huntLogs.length - 1 ? "afterglow" : "action", text));
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
-    const adventurerHistoryLines = {};
-    party.forEach((adv) => {
-      const displayName = getDisplayName(adv);
-      const roleNote = adv.id === "adv_elsie" ? "鼻と警戒で"
-        : adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に";
-      adventurerHistoryLines[adv.id] = `${quest.title}：討伐。${displayName}は${roleNote}記録に残った。`;
+    const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
+      result: "討伐",
+      elsieRoleNote: "鼻と警戒で",
+      roleNoteFor: (adv) =>
+        adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に"
     });
 
     return withElsieLog({
@@ -4999,6 +5119,62 @@ function generateReport(expedition) {
   }
 
   // 護衛依頼：夕市帰りの親子の付き添い
+  if (quest.id === "quest_caravan_escort") {
+    const battle = simulateBattle(quest, party, itemIds, rng);
+    let branch;
+    if (!battle) branch = "fail";
+    else if (battle.outcome === "victory") branch = battle.stage === "軽" ? "great_unhurt" : "great_wound";
+    else if ((battle.outcome === "withdraw_first" || battle.outcome === "withdraw_second") && battle.smoke.questContinues) branch = "evade";
+    else branch = "fail";
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const caravanSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${caravanSupplyDesc.length > 0 ? caravanSupplyDesc.join(" / ") : "なし"}。`);
+
+    const caravanLogs = generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battle, branch });
+    caravanLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    return finalizeQuestReport({
+      expedition,
+      quest,
+      party,
+      logs,
+      rng,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, {
+        result: outcomeInfo.result,
+        elsieRoleNote: "鼻と警戒で",
+        roleNoteFor: (adv) => {
+          if (adv.job === "戦士") return "前衛で受け止め";
+          if (adv.job === "見習い盾役") return "退路と足場確保で";
+          if (adv.job === "斥候") return "先行偵察で";
+          if (adv.job === "薬草師") return "手当てと後方支援で";
+          if (adv.personality === "慎重") return "撤退判断で";
+          return "隊商の護りで";
+        }
+      }),
+      departConditions,
+      adventurerItemIds,
+      itemIds,
+      tensionValue,
+      tensionLevel,
+      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch },
+      wrapElsie: true
+    });
+  }
+
   if (quest.id === "quest_evening_market_escort") {
     let outcome = pickOne(["無事帰宅", "安全確認", "遠回り帰宅"], rng);
     if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["安全確認", "無事帰宅"], rng);

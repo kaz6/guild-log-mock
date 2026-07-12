@@ -157,6 +157,21 @@ window.masterQuests = [
     summary: "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。"
   },
   {
+    id: "quest_caravan_escort",
+    title: "街道の外れを行く隊商の護衛",
+    category: "護衛",
+    danger: "中",
+    area: "生活圏の外縁を抜ける街道",
+    recommended: ["戦士", "見習い盾役", "斥候"],
+    tags: ["護衛", "隊商", "戦闘", "街道", "撤退判断", "掴み"],
+    observationTarget: "なし",
+    tensionBase: 55,
+    tensionRange: 25,
+    enemyId: "enemy_road_raiders",
+    battleEffectiveItemIds: ["item_bandage"],
+    summary: "生活圏の外縁を抜ける隊商を護る。道中で徒党に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。"
+  },
+  {
     id: "quest_old_stele_rubbing",
     title: "古い石碑の拓本",
     category: "記録",
