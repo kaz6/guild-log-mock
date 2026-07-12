@@ -36,6 +36,16 @@ let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
 let selectedAdventurerItems = state.selectedAdventurerItems ?? {};
 let editingAdventurerId = null;
 let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
+
+// オープニング面接: プレイヤー（記録係）の気質選択肢。tags は将来の受付嬢・冒険者の会話反映用。
+const PLAYER_PERSONALITIES = [
+  { key: "careful", label: "慎重", blurb: "石橋を叩いてから渡る方だ。", tags: ["慎重", "確認", "安全"] },
+  { key: "bold", label: "大胆", blurb: "考えるより先に、まず動く。", tags: ["大胆", "即断", "前進"] },
+  { key: "caring", label: "世話好き", blurb: "人を放っておけない。", tags: ["世話焼き", "気配り", "仲間"] },
+  { key: "recorder", label: "記録好き", blurb: "細かいことも書き留めたくなる。", tags: ["記録", "観察", "細部"] }
+];
+let interviewStep = 0;
+let interviewDraft = { name: "", personality: null };
 let mockWeather = null;  // Mock検証用: null の場合は totalExpeditions ベースで自動生成
 
 function createInitialState() {
@@ -60,7 +70,8 @@ function createInitialState() {
     selectedAdventurerItems: {},
     lastObservationUpdate: null,
     beastLog: {},
-    reportMemos: []
+    reportMemos: [],
+    player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
   };
 }
 
@@ -645,6 +656,13 @@ function checkExpeditionCompletion() {
 
 function render() {
   checkExpeditionCompletion();
+
+  // オープニング面接が未完なら、他の画面より先に面接シーンを出す（ゲート）。
+  if (!state.player || !state.player.interviewDone) {
+    renderInterview();
+    return;
+  }
+
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.route === route));
 
   const titles = {
@@ -665,6 +683,112 @@ function render() {
   if (route === "report") renderReportDetail(state.activeReportId);
 }
 
+function renderInterview() {
+  viewTitle.textContent = "ギルド受付・面接";
+  navButtons.forEach((button) => button.classList.remove("active"));
+
+  const receptionCard = (body) => `
+    <section class="card">
+      <div class="card-body reception">
+        <div class="reception-portrait" aria-hidden="true"></div>
+        <div style="flex: 1;">
+          <p class="eyebrow">Guild Reception</p>
+          <h3>受付嬢</h3>
+          ${body}
+        </div>
+      </div>
+    </section>
+  `;
+
+  if (interviewStep === 0) {
+    app.innerHTML = receptionCard(`
+      <div class="speech">ようこそ、遠征ギルドへ。本日はギルドの<strong>記録係</strong>の面接にお越しいただきました。わたしはこのギルドの受付を務めています。……といっても、堅い面接ではありません。少しだけ、お話を伺わせてください。</div>
+      <div class="button-row" style="margin-top: 16px;">
+        <button class="primary-button" onclick="interviewBegin()">面接を始める</button>
+      </div>
+    `);
+    return;
+  }
+
+  if (interviewStep === 1) {
+    app.innerHTML = receptionCard(`
+      <div class="speech">まず、お名前を伺ってもよろしいですか。この名簿に、記録係として書き留めておきます。</div>
+      <div class="form-row" style="margin-top: 14px;">
+        <label for="interviewNameInput">お名前</label>
+        <input id="interviewNameInput" type="text" maxlength="24" placeholder="記録係の名前" value="${escapeHtml(interviewDraft.name)}" />
+      </div>
+      <div class="button-row" style="margin-top: 14px;">
+        <button class="primary-button" onclick="interviewSubmitName()">次へ</button>
+      </div>
+    `);
+    const el = document.getElementById("interviewNameInput");
+    if (el) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter") interviewSubmitName(); });
+    }
+    return;
+  }
+
+  if (interviewStep === 2) {
+    app.innerHTML = receptionCard(`
+      <div class="speech">${escapeHtml(interviewDraft.name)}さん、ですね。差し支えなければ、ご自身の気質を一つだけ選んでいただけますか。……ええ、面接の形として伺うだけですので、正解はありません。</div>
+      <div class="button-row" style="margin-top: 16px; flex-wrap: wrap; gap: 10px;">
+        ${PLAYER_PERSONALITIES.map((p) => `<button class="secondary-button" onclick="interviewPickPersonality('${p.key}')" title="${escapeHtml(p.blurb)}">${escapeHtml(p.label)}</button>`).join("")}
+      </div>
+    `);
+    return;
+  }
+
+  const chosen = PLAYER_PERSONALITIES.find((p) => p.key === interviewDraft.personality);
+  app.innerHTML = receptionCard(`
+    <div class="speech">ありがとうございます。……形ばかりの面接ですが、問題ありません。ようこそ、記録係の${escapeHtml(interviewDraft.name)}さん。</div>
+    <div class="speech" style="margin-top: 12px;">では、記録係としての最初のお仕事です。この名簿に、あなた自身を書き留めてください。これが、ギルドに残る最初の記録になります。</div>
+    <div class="kv" style="margin-top: 14px;">
+      <span>記録係</span><strong>${escapeHtml(interviewDraft.name)}</strong>
+      <span>気質</span><strong>${escapeHtml(chosen?.label ?? "—")}</strong>
+    </div>
+    <div class="button-row" style="margin-top: 16px;">
+      <button class="primary-button" onclick="interviewComplete()">名簿に記録する</button>
+    </div>
+  `);
+}
+
+function interviewBegin() {
+  interviewStep = 1;
+  render();
+}
+
+function interviewSubmitName() {
+  const el = document.getElementById("interviewNameInput");
+  const value = (el?.value ?? "").trim();
+  interviewDraft.name = value || "記録係";
+  interviewStep = 2;
+  render();
+}
+
+function interviewPickPersonality(key) {
+  interviewDraft.personality = key;
+  interviewStep = 3;
+  render();
+}
+
+function interviewComplete() {
+  const chosen = PLAYER_PERSONALITIES.find((p) => p.key === interviewDraft.personality);
+  state.player = {
+    name: interviewDraft.name || "記録係",
+    personality: interviewDraft.personality,
+    personalityLabel: chosen?.label ?? null,
+    personalityTags: chosen?.tags ?? [],
+    interviewDone: true
+  };
+  saveState();
+  interviewStep = 0;
+  interviewDraft = { name: "", personality: null };
+  route = "home";
+  render();
+}
+
 function renderHome() {
   const unopened = state.reports.filter((report) => !report.opened);
   const latestReports = state.reports.slice(0, 3);
@@ -679,7 +803,7 @@ function renderHome() {
             <p class="eyebrow">Guild Reception</p>
             <h3>受付嬢</h3>
             <div class="speech">
-              ${unopened.length > 0
+              ${state.player?.name ? `${escapeHtml(state.player.name)}さん、` : ""}${unopened.length > 0
                 ? `おかえりなさい。未開封の報告書が ${unopened.length} 通、届いています。落ち着いて、一通ずつ確認しましょう。`
                 : expedition
                   ? "遠征中の一行があります。扉の音がしたら、私が報告書をお持ちしますね。"
