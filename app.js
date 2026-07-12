@@ -5285,3 +5285,206 @@ setInterval(() => {
 }, 1000);
 
 render();
+// === 戦闘エンジン（土台） =====================================================
+// 隊商護衛の掴み体験に向けた内部エンジン。まだ報告書ログ生成には接続していない。
+// 検証用: DevToolsコンソールで debugBattleSim() を実行する。
+// 数値はすべて叩き台（CURRENT_SPEC.md「戦闘内部値」参照）。
+
+const BATTLE_TUNING = {
+  jobHp: { "戦士": 120, "見習い盾役": 110, "斥候": 90, "薬草師": 80 },
+  defaultHp: 100,
+  frontOrder: ["戦士", "見習い盾役", "斥候", "薬草師"],
+  retreatJobBase: { "斥候": 50, "薬草師": 55, "見習い盾役": 65, "戦士": 80 },
+  retreatJobDefault: 55,
+  retreatPersonalityShift: { "慎重": -10, "豪胆": 10, "我慢強い": 10 },
+  scoreElsieBonus: 10,
+  scoreSmokeBonus: 30,
+  scoreEnemyLowHpPenalty: -25,
+  enemyLowHpRatio: 0.2,
+  scoreEffectiveItemPenalty: -20,
+  frontDamageShare: 0.6,
+  offensePerCombat: 4,
+  offensePerWeaponPower: 2,
+  varianceMin: 0.85,
+  varianceMax: 1.15,
+  secondDecisionRound: 3,
+  maxRounds: 8,
+  lightWoundRatio: 0.15
+};
+
+function getEnemyForQuest(quest) {
+  if (!quest || !quest.enemyId || !Array.isArray(window.masterEnemies)) return null;
+  return window.masterEnemies.find((e) => e.id === quest.enemyId) ?? null;
+}
+
+function pickBattleFront(fighters) {
+  const alive = fighters.filter((f) => !f.downed);
+  if (alive.length === 0) return null;
+  const sorted = [...alive].sort((a, b) => {
+    const ai = BATTLE_TUNING.frontOrder.indexOf(a.job);
+    const bi = BATTLE_TUNING.frontOrder.indexOf(b.job);
+    const ar = ai === -1 ? 99 : ai;
+    const br = bi === -1 ? 99 : bi;
+    if (ar !== br) return ar - br;
+    return (b.courage ?? 0) - (a.courage ?? 0);
+  });
+  return sorted[0];
+}
+
+function computeBattleRetreatDecision(fighters, allyHpRatio, enemyHpRatio, context) {
+  const alive = fighters.filter((f) => !f.downed);
+  const base = (1 - allyHpRatio) * 100 + (enemyHpRatio - 0.5) * 30;
+  let modifiers = 0;
+  if (context.hasElsie) modifiers += BATTLE_TUNING.scoreElsieBonus;
+  if (context.hasSmoke) modifiers += BATTLE_TUNING.scoreSmokeBonus;
+  if (context.hasEffectiveItem) modifiers += BATTLE_TUNING.scoreEffectiveItemPenalty;
+  if (enemyHpRatio <= BATTLE_TUNING.enemyLowHpRatio) modifiers += BATTLE_TUNING.scoreEnemyLowHpPenalty;
+  const score = Math.round(base + modifiers);
+  const votes = alive.map((f) => {
+    const jobBase = BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault;
+    const shift = BATTLE_TUNING.retreatPersonalityShift[f.personality] ?? 0;
+    const threshold = jobBase + shift;
+    return { id: f.id, name: f.name, threshold, score, retreat: score >= threshold };
+  });
+  const retreatCount = votes.filter((v) => v.retreat).length;
+  const needed = Math.floor(alive.length / 2) + 1;
+  return { score, votes, retreatCount, needed, retreat: retreatCount >= needed };
+}
+
+function battleStageLabel(outcome, allyHpRatio) {
+  if (outcome === "victory") {
+    return 1 - allyHpRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
+  }
+  if (outcome === "withdraw_first") return "軽";
+  if (outcome === "withdraw_second" || outcome === "stalemate") return "重";
+  return "致命";
+}
+
+function simulateBattle(quest, party, itemIds, rng) {
+  const enemy = getEnemyForQuest(quest);
+  if (!enemy) return null;
+  const random = rng ?? Math.random;
+  const humans = party.filter((a) => a.species !== "dog");
+  if (humans.length === 0) return null;
+  const hasElsie = party.some((a) => a.species === "dog");
+  const heldItems = Array.isArray(itemIds) ? itemIds : [];
+  const hasSmoke = heldItems.includes("item_smoke");
+  const effectiveIds = Array.isArray(quest.battleEffectiveItemIds) ? quest.battleEffectiveItemIds : [];
+  const hasEffectiveItem = effectiveIds.some((id) => heldItems.includes(id));
+  const context = { hasElsie, hasSmoke, hasEffectiveItem };
+
+  const fighters = humans.map((a) => {
+    const maxHp = BATTLE_TUNING.jobHp[a.job] ?? BATTLE_TUNING.defaultHp;
+    return {
+      id: a.id,
+      name: getDisplayName(a),
+      job: a.job,
+      personality: a.personality,
+      courage: a.stats?.courage ?? 3,
+      combat: a.stats?.combat ?? 1,
+      weaponPower: a.weapon?.power ?? 0,
+      weaponGuard: a.weapon?.guard ?? 0,
+      hp: maxHp,
+      maxHp,
+      downed: false
+    };
+  });
+
+  const partyMaxHp = fighters.reduce((sum, f) => sum + f.maxHp, 0);
+  let enemyHp = enemy.hp;
+  const decisions = [];
+  const roundLog = [];
+  let outcome = null;
+  let rounds = 0;
+
+  const allyRatio = () => fighters.reduce((sum, f) => sum + Math.max(0, f.hp), 0) / partyMaxHp;
+  const enemyRatio = () => Math.max(0, enemyHp) / enemy.hp;
+  const variance = () => BATTLE_TUNING.varianceMin + random() * (BATTLE_TUNING.varianceMax - BATTLE_TUNING.varianceMin);
+
+  const first = computeBattleRetreatDecision(fighters, allyRatio(), enemyRatio(), context);
+  decisions.push({ at: "first", ...first });
+  if (first.retreat) {
+    outcome = "withdraw_first";
+  } else {
+    for (let round = 1; round <= BATTLE_TUNING.maxRounds; round++) {
+      rounds = round;
+      if (round === BATTLE_TUNING.secondDecisionRound) {
+        const second = computeBattleRetreatDecision(fighters, allyRatio(), enemyRatio(), context);
+        decisions.push({ at: "second", ...second });
+        if (second.retreat) {
+          outcome = "withdraw_second";
+          break;
+        }
+      }
+      const alive = fighters.filter((f) => !f.downed);
+      const offense = alive.reduce(
+        (sum, f) => sum + f.combat * BATTLE_TUNING.offensePerCombat + f.weaponPower * BATTLE_TUNING.offensePerWeaponPower,
+        0
+      );
+      const dealt = Math.round(offense * variance());
+      enemyHp -= dealt;
+      const front = pickBattleFront(fighters);
+      const incoming = enemy.threat * variance();
+      const others = alive.filter((f) => f.id !== front.id);
+      const hits = [];
+      alive.forEach((f) => {
+        const frontShare = others.length > 0 ? BATTLE_TUNING.frontDamageShare : 1;
+        const share = f.id === front.id
+          ? incoming * frontShare
+          : incoming * (1 - BATTLE_TUNING.frontDamageShare) / others.length;
+        const damage = Math.max(0, Math.round(share - f.weaponGuard));
+        f.hp -= damage;
+        if (f.hp <= 0) f.downed = true;
+        hits.push({ id: f.id, damage, hp: Math.max(0, f.hp) });
+      });
+      roundLog.push({ round, dealt, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
+      if (enemyHp <= 0) {
+        outcome = "victory";
+        break;
+      }
+      if (fighters.every((f) => f.downed)) {
+        outcome = "defeat";
+        break;
+      }
+    }
+    if (!outcome) outcome = "stalemate";
+  }
+
+  const finalAllyRatio = allyRatio();
+  return {
+    enemyId: enemy.id,
+    enemyName: enemy.name,
+    outcome,
+    stage: battleStageLabel(outcome, finalAllyRatio),
+    rounds,
+    allyHpRatio: Math.round(finalAllyRatio * 100) / 100,
+    enemyHpRatio: Math.round(enemyRatio() * 100) / 100,
+    frontId: pickBattleFront(fighters)?.id ?? fighters[0].id,
+    members: fighters.map((f) => ({ id: f.id, name: f.name, job: f.job, hp: Math.max(0, f.hp), maxHp: f.maxHp, downed: f.downed })),
+    decisions,
+    roundLog,
+    smoke: { held: hasSmoke, questContinues: hasSmoke && (outcome === "withdraw_first" || outcome === "withdraw_second") }
+  };
+}
+
+window.debugBattleSim = function (questId = "quest_barn_bite", trials = 20, partyIds = null) {
+  const quest = window.masterQuests.find((q) => q.id === questId);
+  if (!quest) return console.warn(`依頼が見つかりません: ${questId}`);
+  const ids = partyIds ?? ["adv_mina", "adv_gadd", "adv_elne", "adv_row"];
+  const party = ids
+    .map((id) => window.masterAdventurers.find((a) => a.id === id))
+    .filter(Boolean);
+  const tally = {};
+  let lastResult = null;
+  for (let i = 0; i < trials; i++) {
+    lastResult = simulateBattle(quest, party, [], Math.random);
+    if (!lastResult) return console.warn(`敵データがありません: ${quest.enemyId ?? "enemyId未設定"}`);
+    const key = `${lastResult.outcome}（${lastResult.stage}）`;
+    tally[key] = (tally[key] ?? 0) + 1;
+  }
+  console.log(`--- debugBattleSim: ${quest.title} × ${trials}回 / 編成: ${party.map((a) => getDisplayName(a)).join("、")} ---`);
+  console.table(tally);
+  console.log("最終試行の詳細:", lastResult);
+  return tally;
+};
+// === 戦闘エンジンここまで ====================================================

@@ -88,6 +88,7 @@ window.masterQuests = [
     observationTarget: "嚙みつく「なにか」",
     tensionBase: 72,
     tensionRange: 18,
+    enemyId: "enemy_barn_biter",
     summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
   },
   {
