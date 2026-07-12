@@ -1,0 +1,2 @@
+# シェルスクリプトは常に LF で取り出す（Windows でも bash がそのまま実行できるように）
+*.sh text eol=lf
