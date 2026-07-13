@@ -974,6 +974,41 @@ hr.soft {
   .main-nav {
     grid-template-columns: 1fr 1fr;
   }
+
+  .sidebar-note {
+    display: none;
+  }
+
+  .sidebar {
+    padding: 12px 18px;
+  }
+
+  .brand {
+    margin-bottom: 12px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .brand h1 {
+    font-size: 16px;
+  }
+
+  .brand p {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .main-nav {
+    gap: 8px;
+  }
+
+  .nav-button {
+    padding: 9px 14px;
+  }
 }
 
 /* ハイライトボックス */
