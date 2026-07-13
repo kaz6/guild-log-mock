@@ -172,6 +172,34 @@ window.masterQuests = [
     summary: "生活圏の外縁を抜ける隊商を護る。道中で徒党に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。"
   },
   {
+    id: "quest_caravan_search",
+    title: "隊商の緊急捜索",
+    category: "捜索",
+    danger: "中",
+    area: "生活圏の外縁を抜ける街道",
+    recommended: ["斥候"],
+    tags: ["捜索", "隊商", "緊急", "護衛失敗"],
+    observationTarget: "なし",
+    tensionBase: 50,
+    tensionRange: 25,
+    hidden: true,
+    summary: "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。"
+  },
+  {
+    id: "quest_caravan_lastchance",
+    title: "最後の手がかり",
+    category: "捜索",
+    danger: "高",
+    area: "生活圏の外縁を抜ける街道",
+    recommended: ["斥候"],
+    tags: ["捜索", "隊商", "最後", "緊急"],
+    observationTarget: "なし",
+    tensionBase: 60,
+    tensionRange: 25,
+    hidden: true,
+    summary: "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。"
+  },
+  {
     id: "quest_old_stele_rubbing",
     title: "古い石碑の拓本",
     category: "記録",

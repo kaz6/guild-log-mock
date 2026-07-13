@@ -71,6 +71,7 @@ function createInitialState() {
     lastObservationUpdate: null,
     beastLog: {},
     reportMemos: [],
+    searchChain: null,
     player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
   };
 }
@@ -647,6 +648,25 @@ function checkExpeditionCompletion() {
   appendPartyBanterToReport(report, state.expedition);
   appendGrowthLogToReport(report, state.expedition);
   state.reports.unshift(report);
+
+  // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
+  if (report.hiddenTags?.caravan && report.hiddenTags?.branch === "fail" && !state.searchChain) {
+    state.searchChain = { stage: 1, sourceReportId: report.id };
+  }
+
+  // 捜索依頼の報告 → チェーンの進行・解決
+  if (report.hiddenTags?.searchChain) {
+    const { searchStage, searchSuccess } = report.hiddenTags;
+    if (searchSuccess === true) {
+      state.searchChain = null;
+    } else if (searchStage === 1) {
+      if (state.searchChain) state.searchChain.stage = 2;
+    } else if (searchStage === 2) {
+      state.searchChain = null;
+      state.worldState.attachmentScore -= 2; // 隊商ロストの恒久ペナルティ
+    }
+  }
+
   state.activeResultReportId = report.id;
   state.expedition.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
@@ -916,11 +936,23 @@ function renderQuests() {
   const cond = getCurrentConditions();
   const timeOptions = ["朝", "昼", "夕方", "夜"];
   const weatherOptions = ["晴れ", "曇り", "小雨", "霧", "風が強い"];
+
+  const searchChain = state.searchChain;
+  const urgentQuestId = searchChain ? (searchChain.stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search") : null;
+  const urgentQuest = urgentQuestId ? getQuest(urgentQuestId) : null;
+  const boardQuests = state.quests.filter((quest) => !quest.hidden);
+  if (urgentQuest) boardQuests.unshift(urgentQuest);
+
   app.innerHTML = `
     <div class="weather-bar">
       <span class="weather-bar-icon">${cond.timeIcon}</span>
       <span class="weather-bar-text">現在：${cond.timeOfDay} / ${cond.weather}</span>
     </div>
+    ${searchChain ? `
+    <div class="weather-bar">
+      <span class="weather-bar-icon">🚨</span>
+      <span class="weather-bar-text">隊商を護り切れなかった。捜索に向かえる者を編成せよ。</span>
+    </div>` : ""}
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間帯：</span>
       ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
@@ -941,7 +973,7 @@ function renderQuests() {
           ${state.expedition ? `<span class="status-pill away">遠征中のため新規出発不可</span>` : `<span class="status-pill good">出発可能</span>`}
         </div>
         <div class="grid-3">
-          ${state.quests.map(questCardHtml).join("")}
+          ${boardQuests.map((quest) => questCardHtml(quest, quest.id === urgentQuestId)).join("")}
         </div>
       </div>
     </section>
@@ -996,13 +1028,16 @@ function renderQuests() {
   `;
 }
 
-function questCardHtml(quest) {
+function questCardHtml(quest, isUrgent = false) {
   const selected = selectedQuestId === quest.id;
   const tags = quest.tags ?? quest.recommended ?? [];
   const isLifeQuest = quest.category === "生活";
   return `
     <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${quest.id}')">
-      <h3>${escapeHtml(quest.title)}</h3>
+      <div class="card-title">
+        <h3>${isUrgent ? "🚨 " : ""}${escapeHtml(quest.title)}</h3>
+        ${isUrgent ? `<span class="status-pill away">緊急</span>` : ""}
+      </div>
       <p class="muted">${escapeHtml(quest.summary)}</p>
       <div class="kv">
         <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
@@ -1688,7 +1723,9 @@ function renderResult(reportId) {
   const quest = getQuest(report.questId);
   const party = report.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
   const branch = report.hiddenTags?.branch;
-  const safetyLine = branch === "great_wound" || branch === "fail" ? "負傷者あり" : "全員無事に帰還";
+  const safetyLine = branch === "lost" ? "全員帰還・隊商は戻らず"
+    : branch === "great_wound" || branch === "fail" ? "負傷者あり"
+    : "全員無事に帰還";
   const growth = report.growth;
   const growthAdv = growth ? getAdventurer(growth.advId) : null;
 
@@ -4466,6 +4503,87 @@ function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context
   return logs;
 }
 
+// 隊商捜索チェーン（護衛失敗の後日談）：斥候かエルシーがいれば手がかりを追える。
+function caravanSearchOutcomeText(stage, found, party, rng) {
+  const variants = {
+    stage1_found: {
+      result: "隊商奪還",
+      summary: "足跡と気配を頼りに徒党を追い、隊商を無事に取り戻した。",
+      line: `側道の茂みに隠された荷馬車を見つけた。商人は無事で、荷にも大きな欠けはなかった。`,
+      after: `報告書には「隊商奪還。商人・荷とも無事」と記されている。`,
+      history: "護衛失敗後の緊急捜索。隊商を無事奪還。"
+    },
+    stage1_lost: {
+      result: "手がかりのみ",
+      summary: "徒党の足跡は追えたが、隊商そのものには辿り着けなかった。",
+      line: `踏み荒らされた跡は途中で他の道に紛れ、それ以上は追い切れなかった。`,
+      after: `報告書には「手がかりのみ。最後の望みを賭けた再捜索が要る」と記されている。`,
+      history: "護衛失敗後の緊急捜索。手がかりのみで隊商は見つからず。"
+    },
+    stage2_found: {
+      result: "辛くも奪還",
+      summary: "最後の手がかりを頼りに追い詰め、辛くも隊商を取り戻した。",
+      line: `古い轍の先に、置き去りにされた荷馬車と商人の姿があった。`,
+      after: `報告書には「隊商、辛くも奪還。これ以上の捜索は要さず」と記されている。`,
+      history: "最後の捜索。辛くも隊商を取り戻した。"
+    },
+    stage2_lost: {
+      result: "隊商喪失",
+      summary: "手がかりは尽き、商人と荷は最後まで見つからなかった。",
+      line: `古い轍もそこで途絶え、それより先の痕跡は残っていなかった。`,
+      after: `報告書には「隊商、ついに見つからず。捜索を打ち切る」と短く記されている。`,
+      history: "最後の捜索。手がかりが尽き、隊商はついに見つからなかった。"
+    }
+  };
+  const key = `stage${stage}_${found ? "found" : "lost"}`;
+  return variants[key] ?? variants.stage1_lost;
+}
+
+function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const tensionValue = context.tensionValue ?? 50;
+  const stage = context.stage ?? 1;
+  const found = context.found ?? false;
+  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  const nm = (adv) => (adv ? getDisplayName(adv) : null);
+  const scout = party.find((a) => a.job === "斥候" && isHumanAdventurer(a));
+  const elsie = party.find((a) => a.id === "adv_elsie");
+  const logs = [];
+
+  logs.push(pick(stage === 1 ? [
+    `隊商が消えた街道の外れへ、急ぎ引き返した。荷馬車の轍と争った跡が残っていた。`,
+    `商人と荷が消えた場所には、踏み荒らされた土と壊れた木箱の欠片が散らばっていた。`
+  ] : [
+    `最後の手がかりを頼りに、もう一度街道の外れへ向かった。残された時間は多くない。`,
+    `前回追い切れなかった轍の先を、もう一度たどり直した。`
+  ]));
+
+  if (scout) {
+    logs.push(`${nm(scout)}は轍と足跡を読み、徒党が向かった方角を絞り込んだ。`);
+  }
+  if (elsie) {
+    logs.push(pick([
+      `エルシーは荷馬車の匂いが残る地面に鼻を押し当て、迷わず一方向へ進み始めた。`,
+      `エルシーは低く唸りながら、徒党の匂いを追って茂みの奥へ進んだ。`
+    ]));
+  }
+  if (!scout && !elsie) {
+    logs.push(pick([
+      `手がかりになりそうな跡はいくつかあったが、どれを追うべきか一行だけでは判断がつかなかった。`,
+      `轍は途中で他の道と交わり、追うべき方向を絞り込めなかった。`
+    ]));
+  }
+
+  logs.push(found ? pick([
+    `やがて轍は一つの方角にまとまり、争った跡の先に荷馬車の影が見えた。`,
+    `匂いと足跡が一致した先に、置き去りにされた荷馬車があった。`
+  ]) : pick([
+    `手がかりは途中で途切れ、それ以上は追い切れなかった。`,
+    `轍も匂いも、途中で他の痕跡に紛れて見失った。`
+  ]));
+
+  return logs;
+}
+
 function steleRubbingOutcomeText(outcome, party, rng) {
   const variants = {
     拓本完了: {
@@ -5348,6 +5466,61 @@ function generateReport(expedition) {
       tensionValue,
       tensionLevel,
       hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch },
+      wrapElsie: true
+    });
+  }
+
+  // 隊商捜索チェーン：護衛失敗の後日談（stage1＝緊急捜索／stage2＝最後の手がかり）
+  if (quest.id === "quest_caravan_search" || quest.id === "quest_caravan_lastchance") {
+    const stage = quest.id === "quest_caravan_search" ? 1 : 2;
+    const found = party.some((a) => a.job === "斥候") || party.some((a) => a.id === "adv_elsie");
+
+    const soloAdv = isSoloHumanParty(party);
+    add("", soloAdv
+      ? `${partySubject(party)}は「${quest.title}」のため、ひとりで${quest.area}へ向かった。`
+      : `${partySubject(party)}は「${quest.title}」のため、${quest.area}へ向かった。`);
+    const searchSupplyDesc = party.map((adv) => {
+      const advItems = getAdvItemIds(adventurerItemIds, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
+      return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
+    }).filter(Boolean);
+    add("", `支給品：${searchSupplyDesc.length > 0 ? searchSupplyDesc.join(" / ") : "なし"}。`);
+
+    const searchLogs = generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, stage, found });
+    searchLogs.forEach((text) => add("action", text));
+
+    const outcomeInfo = caravanSearchOutcomeText(stage, found, party, rng);
+    add("action", outcomeInfo.line);
+    add("afterglow", outcomeInfo.after);
+
+    return finalizeQuestReport({
+      expedition,
+      quest,
+      party,
+      logs,
+      rng,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, {
+        result: outcomeInfo.result,
+        elsieRoleNote: "鼻での追跡で",
+        roleNoteFor: (adv) => {
+          if (adv.job === "斥候") return "足跡の追跡で";
+          if (adv.personality === "慎重") return "手がかりの見極めで";
+          return "捜索の同行で";
+        }
+      }),
+      departConditions,
+      adventurerItemIds,
+      itemIds,
+      tensionValue,
+      tensionLevel,
+      hiddenTags: {
+        searchChain: true,
+        searchStage: stage,
+        searchSuccess: found,
+        branch: found ? "recovered" : (stage === 2 ? "lost" : "fail")
+      },
       wrapElsie: true
     });
   }
