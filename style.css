@@ -532,6 +532,23 @@ textarea {
   border-left-color: var(--blue);
 }
 
+/* 戦闘ドラマログの色分け（文字色のみ／ダーク背景での視認性優先）。
+   罫線は action と同じにして、変化が文字色だけに見えるようにする。 */
+.log-line.battle-start,
+.log-line.status-hurt,
+.log-line.status-grave {
+  border-left-color: var(--blue);
+}
+
+.log-line.battle-start,
+.log-line.status-grave {
+  color: #ff6b5b;
+}
+
+.log-line.status-hurt {
+  color: #ffa94d;
+}
+
 .log-line.drama {
   border-left-color: var(--accent-2);
 }

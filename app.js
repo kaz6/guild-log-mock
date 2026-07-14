@@ -4451,7 +4451,8 @@ function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context
     `荷を狙う野盗が、数を頼みに街道へ出てきた。`
   ]));
 
-  return logs;
+  // 末尾の1行は必ず遭遇（戦闘開始）の一文。色分け用に battle-start を付け、他は action。
+  return logs.map((text, i) => ({ kind: i === logs.length - 1 ? "battle-start" : "action", text }));
 }
 
 // 隊商護衛の交戦を events から「1行1アクション」のドラマログへ翻訳する（案D・スライス2）。
@@ -4469,45 +4470,46 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   const dealLine = (ev) => {
     const n = ev.damage, big = n >= 14, name = ev.attackerName, job = jobById[ev.attackerId];
     if (job === "斥候") return big
-      ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に-${n}！）`
-      : `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に-${n}）`;
+      ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に${n}ダメージ！）`
+      : `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に${n}ダメージ）`;
     if (job === "戦士") return big
-      ? `${name}の一撃が${enemyN}をまとめて弾き飛ばした！（${enemyN}に-${n}！）`
-      : pick([`${name}が踏み込み、${enemyN}を打ち据えた（${enemyN}に-${n}）`, `${name}が前へ出て、${enemyN}を弾き返した（${enemyN}に-${n}）`]);
+      ? `${name}の一撃が${enemyN}をまとめて弾き飛ばした！（${enemyN}に${n}ダメージ！）`
+      : pick([`${name}が踏み込み、${enemyN}を打ち据えた（${enemyN}に${n}ダメージ）`, `${name}が前へ出て、${enemyN}を弾き返した（${enemyN}に${n}ダメージ）`]);
     if (job === "見習い盾役") return big
-      ? `${name}が盾ごと体当たりし、${enemyN}を押し崩した！（${enemyN}に-${n}！）`
-      : pick([`${name}は盾で押し込み、${enemyN}の体勢を崩した（${enemyN}に-${n}）`, `${name}は突いてきた${enemyN}を打ち払った（${enemyN}に-${n}）`]);
+      ? `${name}が盾ごと体当たりし、${enemyN}を押し崩した！（${enemyN}に${n}ダメージ！）`
+      : pick([`${name}は盾で押し込み、${enemyN}の体勢を崩した（${enemyN}に${n}ダメージ）`, `${name}は突いてきた${enemyN}を打ち払った（${enemyN}に${n}ダメージ）`]);
     if (job === "薬草師") return pick([
-      `${name}は慣れない手つきで棒を振るった（${enemyN}に-${n}）`,
-      `${name}はおそるおそる棒を突き出した（${enemyN}に-${n}）`,
-      `${name}は戦い慣れない様子で、それでも棒を振るった（${enemyN}に-${n}）`
+      `${name}は慣れない手つきで棒を振るった（${enemyN}に${n}ダメージ）`,
+      `${name}はおそるおそる棒を突き出した（${enemyN}に${n}ダメージ）`,
+      `${name}は戦い慣れない様子で、それでも棒を振るった（${enemyN}に${n}ダメージ）`
     ]);
-    return `${name}は${enemyN}へ打ちかかった（${enemyN}に-${n}${big ? "！" : ""}）`;
+    return `${name}は${enemyN}へ打ちかかった（${enemyN}に${n}ダメージ${big ? "！" : ""}）`;
   };
 
   const finisherLine = (ev) => {
     const n = ev.damage, name = ev.attackerName, job = jobById[ev.attackerId];
-    if (job === "斥候") return `${name}が最後の矢をつがえる。放たれた一射が決め手になった。${enemyN}は算を乱し、街道の奥へ引いていった（${enemyN}に-${n}！）`;
-    if (job === "戦士") return `${name}の一撃で${enemyN}は総崩れになり、街道から姿を消した（${enemyN}に-${n}！）`;
-    return `${name}の一撃が決め手になった。${enemyN}は算を乱して退いていった（${enemyN}に-${n}！）`;
+    if (job === "斥候") return `${name}が最後の矢をつがえる。放たれた一射が決め手になった。${enemyN}は算を乱し、街道の奥へ引いていった（${enemyN}に${n}ダメージ！）`;
+    if (job === "戦士") return `${name}の一撃で${enemyN}は総崩れになり、街道から姿を消した（${enemyN}に${n}ダメージ！）`;
+    return `${name}の一撃が決め手になった。${enemyN}は算を乱して退いていった（${enemyN}に${n}ダメージ！）`;
   };
 
   const takeLine = (ev) => {
     const n = ev.damage, big = n >= 10, name = ev.targetName, job = jobById[ev.targetId];
     const frontish = job === "戦士" || job === "見習い盾役";
     if (frontish) return big
-      ? `${name}はよろけた拍子に、${enemyN}の一撃をまともに受けた！（${name}に-${n}！）`
-      : `${name}は前で受け止めたが、衝撃は殺しきれなかった（${name}に-${n}）`;
+      ? `${name}はよろけた拍子に、${enemyN}の一撃をまともに受けた！（${name}に${n}ダメージ！）`
+      : `${name}は前で受け止めたが、衝撃は殺しきれなかった（${name}に${n}ダメージ）`;
     return big
-      ? `${name}は回り込まれ、${enemyN}の一撃をもらった！（${name}に-${n}！）`
-      : `${name}はかすめる一撃を払い、浅く傷を負った（${name}に-${n}）`;
+      ? `${name}は回り込まれ、${enemyN}の一撃をもらった！（${name}に${n}ダメージ！）`
+      : `${name}はかすめる一撃を払い、浅く傷を負った（${name}に${n}ダメージ）`;
   };
 
+  // 状態遷移行は色分け対象：手負い=status-hurt（橙）／深手・戦闘不能=status-grave（赤）。
   const statusLine = (ev) => {
     const name = ev.targetName;
-    if (ev.to === "手負い") return pick([`${name}の息が上がってきた。`, `${name}の動きから、少しずつ精彩が失われていく。`]);
-    if (ev.to === "深手") return pick([`${name}の構えが崩れた。もう長くは保たない。`, `${name}は足を引きずり始めた。傷が深い。`]);
-    if (ev.to === "戦闘不能") return pick([`${name}は膝をつき、そのまま動けなくなった。`, `${name}が崩れ落ちた。もう立ち上がれない。`]);
+    if (ev.to === "手負い") return { kind: "status-hurt", text: pick([`${name}の息が上がってきた。`, `${name}の動きから、少しずつ精彩が失われていく。`]) };
+    if (ev.to === "深手") return { kind: "status-grave", text: pick([`${name}の構えが崩れた。もう長くは保たない。`, `${name}は足を引きずり始めた。傷が深い。`]) };
+    if (ev.to === "戦闘不能") return { kind: "status-grave", text: pick([`${name}は膝をつき、そのまま動けなくなった。`, `${name}が崩れ落ちた。もう立ち上がれない。`]) };
     return null;
   };
 
@@ -4548,16 +4550,17 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   // エンジンはラウンド内を同時解決（与ダメ一括→被ダメ一括）で記録するため、
   // トドメ行（決着宣言）はイベント位置のまま出すと同ラウンドの被弾行より前に来てしまう。
   // 読み物としての決着は最後に置く：トドメ行だけ退避し、全戦闘行の末尾に付ける。
+  // 戻り値は {kind, text} の配列。kind はログ行のCSSクラス（状態遷移行のみ色分け用の専用kind）。
   const lines = [];
   let finisher = null;
   battle.events.forEach((ev, i) => {
     if (ev.type === "deal") {
-      if (i === killIndex) finisher = finisherLine(ev);
-      else lines.push(dealLine(ev));
+      if (i === killIndex) finisher = { kind: "action", text: finisherLine(ev) };
+      else lines.push({ kind: "action", text: dealLine(ev) });
     }
-    else if (ev.type === "take") lines.push(takeLine(ev));
+    else if (ev.type === "take") lines.push({ kind: "action", text: takeLine(ev) });
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
-    else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push(l));
+    else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push({ kind: "action", text: l }));
   });
   if (finisher) lines.push(finisher);
   return lines;
@@ -5493,10 +5496,10 @@ function generateReport(expedition) {
     add("", `支給品：${caravanSupplyDesc.length > 0 ? caravanSupplyDesc.join(" / ") : "なし"}。`);
 
     const caravanLogs = generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    caravanLogs.forEach((text) => add("action", text));
+    caravanLogs.forEach((line) => add(line.kind, line.text));
 
     // 交戦ドラマログ（案D・スライス2）：events を1行1アクションで描画。結果ログより前に入れる。
-    generateCaravanBattleDramaLog(battle, party, rng).forEach((text) => add("action", text));
+    generateCaravanBattleDramaLog(battle, party, rng).forEach((line) => add(line.kind, line.text));
 
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
     add("action", outcomeInfo.line);
