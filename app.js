@@ -4386,14 +4386,14 @@ function caravanEscortOutcomeText(branch, party, rng) {
   const variants = {
     great_unhurt: {
       result: "護衛成功",
-      summary: "隊商を狙う徒党を正面から退け、荷を欠かさず外縁の先まで送り届けた。負傷者なし。",
-      line: `徒党は間合いを詰めきれず、荷馬車は止まることなく街道を抜けた。`,
+      summary: "隊商を狙う野盗を正面から退け、荷を欠かさず外縁の先まで送り届けた。負傷者なし。",
+      line: `野盗は間合いを詰めきれず、荷馬車は止まることなく街道を抜けた。`,
       after: `報告書には「隊商、無事通過。負傷者なし」と記されている。`,
       history: "街道の外れを行く隊商の護衛。強行突破で無傷、隊商を送り届けた。"
     },
     great_wound: {
       result: "護衛成功（負傷）",
-      summary: "徒党の襲撃を受け止め、負傷しながらも押し返して隊商を通した。荷は守り切った。",
+      summary: "野盗の襲撃を受け止め、負傷しながらも押し返して隊商を通した。荷は守り切った。",
       line: `幾人かは傷を負ったが、隊商は止まらずに外縁の先へ抜けた。`,
       after: `報告書には「隊商通過。護衛に負傷あり、荷の損失なし」と記されている。`,
       history: "街道の外れを行く隊商の護衛。負傷しつつ強行突破、隊商を送り届けた。"
@@ -4401,14 +4401,14 @@ function caravanEscortOutcomeText(branch, party, rng) {
     evade: {
       result: "離脱・完遂",
       summary: "正面からの突破は避け、煙幕で視界を奪って隊商を先に行かせ、戦わずに離脱した。",
-      line: `煙の中で徒党の足が止まった隙に、隊商は街道の先へ抜けていった。`,
+      line: `煙の中で野盗の足が止まった隙に、隊商は街道の先へ抜けていった。`,
       after: `報告書には「交戦回避。煙幕により隊商を離脱させ、被害なし」と記されている。`,
       history: "街道の外れを行く隊商の護衛。煙幕で離脱回避、被害なく隊商を通した。"
     },
     fail: {
       result: "護衛失敗",
-      summary: "徒党の数に押し込まれ、隊商を護り切れないまま街道から退いた。",
-      line: `隊商とははぐれ、荷馬車は徒党の側へ取り残された。`,
+      summary: "野盗の数に押し込まれ、隊商を護り切れないまま街道から退いた。",
+      line: `隊商とははぐれ、荷馬車は野盗の側へ取り残された。`,
       after: `報告書には「隊商を護り切れず。後日の捜索が要る」と短く記されている。`,
       history: "街道の外れを行く隊商の護衛。護り切れず撤退、後日の捜索へ。"
     }
@@ -4417,19 +4417,12 @@ function caravanEscortOutcomeText(branch, party, rng) {
 }
 
 function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context = {}) {
-  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  // 遭遇フリ（到着〜遭遇）のみ。交戦の blow-by-blow は generateCaravanBattleDramaLog（案D）へ分離。
   const tensionValue = context.tensionValue ?? 55;
-  const battle = context.battle ?? null;
-  const branch = context.branch ?? "fail";
   const pick = (list) => pickTensionOne(list, tensionValue, rng);
   const nm = (adv) => (adv ? getDisplayName(adv) : null);
-  const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId) || "一行の誰か";
   const scout = findByTrait(party, "job", "斥候");
   const elsie = party.find((a) => a.id === "adv_elsie");
-  const frontName = battle ? (battle.members.find((m) => m.id === battle.frontId)?.name ?? null) : null;
-  const wounded = battle ? battle.members.filter((m) => m.downed || m.hp < m.maxHp * 0.6).map((m) => m.name) : [];
-  const hasSmoke = itemIds.includes("item_smoke");
-  const hasBandage = itemIds.includes("item_bandage");
   const logs = [];
 
   logs.push(pick([
@@ -4454,53 +4447,112 @@ function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context
   }
 
   logs.push(pick([
-    `茂みが揺れ、街道の外れから徒党が現れて行く手を塞いだ。`,
-    `荷を狙う徒党が、数を頼みに街道へ出てきた。`
+    `茂みが揺れ、街道の外れから野盗が現れて行く手を塞いだ。`,
+    `荷を狙う野盗が、数を頼みに街道へ出てきた。`
   ]));
 
-  if (branch === "great_unhurt") {
-    logs.push(frontName
-      ? `${frontName}が荷馬車の前に立ち、最初の一撃を正面から受け止めた。`
-      : `一行は荷馬車の前に立ち、最初の一撃を正面から受け止めた。`);
-    logs.push(pick([
-      `間合いを詰めさせず、徒党は荷に手をかける前に押し返された。`,
-      `数の圧はあったが、前衛が崩れず、徒党は間合いを保てなかった。`
-    ]));
-    if (hasBandage && rng() < 0.5) logs.push(`${holderName("item_bandage")}は念のため包帯を手に構えたが、使う場面はなかった。`);
-  } else if (branch === "great_wound") {
-    logs.push(frontName
-      ? `${frontName}が前で受け続けたが、徒党は数を頼みに横から回り込もうとした。`
-      : `前衛が受け続けたが、徒党は数を頼みに横から回り込もうとした。`);
-    logs.push(pick([
-      `打ち合いは長引き、幾人かが傷を負いながらも、荷馬車の前を空けなかった。`,
-      `押し込まれかけたが、粘って徒党を退け、隊商の前を守り抜いた。`
-    ]));
-    if (hasBandage) logs.push(`${holderName("item_bandage")}は${wounded.length > 0 ? wounded[0] + "の" : ""}傷に手早く包帯を巻き、隊商を止めずに歩かせた。`);
-    else if (wounded.length > 0) logs.push(`${wounded[0]}は傷を庇いながらも、隊商の前を離れなかった。`);
-  } else if (branch === "evade") {
-    const smokeHolder = hasSmoke ? holderName("item_smoke") : "一行";
-    logs.push(`${smokeHolder}が煙幕を焚くと、街道は白く覆われ、徒党は間合いを見失った。`);
-    logs.push(pick([
-      `煙の中で、隊商だけを先に街道の先へ行かせた。交戦は避けられた。`,
-      `視界の切れた隙に荷馬車を通し、一行はその後を追って離脱した。`
-    ]));
-  } else {
-    logs.push(frontName
-      ? `${frontName}が前で受けたが、徒党の数は途切れず、じりじりと押し込まれた。`
-      : `前衛が受けたが、徒党の数は途切れず、じりじりと押し込まれた。`);
-    if (elsie) {
-      logs.push(pick([
-        `エルシーが徒党の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
-        `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
+  return logs;
+}
+
+// 隊商護衛の交戦を events から「1行1アクション」のドラマログへ翻訳する（案D・スライス2）。
+// ラウンド番号は出さず、動作＋結果＋括弧内の数値で語る。状態変化は文章に溶かす。エルシーはダメージ・状態行に出さない。
+function generateCaravanBattleDramaLog(battle, party, rng) {
+  if (!battle || !Array.isArray(battle.events) || battle.events.length === 0) return [];
+  const random = rng ?? Math.random;
+  const pick = (list) => list[Math.floor(random() * list.length)];
+  const enemyRow = Array.isArray(window.masterEnemies) ? window.masterEnemies.find((e) => e.id === battle.enemyId) : null;
+  const enemyN = enemyRow?.shortName ?? enemyRow?.name ?? battle.enemyName ?? "相手";
+  const jobById = {};
+  party.forEach((a) => { jobById[a.id] = a.job; });
+  const hasElsie = party.some((a) => a.id === "adv_elsie");
+
+  const dealLine = (ev) => {
+    const n = ev.damage, big = n >= 14, name = ev.attackerName, job = jobById[ev.attackerId];
+    if (job === "斥候") return big
+      ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に-${n}！）`
+      : `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に-${n}）`;
+    if (job === "戦士") return big
+      ? `${name}の一撃が${enemyN}をまとめて弾き飛ばした！（${enemyN}に-${n}！）`
+      : pick([`${name}が踏み込み、${enemyN}を打ち据えた（${enemyN}に-${n}）`, `${name}が前へ出て、${enemyN}を弾き返した（${enemyN}に-${n}）`]);
+    if (job === "見習い盾役") return big
+      ? `${name}が盾ごと体当たりし、${enemyN}を押し崩した！（${enemyN}に-${n}！）`
+      : pick([`${name}は盾で押し込み、${enemyN}の体勢を崩した（${enemyN}に-${n}）`, `${name}は突いてきた${enemyN}を打ち払った（${enemyN}に-${n}）`]);
+    if (job === "薬草師") return pick([
+      `${name}は慣れない手つきで棒を振るった（${enemyN}に-${n}）`,
+      `${name}はおそるおそる棒を突き出した（${enemyN}に-${n}）`,
+      `${name}は戦い慣れない様子で、それでも棒を振るった（${enemyN}に-${n}）`
+    ]);
+    return `${name}は${enemyN}へ打ちかかった（${enemyN}に-${n}${big ? "！" : ""}）`;
+  };
+
+  const finisherLine = (ev) => {
+    const n = ev.damage, name = ev.attackerName, job = jobById[ev.attackerId];
+    if (job === "斥候") return `${name}が最後の矢をつがえる。放たれた一射が決め手になった。${enemyN}は算を乱し、街道の奥へ引いていった（${enemyN}に-${n}！）`;
+    if (job === "戦士") return `${name}の一撃で${enemyN}は総崩れになり、街道から姿を消した（${enemyN}に-${n}！）`;
+    return `${name}の一撃が決め手になった。${enemyN}は算を乱して退いていった（${enemyN}に-${n}！）`;
+  };
+
+  const takeLine = (ev) => {
+    const n = ev.damage, big = n >= 10, name = ev.targetName, job = jobById[ev.targetId];
+    const frontish = job === "戦士" || job === "見習い盾役";
+    if (frontish) return big
+      ? `${name}はよろけた拍子に、${enemyN}の一撃をまともに受けた！（${name}に-${n}！）`
+      : `${name}は前で受け止めたが、衝撃は殺しきれなかった（${name}に-${n}）`;
+    return big
+      ? `${name}は回り込まれ、${enemyN}の一撃をもらった！（${name}に-${n}！）`
+      : `${name}はかすめる一撃を払い、浅く傷を負った（${name}に-${n}）`;
+  };
+
+  const statusLine = (ev) => {
+    const name = ev.targetName;
+    if (ev.to === "手負い") return pick([`${name}の息が上がってきた。`, `${name}の動きから、少しずつ精彩が失われていく。`]);
+    if (ev.to === "深手") return pick([`${name}の構えが崩れた。もう長くは保たない。`, `${name}は足を引きずり始めた。傷が深い。`]);
+    if (ev.to === "戦闘不能") return pick([`${name}は膝をつき、そのまま動けなくなった。`, `${name}が崩れ落ちた。もう立ち上がれない。`]);
+    return null;
+  };
+
+  const retreatLines = (ev) => {
+    const out = [];
+    if (ev.at === "first") {
+      if (ev.retreat) out.push(pick([
+        `まともにやり合うのは危険と見て、一行は早々に距離を取った。`,
+        `数が多すぎると見て、一行は交戦を避けて退いた。`
+      ]));
+    } else if (ev.retreat) {
+      out.push(pick([
+        `これ以上は保たないと見て、隊商を先に行かせ、一行は退いた。`,
+        `踏みとどまる限界だった。隊商を逃がし、一行は街道の外へ退いた。`
+      ]));
+    } else {
+      out.push(pick([
+        `退くか一瞬迷ったが、隊商を置いてはいけないと、一行は踏みとどまった。`,
+        `ここが退き時かと思われたが、一行はもう一歩踏ん張ることを選んだ。`
       ]));
     }
-    logs.push(pick([
-      `荷馬車は徒党の側へ取り残され、一行は隊商を護り切れないまま退いた。`,
-      `数に押され、隊商を残して街道を退くほかなかった。`
+    // 撤退成立時のみエルシーの囮（撤退フレーバー＝ダメージ・状態行ではない）。
+    if (ev.retreat && hasElsie) out.push(pick([
+      `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
+      `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
     ]));
+    return out;
+  };
+
+  // victory時、最後の deal イベントをトドメ扱いにする。
+  let killIndex = -1;
+  if (battle.outcome === "victory") {
+    for (let i = battle.events.length - 1; i >= 0; i--) {
+      if (battle.events[i].type === "deal") { killIndex = i; break; }
+    }
   }
 
-  return logs;
+  const lines = [];
+  battle.events.forEach((ev, i) => {
+    if (ev.type === "deal") lines.push(i === killIndex ? finisherLine(ev) : dealLine(ev));
+    else if (ev.type === "take") lines.push(takeLine(ev));
+    else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
+    else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push(l));
+  });
+  return lines;
 }
 
 // 隊商捜索チェーン（護衛失敗の後日談）：斥候かエルシーがいれば手がかりを追える。
@@ -4508,14 +4560,14 @@ function caravanSearchOutcomeText(stage, found, party, rng) {
   const variants = {
     stage1_found: {
       result: "隊商奪還",
-      summary: "足跡と気配を頼りに徒党を追い、隊商を無事に取り戻した。",
+      summary: "足跡と気配を頼りに野盗を追い、隊商を無事に取り戻した。",
       line: `側道の茂みに隠された荷馬車を見つけた。商人は無事で、荷にも大きな欠けはなかった。`,
       after: `報告書には「隊商奪還。商人・荷とも無事」と記されている。`,
       history: "護衛失敗後の緊急捜索。隊商を無事奪還。"
     },
     stage1_lost: {
       result: "手がかりのみ",
-      summary: "徒党の足跡は追えたが、隊商そのものには辿り着けなかった。",
+      summary: "野盗の足跡は追えたが、隊商そのものには辿り着けなかった。",
       line: `踏み荒らされた跡は途中で他の道に紛れ、それ以上は追い切れなかった。`,
       after: `報告書には「手がかりのみ。最後の望みを賭けた再捜索が要る」と記されている。`,
       history: "護衛失敗後の緊急捜索。手がかりのみで隊商は見つからず。"
@@ -4558,12 +4610,12 @@ function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context
   ]));
 
   if (scout) {
-    logs.push(`${nm(scout)}は轍と足跡を読み、徒党が向かった方角を絞り込んだ。`);
+    logs.push(`${nm(scout)}は轍と足跡を読み、野盗が向かった方角を絞り込んだ。`);
   }
   if (elsie) {
     logs.push(pick([
       `エルシーは荷馬車の匂いが残る地面に鼻を押し当て、迷わず一方向へ進み始めた。`,
-      `エルシーは低く唸りながら、徒党の匂いを追って茂みの奥へ進んだ。`
+      `エルシーは低く唸りながら、野盗の匂いを追って茂みの奥へ進んだ。`
     ]));
   }
   if (!scout && !elsie) {
@@ -5432,8 +5484,11 @@ function generateReport(expedition) {
     }).filter(Boolean);
     add("", `支給品：${caravanSupplyDesc.length > 0 ? caravanSupplyDesc.join(" / ") : "なし"}。`);
 
-    const caravanLogs = generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battle, branch });
+    const caravanLogs = generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     caravanLogs.forEach((text) => add("action", text));
+
+    // 交戦ドラマログ（案D・スライス2）：events を1行1アクションで描画。結果ログより前に入れる。
+    generateCaravanBattleDramaLog(battle, party, rng).forEach((text) => add("action", text));
 
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
     add("action", outcomeInfo.line);

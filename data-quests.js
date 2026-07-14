@@ -169,7 +169,7 @@ window.masterQuests = [
     tensionRange: 25,
     enemyId: "enemy_road_raiders",
     battleEffectiveItemIds: ["item_bandage"],
-    summary: "生活圏の外縁を抜ける隊商を護る。道中で徒党に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。"
+    summary: "生活圏の外縁を抜ける隊商を護る。道中で野盗に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。"
   },
   {
     id: "quest_caravan_search",
