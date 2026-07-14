@@ -4545,13 +4545,21 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     }
   }
 
+  // エンジンはラウンド内を同時解決（与ダメ一括→被ダメ一括）で記録するため、
+  // トドメ行（決着宣言）はイベント位置のまま出すと同ラウンドの被弾行より前に来てしまう。
+  // 読み物としての決着は最後に置く：トドメ行だけ退避し、全戦闘行の末尾に付ける。
   const lines = [];
+  let finisher = null;
   battle.events.forEach((ev, i) => {
-    if (ev.type === "deal") lines.push(i === killIndex ? finisherLine(ev) : dealLine(ev));
+    if (ev.type === "deal") {
+      if (i === killIndex) finisher = finisherLine(ev);
+      else lines.push(dealLine(ev));
+    }
     else if (ev.type === "take") lines.push(takeLine(ev));
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
     else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push(l));
   });
+  if (finisher) lines.push(finisher);
   return lines;
 }
 
