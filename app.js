@@ -5886,6 +5886,15 @@ function battleStageLabel(outcome, allyHpRatio) {
   return "致命";
 }
 
+// 交戦記録用の状態語（案B・スライス1）。閾値：70%以下で手負い、35%以下で深手、HP0で戦闘不能。
+function battleStatusWord(hp, maxHp) {
+  if (hp <= 0) return "戦闘不能";
+  const ratio = hp / maxHp;
+  if (ratio > 0.70) return "健在";
+  if (ratio > 0.35) return "手負い";
+  return "深手";
+}
+
 function simulateBattle(quest, party, itemIds, rng) {
   const enemy = getEnemyForQuest(quest);
   if (!enemy) return null;
@@ -5912,7 +5921,8 @@ function simulateBattle(quest, party, itemIds, rng) {
       weaponGuard: a.weapon?.guard ?? 0,
       hp: maxHp,
       maxHp,
-      downed: false
+      downed: false,
+      status: "健在"
     };
   });
 
@@ -5920,6 +5930,7 @@ function simulateBattle(quest, party, itemIds, rng) {
   let enemyHp = enemy.hp;
   const decisions = [];
   const roundLog = [];
+  const events = []; // 交戦記録用イベント列（案B・スライス1）。既存ロジックからの派生記録のみ。
   let outcome = null;
   let rounds = 0;
 
@@ -5929,6 +5940,7 @@ function simulateBattle(quest, party, itemIds, rng) {
 
   const first = computeBattleRetreatDecision(fighters, allyRatio(), enemyRatio(), context);
   decisions.push({ at: "first", ...first });
+  events.push({ type: "retreat", at: "first", round: 0, retreat: first.retreat });
   if (first.retreat) {
     outcome = "withdraw_first";
   } else {
@@ -5937,6 +5949,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       if (round === BATTLE_TUNING.secondDecisionRound) {
         const second = computeBattleRetreatDecision(fighters, allyRatio(), enemyRatio(), context);
         decisions.push({ at: "second", ...second });
+        events.push({ type: "retreat", at: "second", round, retreat: second.retreat });
         if (second.retreat) {
           outcome = "withdraw_second";
           break;
@@ -5949,6 +5962,16 @@ function simulateBattle(quest, party, itemIds, rng) {
       );
       const dealt = Math.round(offense * variance());
       enemyHp -= dealt;
+      // 与ダメージを各人の攻撃寄与で按分（表示用の派生値。合計 dealt は既存計算のまま）。
+      if (offense > 0 && dealt > 0) {
+        alive.forEach((f) => {
+          const contrib = f.combat * BATTLE_TUNING.offensePerCombat + f.weaponPower * BATTLE_TUNING.offensePerWeaponPower;
+          const personDealt = Math.round(dealt * (contrib / offense));
+          if (personDealt > 0) {
+            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt });
+          }
+        });
+      }
       const front = pickBattleFront(fighters);
       const incoming = enemy.threat * variance();
       const others = alive.filter((f) => f.id !== front.id);
@@ -5962,6 +5985,15 @@ function simulateBattle(quest, party, itemIds, rng) {
         f.hp -= damage;
         if (f.hp <= 0) f.downed = true;
         hits.push({ id: f.id, damage, hp: Math.max(0, f.hp) });
+        if (damage > 0) {
+          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage });
+        }
+        // 状態語は遷移した瞬間だけ記録する（健在→手負い→深手→戦闘不能）。
+        const newStatus = battleStatusWord(f.hp, f.maxHp);
+        if (newStatus !== f.status) {
+          events.push({ type: "status", round, targetId: f.id, targetName: f.name, from: f.status, to: newStatus });
+          f.status = newStatus;
+        }
       });
       roundLog.push({ round, dealt, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
       if (enemyHp <= 0) {
@@ -5989,6 +6021,7 @@ function simulateBattle(quest, party, itemIds, rng) {
     members: fighters.map((f) => ({ id: f.id, name: f.name, job: f.job, hp: Math.max(0, f.hp), maxHp: f.maxHp, downed: f.downed })),
     decisions,
     roundLog,
+    events,
     smoke: { held: hasSmoke, questContinues: hasSmoke && (outcome === "withdraw_first" || outcome === "withdraw_second") }
   };
 }
@@ -6011,6 +6044,11 @@ window.debugBattleSim = function (questId = "quest_barn_bite", trials = 20, part
   console.log(`--- debugBattleSim: ${quest.title} × ${trials}回 / 編成: ${party.map((a) => getDisplayName(a)).join("、")} ---`);
   console.table(tally);
   console.log("最終試行の詳細:", lastResult);
+  // スライス1の一時確認用：交戦イベント列を出力（表示はスライス2で実装）。
+  if (lastResult.events) {
+    console.log(`交戦イベント列（${lastResult.events.length}件）:`);
+    console.table(lastResult.events);
+  }
   return tally;
 };
 // === 戦闘エンジンここまで ====================================================
