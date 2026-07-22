@@ -4504,14 +4504,27 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
       : `${name}はかすめる一撃を払い、浅く傷を負った（${name}に${n}ダメージ）`;
   };
 
-  // 状態遷移行は色分け対象：手負い=status-hurt（橙）／深手・戦闘不能=status-grave（赤）。
+  // 状態遷移行は色分け対象：手負い=status-hurt（橙）／深手・戦闘不能=status-grave（赤）／回復による戻り=battle-heal（緑）。
   const statusLine = (ev) => {
     const name = ev.targetName;
+    if (ev.recovered) {
+      if (ev.to === "手負い") return { kind: "battle-heal", text: `${name}の顔に血の気が戻った。まだ戦える。` };
+      if (ev.to === "健在") return { kind: "battle-heal", text: `${name}の動きが軽くなった。もう案じることはない。` };
+      return null;
+    }
     if (ev.to === "手負い") return { kind: "status-hurt", text: pick([`${name}の息が上がってきた。`, `${name}の動きから、少しずつ精彩が失われていく。`]) };
     if (ev.to === "深手") return { kind: "status-grave", text: pick([`${name}の構えが崩れた。もう長くは保たない。`, `${name}は足を引きずり始めた。傷が深い。`]) };
     if (ev.to === "戦闘不能") return { kind: "status-grave", text: pick([`${name}は膝をつき、そのまま動けなくなった。`, `${name}が崩れ落ちた。もう立ち上がれない。`]) };
     return null;
   };
+
+  // 回復行（スライス5）：supportの高い人間が包帯で手当てする。エルシーは施術者にならない。
+  const healLine = (ev) => ({
+    kind: "battle-heal",
+    text: ev.self
+      ? `${ev.healerName}は自分の傷に手早く包帯を巻いた（${ev.healerName}は${ev.amount}回復）（包帯消費：1）`
+      : `${ev.healerName}は${ev.targetName}に駆け寄り、傷に包帯を巻いた（${ev.targetName}は${ev.amount}回復）（包帯消費：1）`
+  });
 
   const retreatLines = (ev) => {
     const out = [];
@@ -4559,6 +4572,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
       else lines.push({ kind: "action", text: dealLine(ev) });
     }
     else if (ev.type === "take") lines.push({ kind: "action", text: takeLine(ev) });
+    else if (ev.type === "heal") lines.push(healLine(ev));
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
     else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push({ kind: "action", text: l }));
   });
@@ -5901,7 +5915,8 @@ const BATTLE_TUNING = {
   varianceMax: 1.15,
   secondDecisionRound: 3,
   maxRounds: 8,
-  lightWoundRatio: 0.15
+  lightWoundRatio: 0.15,
+  healAmount: 15
 };
 
 function getEnemyForQuest(quest) {
@@ -5969,6 +5984,7 @@ function simulateBattle(quest, party, itemIds, rng) {
   if (humans.length === 0) return null;
   const hasElsie = party.some((a) => a.species === "dog");
   const heldItems = Array.isArray(itemIds) ? itemIds : [];
+  let bandages = heldItems.filter((id) => id === "item_bandage").length; // 包帯総数（エルシーは運び手：所持分も人間が使う）
   const hasSmoke = heldItems.includes("item_smoke");
   const effectiveIds = Array.isArray(quest.battleEffectiveItemIds) ? quest.battleEffectiveItemIds : [];
   const hasEffectiveItem = effectiveIds.some((id) => heldItems.includes(id));
@@ -5983,6 +5999,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       personality: a.personality,
       courage: a.stats?.courage ?? 3,
       combat: a.stats?.combat ?? 1,
+      support: a.stats?.support ?? 1,
       weaponPower: a.weapon?.power ?? 0,
       weaponGuard: a.weapon?.guard ?? 0,
       hp: maxHp,
@@ -6042,6 +6059,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       const incoming = enemy.threat * variance();
       const others = alive.filter((f) => f.id !== front.id);
       const hits = [];
+      let woundedThisRound = false;
       alive.forEach((f) => {
         const frontShare = others.length > 0 ? BATTLE_TUNING.frontDamageShare : 1;
         const share = f.id === front.id
@@ -6059,6 +6077,7 @@ function simulateBattle(quest, party, itemIds, rng) {
         if (newStatus !== f.status) {
           events.push({ type: "status", round, targetId: f.id, targetName: f.name, from: f.status, to: newStatus });
           f.status = newStatus;
+          if (newStatus === "手負い" || newStatus === "深手") woundedThisRound = true;
         }
       });
       roundLog.push({ round, dealt, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
@@ -6069,6 +6088,25 @@ function simulateBattle(quest, party, itemIds, rng) {
       if (fighters.every((f) => f.downed)) {
         outcome = "defeat";
         break;
+      }
+      // 回復（B案・スライス5）：このラウンドで手負い/深手が出たら、support最大の生存者が包帯1個で手当てする。
+      // 勝敗が決したラウンドでは発動しない（上のbreakより後ろに置くことで保証）。1ラウンド1回まで。
+      if (woundedThisRound && bandages > 0) {
+        const standing = fighters.filter((f) => !f.downed);
+        const healer = [...standing].sort((a, b) => b.support - a.support)[0];
+        const severity = { "深手": 2, "手負い": 1 };
+        const target = [...standing].filter((f) => severity[f.status]).sort((a, b) => severity[b.status] - severity[a.status])[0];
+        if (healer && target) {
+          bandages -= 1;
+          const healed = Math.min(BATTLE_TUNING.healAmount, target.maxHp - target.hp);
+          target.hp += healed;
+          events.push({ type: "heal", round, healerId: healer.id, healerName: healer.name, targetId: target.id, targetName: target.name, amount: healed, self: healer.id === target.id });
+          const backStatus = battleStatusWord(target.hp, target.maxHp);
+          if (backStatus !== target.status) {
+            events.push({ type: "status", round, targetId: target.id, targetName: target.name, from: target.status, to: backStatus, recovered: true });
+            target.status = backStatus;
+          }
+        }
       }
     }
     if (!outcome) outcome = "stalemate";
