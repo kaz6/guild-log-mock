@@ -135,9 +135,17 @@ function mergeAdventurerList(masterList, savedList = []) {
     return {
       ...masterItem,
       ...savedFields,
-      stats: { ...masterItem.stats, ...(saved.stats ?? {}) }
+      // 255スケール移行（2026-07-23）：旧スケール（全stat1〜5）のセーブはマスター初期値へ置換。
+      // 旧値が新しい戦闘式に流入すると戦闘が成立しないため（成長分の破棄はモック段階の割り切り）。
+      stats: isOldScaleStats(saved.stats) ? { ...masterItem.stats } : { ...masterItem.stats, ...(saved.stats ?? {}) }
     };
   });
+}
+
+function isOldScaleStats(stats) {
+  if (!stats || typeof stats !== "object") return false;
+  const values = Object.values(stats).filter((v) => typeof v === "number");
+  return values.length > 0 && values.every((v) => v <= 5);
 }
 
 const GROWTH_STAT_BY_CATEGORY = {
@@ -161,7 +169,10 @@ const GROWTH_STAT_LABELS = {
   survival: "帰り道を確かめること"
 };
 
-const GROWTH_STAT_MAX = 5;
+const GROWTH_STAT_MAX = 255;
+// 成長するのは育成stats（6種）のみ。性格値（memory/caution/courage/kindness/curiosity）は
+// 能力ではなく性格なので成長させない（2026-07-23決定。全員が同じ性格へ収束するのを防ぐ）。
+const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
 
 function growthStatForCategory(category) {
   return GROWTH_STAT_BY_CATEGORY[category] ?? "exploration";
@@ -186,8 +197,9 @@ function humanGrowthLogText(name, statKey, rng) {
 }
 
 function incrementGrowthStat(adv, statKey) {
+  if (!GROWTH_ELIGIBLE_STAT_KEYS.includes(statKey)) return;
   if (!adv.stats) adv.stats = {};
-  const current = adv.stats[statKey] ?? 1;
+  const current = adv.stats[statKey] ?? 10;
   if (current < GROWTH_STAT_MAX) adv.stats[statKey] = current + 1;
 }
 
@@ -1197,7 +1209,7 @@ const ROSTER_STAT_LABELS = {
 
 function adventurerRosterStatsLine(adventurer) {
   const stats = adventurer.stats ?? {};
-  const parts = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${stats[key] ?? 1}`);
+  const parts = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${Math.floor(stats[key] ?? 10)}`); // 内部小数・表示整数
   return `任務能力：${parts.join(" / ")}`;
 }
 
@@ -1234,8 +1246,8 @@ function adventurerTraitsDetailHtml(adventurer) {
 
 function adventurerStatsDetailHtml(adventurer) {
   const stats = adventurer.stats ?? {};
-  const tendency = TENDENCY_STAT_KEYS.map((key) => `${TENDENCY_STAT_LABELS[key]}${stats[key] ?? "—"}`).join(" / ");
-  const mission = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${stats[key] ?? 1}`).join(" / ");
+  const tendency = TENDENCY_STAT_KEYS.map((key) => `${TENDENCY_STAT_LABELS[key]}${stats[key] != null ? Math.floor(stats[key]) : "—"}`).join(" / ");
+  const mission = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${Math.floor(stats[key] ?? 10)}`).join(" / ");
   return `
     <div class="kv adventurer-detail-stats">
       <span>傾向</span><strong>${escapeHtml(tendency)}</strong>
@@ -2436,7 +2448,7 @@ function statsPersonalityLog(party, rng) {
   const chosen = pickOne(statKeys, rng);
   const best = humans.reduce((a, b) => ((b.stats?.[chosen] ?? 0) > (a.stats?.[chosen] ?? 0) ? b : a));
   const val = best.stats?.[chosen] ?? 0;
-  if (val < 3) return null;
+  if (val < 14) return null;
   const name = getDisplayName(best);
   const lines = {
     memory: [
@@ -2929,7 +2941,7 @@ function observationTextFor(updates) {
 }
 
 function generateRabbitNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 3;
+  const memory = adv.stats?.memory ?? 15;
   const isCareful = adv.personality === "慎重";
   const isBold = adv.personality === "豪胆";
   const isCaregiver = adv.personality === "世話焼き";
@@ -2940,7 +2952,7 @@ function generateRabbitNote(adv, rng) {
   const isHerbalist = adv.job === "薬草師";
   const isWarrior = adv.job === "戦士";
 
-  if (memory >= 4) {
+  if (memory >= 20) {
     if (isScout || isCareful) return pickOne([
       "耳の先が黒く、荷物袋の匂いに反応する。草むらへ逃げる際、後ろ脚で泥を跳ね上げた。こちらを追う様子はなかった。距離を保てば接触は避けられる。",
       "雨の中でも匂いへの反応は鋭かった。逃走方向は一定で、草むらの奥へ消えた。荷物の位置を変えれば被害は防げると思う。"
@@ -2986,17 +2998,17 @@ function generateRabbitNote(adv, rng) {
 }
 
 function generateMysteryFieldNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 3;
-  const curiosity = adv.stats?.curiosity ?? 3;
+  const memory = adv.stats?.memory ?? 15;
+  const curiosity = adv.stats?.curiosity ?? 15;
   const name = getDisplayName(adv);
 
-  if (memory >= 4) {
+  if (memory >= 20) {
     return pickOne([
       `${name}は、耳の先が黒く、泥の跳ね方が左右で違っていたと記録している。足跡は畝の間から外側へ続いていた。`,
       `${name}の記録には、背丈は膝ほど、畑の柔らかい土を避けるように跳ねた、とある。正体は未確定。`
     ], rng);
   }
-  if (curiosity >= 4) {
+  if (curiosity >= 20) {
     return pickOne([
       `${name}は「なにか」が逃げた後の草の倒れ方を気にしていた。巣穴か通り道が近くにあるかもしれない。`,
       `${name}は姿よりも痕跡を気にしていた。畑の外で同じ足跡を探したが、途中で途切れている。`
@@ -3009,24 +3021,24 @@ function generateMysteryFieldNote(adv, rng) {
 }
 
 function generateLingeringLightNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 3;
-  const curiosity = adv.stats?.curiosity ?? 3;
-  const caution = adv.stats?.caution ?? 3;
+  const memory = adv.stats?.memory ?? 15;
+  const curiosity = adv.stats?.curiosity ?? 15;
+  const caution = adv.stats?.caution ?? 15;
   const name = getDisplayName(adv);
 
-  if (memory >= 4) {
+  if (memory >= 20) {
     return pickOne([
       `${name}は、灯りが道の右手、古い曲がり角の先で二度揺れてから消えたと記録している。足跡は増えていなかった。`,
       `${name}の記録では、灯りは人の腰ほどの高さに見え、近づくほど遠ざかったように見えた。位置の記録は次回調査に使える。`
     ], rng);
   }
-  if (curiosity >= 4) {
+  if (curiosity >= 20) {
     return pickOne([
       `${name}は灯りそのものより、消えた後の暗さを気にしていた。道の先に反射するものがあるのかもしれない。`,
       `${name}は灯りが揺れる間隔を気にしていた。風や人の手とは違う動きだった、と報告している。`
     ], rng);
   }
-  if (caution >= 4) {
+  if (caution >= 20) {
     return `${name}は、帰り道の轍を見失わない位置で観察を止めた。安全な距離の記録として有用。`;
   }
   return `${name}は、小さな灯りが道の先に見え、しばらくして消えたと記録した。詳細は次回確認が必要。`;
@@ -4468,7 +4480,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   const hasElsie = party.some((a) => a.id === "adv_elsie");
 
   const dealLine = (ev) => {
-    const n = ev.damage, big = n >= 14, name = ev.attackerName, job = jobById[ev.attackerId];
+    const n = ev.damage, big = ev.strong === true, name = ev.attackerName, job = jobById[ev.attackerId];
     if (job === "斥候") return big
       ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に${n}ダメージ！）`
       : `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に${n}ダメージ）`;
@@ -4494,7 +4506,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   };
 
   const takeLine = (ev) => {
-    const n = ev.damage, big = n >= 10, name = ev.targetName, job = jobById[ev.targetId];
+    const n = ev.damage, big = ev.strong === true, name = ev.targetName, job = jobById[ev.targetId];
     const frontish = job === "戦士" || job === "見習い盾役";
     if (frontish) return big
       ? `${name}はよろけた拍子に、${enemyN}の一撃をまともに受けた！（${name}に${n}ダメージ！）`
@@ -5051,15 +5063,15 @@ function defaultNewQuestRoleNote(quest, adv) {
     return "一員として";
   }
   if (category === "戦闘") {
-    if (adv.stats?.courage >= 4) return "前に出る判断で";
-    if (adv.stats?.caution >= 4) return "慎重な距離取りで";
-    if (adv.stats?.kindness >= 4) return "周囲への気配りで";
+    if (adv.stats?.courage >= 20) return "前に出る判断で";
+    if (adv.stats?.caution >= 20) return "慎重な距離取りで";
+    if (adv.stats?.kindness >= 20) return "周囲への気配りで";
     return "戦闘に";
   }
   if (category === "調査") {
-    if (adv.stats?.caution >= 4) return "慎重な距離取りで";
-    if (adv.stats?.memory >= 4) return "記録役として";
-    if (adv.stats?.kindness >= 4) return "周囲への気配りで";
+    if (adv.stats?.caution >= 20) return "慎重な距離取りで";
+    if (adv.stats?.memory >= 20) return "記録役として";
+    if (adv.stats?.kindness >= 20) return "周囲への気配りで";
     return "調査に";
   }
   if (adv.job === "斥候") return "確認役として";
@@ -5174,7 +5186,7 @@ function generateReport(expedition) {
       result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に"
+        adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.memory >= 20 ? "記録役として" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "調査に"
     });
 
     return withElsieLog({
@@ -5211,7 +5223,7 @@ function generateReport(expedition) {
       result: "追い払い",
       elsieRoleNote: "吠えと警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに"
+        adv.stats?.courage >= 20 ? "前に出る判断で" : adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "追い払いに"
     });
 
     return withElsieLog({
@@ -5246,7 +5258,7 @@ function generateReport(expedition) {
       result: "討伐",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に"
+        adv.stats?.courage >= 20 ? "前に出る判断で" : adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "討伐に"
     });
 
     return withElsieLog({
@@ -5897,8 +5909,9 @@ render();
 // 数値はすべて叩き台（CURRENT_SPEC.md「戦闘内部値」参照）。
 
 const BATTLE_TUNING = {
-  jobHp: { "戦士": 120, "見習い盾役": 110, "斥候": 90, "薬草師": 80 },
-  defaultHp: 100,
+  jobBaseHp: { "戦士": 95, "見習い盾役": 110, "斥候": 78, "薬草師": 72 },
+  defaultJobBaseHp: 85,
+  hpPerSurvival: 0.6,
   frontOrder: ["戦士", "見習い盾役", "斥候", "薬草師"],
   retreatJobBase: { "斥候": 50, "薬草師": 55, "見習い盾役": 65, "戦士": 80 },
   retreatJobDefault: 55,
@@ -5909,13 +5922,15 @@ const BATTLE_TUNING = {
   enemyLowHpRatio: 0.2,
   scoreEffectiveItemPenalty: -20,
   frontDamageShare: 0.6,
-  offensePerCombat: 4,
-  offensePerWeaponPower: 2,
+  attackSqrtCombatCoef: 3.5,
+  attackWeaponCoef: 2,
+  strongDealRatio: 1.08,
+  strongTakeHpRatio: 0.12,
   varianceMin: 0.85,
   varianceMax: 1.15,
   secondDecisionRound: 3,
   maxRounds: 8,
-  lightWoundRatio: 0.15,
+  lightWoundRatio: 0.18,
   healAmount: 15
 };
 
@@ -5958,9 +5973,10 @@ function computeBattleRetreatDecision(fighters, allyHpRatio, enemyHpRatio, conte
   return { score, votes, retreatCount, needed, retreat: retreatCount >= needed };
 }
 
-function battleStageLabel(outcome, allyHpRatio) {
+// stage（軽/中）は「累積被ダメ」基準（2026-07-23）：傷を負った事実は回復しても報告書に残す。
+function battleStageLabel(outcome, woundRatio) {
   if (outcome === "victory") {
-    return 1 - allyHpRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
+    return woundRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
   }
   if (outcome === "withdraw_first") return "軽";
   if (outcome === "withdraw_second" || outcome === "stalemate") return "重";
@@ -5991,16 +6007,22 @@ function simulateBattle(quest, party, itemIds, rng) {
   const context = { hasElsie, hasSmoke, hasEffectiveItem };
 
   const fighters = humans.map((a) => {
-    const maxHp = BATTLE_TUNING.jobHp[a.job] ?? BATTLE_TUNING.defaultHp;
+    const combatStat = a.stats?.combat ?? 10;
+    const survivalStat = a.stats?.survival ?? 10;
+    const weaponPower = a.weapon?.power ?? 0;
+    // HP = job基礎値 + survival×0.6（2026-07-23 255スケール移行。盾役>戦士の序列）
+    const maxHp = Math.round((BATTLE_TUNING.jobBaseHp[a.job] ?? BATTLE_TUNING.defaultJobBaseHp) + survivalStat * BATTLE_TUNING.hpPerSurvival);
     return {
       id: a.id,
       name: getDisplayName(a),
       job: a.job,
       personality: a.personality,
-      courage: a.stats?.courage ?? 3,
-      combat: a.stats?.combat ?? 1,
-      support: a.stats?.support ?? 1,
-      weaponPower: a.weapon?.power ?? 0,
+      courage: a.stats?.courage ?? 15,
+      combat: combatStat,
+      support: a.stats?.support ?? 10,
+      // 与ダメは平方根型：成長を実感しつつ終盤のインフレを圧縮する
+      attack: Math.sqrt(combatStat) * BATTLE_TUNING.attackSqrtCombatCoef + weaponPower * BATTLE_TUNING.attackWeaponCoef,
+      weaponPower,
       weaponGuard: a.weapon?.guard ?? 0,
       hp: maxHp,
       maxHp,
@@ -6014,6 +6036,7 @@ function simulateBattle(quest, party, itemIds, rng) {
   const decisions = [];
   const roundLog = [];
   const events = []; // 交戦記録用イベント列（案B・スライス1）。既存ロジックからの派生記録のみ。
+  let totalDamageTaken = 0; // 累積被ダメ（回復で戻さない総被弾）。stage判定の基準（2026-07-23）
   let outcome = null;
   let rounds = 0;
 
@@ -6039,19 +6062,16 @@ function simulateBattle(quest, party, itemIds, rng) {
         }
       }
       const alive = fighters.filter((f) => !f.downed);
-      const offense = alive.reduce(
-        (sum, f) => sum + f.combat * BATTLE_TUNING.offensePerCombat + f.weaponPower * BATTLE_TUNING.offensePerWeaponPower,
-        0
-      );
+      const offense = alive.reduce((sum, f) => sum + f.attack, 0);
       const dealt = Math.round(offense * variance());
       enemyHp -= dealt;
       // 与ダメージを各人の攻撃寄与で按分（表示用の派生値。合計 dealt は既存計算のまま）。
       if (offense > 0 && dealt > 0) {
         alive.forEach((f) => {
-          const contrib = f.combat * BATTLE_TUNING.offensePerCombat + f.weaponPower * BATTLE_TUNING.offensePerWeaponPower;
-          const personDealt = Math.round(dealt * (contrib / offense));
+          const personDealt = Math.round(dealt * (f.attack / offense));
           if (personDealt > 0) {
-            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt });
+            // strong=自分の期待値より上振れした一撃（スケール非依存の「！」判定）
+            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt, strong: personDealt >= f.attack * BATTLE_TUNING.strongDealRatio });
           }
         });
       }
@@ -6069,8 +6089,9 @@ function simulateBattle(quest, party, itemIds, rng) {
         f.hp -= damage;
         if (f.hp <= 0) f.downed = true;
         hits.push({ id: f.id, damage, hp: Math.max(0, f.hp) });
+        totalDamageTaken += damage;
         if (damage > 0) {
-          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage });
+          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage, strong: damage >= f.maxHp * BATTLE_TUNING.strongTakeHpRatio });
         }
         // 状態語は遷移した瞬間だけ記録する（健在→手負い→深手→戦闘不能）。
         const newStatus = battleStatusWord(f.hp, f.maxHp);
@@ -6113,11 +6134,13 @@ function simulateBattle(quest, party, itemIds, rng) {
   }
 
   const finalAllyRatio = allyRatio();
+  const woundRatio = totalDamageTaken / partyMaxHp;
   return {
     enemyId: enemy.id,
     enemyName: enemy.name,
     outcome,
-    stage: battleStageLabel(outcome, finalAllyRatio),
+    stage: battleStageLabel(outcome, woundRatio),
+    damageTakenRatio: Math.round(woundRatio * 100) / 100,
     rounds,
     allyHpRatio: Math.round(finalAllyRatio * 100) / 100,
     enemyHpRatio: Math.round(enemyRatio() * 100) / 100,
