@@ -4479,7 +4479,24 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   party.forEach((a) => { jobById[a.id] = a.job; });
   const hasElsie = party.some((a) => a.id === "adv_elsie");
 
+  // 深手の者の攻撃行は専用文（損耗が動作に出る書き方・メタ用語なし）。連続で同じ文は使わない。
+  let lastWeakenedIdx = -1;
+  const weakenedDealLine = (ev) => {
+    const n = ev.damage, name = ev.attackerName;
+    if (ev.strong === true) return `${name}は傷を押して、なお重い一撃を叩き込んだ！（${enemyN}に${n}ダメージ！）`;
+    const variants = [
+      `${name}の一撃は、さっきほどの重さがなかった（${enemyN}に${n}ダメージ）`,
+      `${name}は傷を押して打ちかかった（${enemyN}に${n}ダメージ）`,
+      `${name}は乱れた息のまま打ち込んだ（${enemyN}に${n}ダメージ）`
+    ];
+    let idx = Math.floor(random() * variants.length);
+    if (idx === lastWeakenedIdx) idx = (idx + 1) % variants.length;
+    lastWeakenedIdx = idx;
+    return variants[idx];
+  };
+
   const dealLine = (ev) => {
+    if (ev.attackerStatus === "深手") return weakenedDealLine(ev);
     const n = ev.damage, big = ev.strong === true, name = ev.attackerName, job = jobById[ev.attackerId];
     if (job === "斥候") return big
       ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に${n}ダメージ！）`
@@ -5931,7 +5948,9 @@ const BATTLE_TUNING = {
   secondDecisionRound: 3,
   maxRounds: 8,
   lightWoundRatio: 0.18,
-  healAmount: 15
+  healAmount: 15,
+  // 損耗による与ダメ低下（状態語連動・段階的）。因果が読めることを最優先（2026-07-24）
+  woundAttackMult: { "手負い": 0.8, "深手": 0.5 }
 };
 
 function getEnemyForQuest(quest) {
@@ -6062,16 +6081,18 @@ function simulateBattle(quest, party, itemIds, rng) {
         }
       }
       const alive = fighters.filter((f) => !f.downed);
-      const offense = alive.reduce((sum, f) => sum + f.attack, 0);
+      // 損耗DPS低下：状態語に応じて与ダメが段階的に落ちる（健在100%/手負い80%/深手50%）
+      const offense = alive.reduce((sum, f) => sum + f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1), 0);
       const dealt = Math.round(offense * variance());
       enemyHp -= dealt;
       // 与ダメージを各人の攻撃寄与で按分（表示用の派生値。合計 dealt は既存計算のまま）。
       if (offense > 0 && dealt > 0) {
         alive.forEach((f) => {
-          const personDealt = Math.round(dealt * (f.attack / offense));
+          const effAttack = f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1);
+          const personDealt = Math.round(dealt * (effAttack / offense));
           if (personDealt > 0) {
-            // strong=自分の期待値より上振れした一撃（スケール非依存の「！」判定）
-            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt, strong: personDealt >= f.attack * BATTLE_TUNING.strongDealRatio });
+            // strong=自分の期待値（損耗後）より上振れした一撃。深手の者の上振れ＝「傷を押してなお重い一撃」
+            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt, strong: personDealt >= effAttack * BATTLE_TUNING.strongDealRatio, attackerStatus: f.status });
           }
         });
       }
