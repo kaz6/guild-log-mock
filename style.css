@@ -536,7 +536,8 @@ textarea {
    罫線は action と同じにして、変化が文字色だけに見えるようにする。 */
 .log-line.battle-start,
 .log-line.status-hurt,
-.log-line.status-grave {
+.log-line.status-grave,
+.log-line.battle-heal {
   border-left-color: var(--blue);
 }
 
@@ -547,6 +548,10 @@ textarea {
 
 .log-line.status-hurt {
   color: #ffa94d;
+}
+
+.log-line.battle-heal {
+  color: var(--success);
 }
 
 .log-line.drama {

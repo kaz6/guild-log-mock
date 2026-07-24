@@ -135,9 +135,17 @@ function mergeAdventurerList(masterList, savedList = []) {
     return {
       ...masterItem,
       ...savedFields,
-      stats: { ...masterItem.stats, ...(saved.stats ?? {}) }
+      // 255スケール移行（2026-07-23）：旧スケール（全stat1〜5）のセーブはマスター初期値へ置換。
+      // 旧値が新しい戦闘式に流入すると戦闘が成立しないため（成長分の破棄はモック段階の割り切り）。
+      stats: isOldScaleStats(saved.stats) ? { ...masterItem.stats } : { ...masterItem.stats, ...(saved.stats ?? {}) }
     };
   });
+}
+
+function isOldScaleStats(stats) {
+  if (!stats || typeof stats !== "object") return false;
+  const values = Object.values(stats).filter((v) => typeof v === "number");
+  return values.length > 0 && values.every((v) => v <= 5);
 }
 
 const GROWTH_STAT_BY_CATEGORY = {
@@ -161,7 +169,10 @@ const GROWTH_STAT_LABELS = {
   survival: "帰り道を確かめること"
 };
 
-const GROWTH_STAT_MAX = 5;
+const GROWTH_STAT_MAX = 255;
+// 成長するのは育成stats（6種）のみ。性格値（memory/caution/courage/kindness/curiosity）は
+// 能力ではなく性格なので成長させない（2026-07-23決定。全員が同じ性格へ収束するのを防ぐ）。
+const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
 
 function growthStatForCategory(category) {
   return GROWTH_STAT_BY_CATEGORY[category] ?? "exploration";
@@ -186,8 +197,9 @@ function humanGrowthLogText(name, statKey, rng) {
 }
 
 function incrementGrowthStat(adv, statKey) {
+  if (!GROWTH_ELIGIBLE_STAT_KEYS.includes(statKey)) return;
   if (!adv.stats) adv.stats = {};
-  const current = adv.stats[statKey] ?? 1;
+  const current = adv.stats[statKey] ?? 10;
   if (current < GROWTH_STAT_MAX) adv.stats[statKey] = current + 1;
 }
 
@@ -650,7 +662,7 @@ function checkExpeditionCompletion() {
   state.reports.unshift(report);
 
   // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
-  if (report.hiddenTags?.caravan && report.hiddenTags?.branch === "fail" && !state.searchChain) {
+  if (report.hiddenTags?.caravan && (report.hiddenTags?.branch === "fail" || report.hiddenTags?.branch === "bail") && !state.searchChain) {
     state.searchChain = { stage: 1, sourceReportId: report.id };
   }
 
@@ -1197,7 +1209,7 @@ const ROSTER_STAT_LABELS = {
 
 function adventurerRosterStatsLine(adventurer) {
   const stats = adventurer.stats ?? {};
-  const parts = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${stats[key] ?? 1}`);
+  const parts = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${Math.floor(stats[key] ?? 10)}`); // 内部小数・表示整数
   return `任務能力：${parts.join(" / ")}`;
 }
 
@@ -1234,8 +1246,8 @@ function adventurerTraitsDetailHtml(adventurer) {
 
 function adventurerStatsDetailHtml(adventurer) {
   const stats = adventurer.stats ?? {};
-  const tendency = TENDENCY_STAT_KEYS.map((key) => `${TENDENCY_STAT_LABELS[key]}${stats[key] ?? "—"}`).join(" / ");
-  const mission = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${stats[key] ?? 1}`).join(" / ");
+  const tendency = TENDENCY_STAT_KEYS.map((key) => `${TENDENCY_STAT_LABELS[key]}${stats[key] != null ? Math.floor(stats[key]) : "—"}`).join(" / ");
+  const mission = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${Math.floor(stats[key] ?? 10)}`).join(" / ");
   return `
     <div class="kv adventurer-detail-stats">
       <span>傾向</span><strong>${escapeHtml(tendency)}</strong>
@@ -1724,7 +1736,7 @@ function renderResult(reportId) {
   const party = report.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
   const branch = report.hiddenTags?.branch;
   const safetyLine = branch === "lost" ? "全員帰還・隊商は戻らず"
-    : branch === "great_wound" || branch === "fail" ? "負傷者あり"
+    : branch === "great_wound" || branch === "fail" || branch === "bail" ? "負傷者あり"
     : "全員無事に帰還";
   const growth = report.growth;
   const growthAdv = growth ? getAdventurer(growth.advId) : null;
@@ -2436,7 +2448,7 @@ function statsPersonalityLog(party, rng) {
   const chosen = pickOne(statKeys, rng);
   const best = humans.reduce((a, b) => ((b.stats?.[chosen] ?? 0) > (a.stats?.[chosen] ?? 0) ? b : a));
   const val = best.stats?.[chosen] ?? 0;
-  if (val < 3) return null;
+  if (val < 14) return null;
   const name = getDisplayName(best);
   const lines = {
     memory: [
@@ -2929,7 +2941,7 @@ function observationTextFor(updates) {
 }
 
 function generateRabbitNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 3;
+  const memory = adv.stats?.memory ?? 15;
   const isCareful = adv.personality === "慎重";
   const isBold = adv.personality === "豪胆";
   const isCaregiver = adv.personality === "世話焼き";
@@ -2940,7 +2952,7 @@ function generateRabbitNote(adv, rng) {
   const isHerbalist = adv.job === "薬草師";
   const isWarrior = adv.job === "戦士";
 
-  if (memory >= 4) {
+  if (memory >= 20) {
     if (isScout || isCareful) return pickOne([
       "耳の先が黒く、荷物袋の匂いに反応する。草むらへ逃げる際、後ろ脚で泥を跳ね上げた。こちらを追う様子はなかった。距離を保てば接触は避けられる。",
       "雨の中でも匂いへの反応は鋭かった。逃走方向は一定で、草むらの奥へ消えた。荷物の位置を変えれば被害は防げると思う。"
@@ -2986,17 +2998,17 @@ function generateRabbitNote(adv, rng) {
 }
 
 function generateMysteryFieldNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 3;
-  const curiosity = adv.stats?.curiosity ?? 3;
+  const memory = adv.stats?.memory ?? 15;
+  const curiosity = adv.stats?.curiosity ?? 15;
   const name = getDisplayName(adv);
 
-  if (memory >= 4) {
+  if (memory >= 20) {
     return pickOne([
       `${name}は、耳の先が黒く、泥の跳ね方が左右で違っていたと記録している。足跡は畝の間から外側へ続いていた。`,
       `${name}の記録には、背丈は膝ほど、畑の柔らかい土を避けるように跳ねた、とある。正体は未確定。`
     ], rng);
   }
-  if (curiosity >= 4) {
+  if (curiosity >= 20) {
     return pickOne([
       `${name}は「なにか」が逃げた後の草の倒れ方を気にしていた。巣穴か通り道が近くにあるかもしれない。`,
       `${name}は姿よりも痕跡を気にしていた。畑の外で同じ足跡を探したが、途中で途切れている。`
@@ -3009,24 +3021,24 @@ function generateMysteryFieldNote(adv, rng) {
 }
 
 function generateLingeringLightNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 3;
-  const curiosity = adv.stats?.curiosity ?? 3;
-  const caution = adv.stats?.caution ?? 3;
+  const memory = adv.stats?.memory ?? 15;
+  const curiosity = adv.stats?.curiosity ?? 15;
+  const caution = adv.stats?.caution ?? 15;
   const name = getDisplayName(adv);
 
-  if (memory >= 4) {
+  if (memory >= 20) {
     return pickOne([
       `${name}は、灯りが道の右手、古い曲がり角の先で二度揺れてから消えたと記録している。足跡は増えていなかった。`,
       `${name}の記録では、灯りは人の腰ほどの高さに見え、近づくほど遠ざかったように見えた。位置の記録は次回調査に使える。`
     ], rng);
   }
-  if (curiosity >= 4) {
+  if (curiosity >= 20) {
     return pickOne([
       `${name}は灯りそのものより、消えた後の暗さを気にしていた。道の先に反射するものがあるのかもしれない。`,
       `${name}は灯りが揺れる間隔を気にしていた。風や人の手とは違う動きだった、と報告している。`
     ], rng);
   }
-  if (caution >= 4) {
+  if (caution >= 20) {
     return `${name}は、帰り道の轍を見失わない位置で観察を止めた。安全な距離の記録として有用。`;
   }
   return `${name}は、小さな灯りが道の先に見え、しばらくして消えたと記録した。詳細は次回確認が必要。`;
@@ -4405,6 +4417,13 @@ function caravanEscortOutcomeText(branch, party, rng) {
       after: `報告書には「交戦回避。煙幕により隊商を離脱させ、被害なし」と記されている。`,
       history: "街道の外れを行く隊商の護衛。煙幕で離脱回避、被害なく隊商を通した。"
     },
+    bail: {
+      result: "荷を置いて撤退",
+      summary: "野盗の狙いが荷にあると見て、荷を残して人を退かせた。商人と一行は外縁まで戻った。",
+      line: `荷は失われたが、商人も一行も外縁まで退いた。`,
+      after: `報告書には「荷の損失あり、負傷者あり、死者なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。荷を置いて退いた。負傷はあれど、死者はない。"
+    },
     fail: {
       result: "護衛失敗",
       summary: "野盗の数に押し込まれ、隊商を護り切れないまま街道から退いた。",
@@ -4467,8 +4486,25 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   party.forEach((a) => { jobById[a.id] = a.job; });
   const hasElsie = party.some((a) => a.id === "adv_elsie");
 
+  // 深手の者の攻撃行は専用文（損耗が動作に出る書き方・メタ用語なし）。連続で同じ文は使わない。
+  let lastWeakenedIdx = -1;
+  const weakenedDealLine = (ev) => {
+    const n = ev.damage, name = ev.attackerName;
+    if (ev.strong === true) return `${name}は傷を押して、なお重い一撃を叩き込んだ！（${enemyN}に${n}ダメージ！）`;
+    const variants = [
+      `${name}の一撃は、さっきほどの重さがなかった（${enemyN}に${n}ダメージ）`,
+      `${name}は傷を押して打ちかかった（${enemyN}に${n}ダメージ）`,
+      `${name}は乱れた息のまま打ち込んだ（${enemyN}に${n}ダメージ）`
+    ];
+    let idx = Math.floor(random() * variants.length);
+    if (idx === lastWeakenedIdx) idx = (idx + 1) % variants.length;
+    lastWeakenedIdx = idx;
+    return variants[idx];
+  };
+
   const dealLine = (ev) => {
-    const n = ev.damage, big = n >= 14, name = ev.attackerName, job = jobById[ev.attackerId];
+    if (ev.attackerStatus === "深手") return weakenedDealLine(ev);
+    const n = ev.damage, big = ev.strong === true, name = ev.attackerName, job = jobById[ev.attackerId];
     if (job === "斥候") return big
       ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に${n}ダメージ！）`
       : `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に${n}ダメージ）`;
@@ -4494,7 +4530,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   };
 
   const takeLine = (ev) => {
-    const n = ev.damage, big = n >= 10, name = ev.targetName, job = jobById[ev.targetId];
+    const n = ev.damage, big = ev.strong === true, name = ev.targetName, job = jobById[ev.targetId];
     const frontish = job === "戦士" || job === "見習い盾役";
     if (frontish) return big
       ? `${name}はよろけた拍子に、${enemyN}の一撃をまともに受けた！（${name}に${n}ダメージ！）`
@@ -4504,17 +4540,47 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
       : `${name}はかすめる一撃を払い、浅く傷を負った（${name}に${n}ダメージ）`;
   };
 
-  // 状態遷移行は色分け対象：手負い=status-hurt（橙）／深手・戦闘不能=status-grave（赤）。
+  // 状態遷移行は色分け対象：手負い=status-hurt（橙）／深手・戦闘不能=status-grave（赤）／回復による戻り=battle-heal（緑）。
   const statusLine = (ev) => {
     const name = ev.targetName;
+    if (ev.recovered) {
+      if (ev.to === "手負い") return { kind: "battle-heal", text: `${name}の顔に血の気が戻った。まだ戦える。` };
+      if (ev.to === "健在") return { kind: "battle-heal", text: `${name}の動きが軽くなった。もう案じることはない。` };
+      return null;
+    }
     if (ev.to === "手負い") return { kind: "status-hurt", text: pick([`${name}の息が上がってきた。`, `${name}の動きから、少しずつ精彩が失われていく。`]) };
     if (ev.to === "深手") return { kind: "status-grave", text: pick([`${name}の構えが崩れた。もう長くは保たない。`, `${name}は足を引きずり始めた。傷が深い。`]) };
     if (ev.to === "戦闘不能") return { kind: "status-grave", text: pick([`${name}は膝をつき、そのまま動けなくなった。`, `${name}が崩れ落ちた。もう立ち上がれない。`]) };
     return null;
   };
 
+  // 回復行（スライス5）：supportの高い人間が包帯で手当てする。エルシーは施術者にならない。
+  const healLine = (ev) => ({
+    kind: "battle-heal",
+    text: ev.self
+      ? `${ev.healerName}は自分の傷に手早く包帯を巻いた（${ev.healerName}は${ev.amount}回復）（包帯消費：1）`
+      : `${ev.healerName}は${ev.targetName}に駆け寄り、傷に包帯を巻いた（${ev.targetName}は${ev.amount}回復）（包帯消費：1）`
+  });
+
   const retreatLines = (ev) => {
     const out = [];
+    // 臨時判断（スライス9）：仲間が倒れて一行が迷う。踏みとどまっても退いても、判断があったことを必ず出す。
+    if (ev.at === "emergency") {
+      const cname = ev.causeName ?? "仲間";
+      out.push(ev.causeTo === "戦闘不能"
+        ? pick([`${cname}が倒れたのを見て、一行の動きが一瞬止まった。`, `${cname}が崩れ落ち、一行の足並みが乱れた。`])
+        : pick([`${cname}の傷を見て、一行の動きが一瞬止まった。`, `${cname}の傷の深さに、一行の間に迷いがよぎった。`]));
+      if (ev.retreat) {
+        out.push(`これ以上は人が保たない。一行は荷を置いて退くことを決めた。`);
+        if (hasElsie) out.push(pick([
+          `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
+          `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
+        ]));
+      } else {
+        out.push(pick([`それでも、荷馬車の前を空けるわけにはいかなかった。`, `誰も口には出さず、ただ持ち場に戻った。`]));
+      }
+      return out;
+    }
     if (ev.at === "first") {
       if (ev.retreat) out.push(pick([
         `まともにやり合うのは危険と見て、一行は早々に距離を取った。`,
@@ -4559,6 +4625,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
       else lines.push({ kind: "action", text: dealLine(ev) });
     }
     else if (ev.type === "take") lines.push({ kind: "action", text: takeLine(ev) });
+    else if (ev.type === "heal") lines.push(healLine(ev));
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
     else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push({ kind: "action", text: l }));
   });
@@ -5037,15 +5104,15 @@ function defaultNewQuestRoleNote(quest, adv) {
     return "一員として";
   }
   if (category === "戦闘") {
-    if (adv.stats?.courage >= 4) return "前に出る判断で";
-    if (adv.stats?.caution >= 4) return "慎重な距離取りで";
-    if (adv.stats?.kindness >= 4) return "周囲への気配りで";
+    if (adv.stats?.courage >= 20) return "前に出る判断で";
+    if (adv.stats?.caution >= 20) return "慎重な距離取りで";
+    if (adv.stats?.kindness >= 20) return "周囲への気配りで";
     return "戦闘に";
   }
   if (category === "調査") {
-    if (adv.stats?.caution >= 4) return "慎重な距離取りで";
-    if (adv.stats?.memory >= 4) return "記録役として";
-    if (adv.stats?.kindness >= 4) return "周囲への気配りで";
+    if (adv.stats?.caution >= 20) return "慎重な距離取りで";
+    if (adv.stats?.memory >= 20) return "記録役として";
+    if (adv.stats?.kindness >= 20) return "周囲への気配りで";
     return "調査に";
   }
   if (adv.job === "斥候") return "確認役として";
@@ -5160,7 +5227,7 @@ function generateReport(expedition) {
       result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.memory >= 4 ? "記録役として" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "調査に"
+        adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.memory >= 20 ? "記録役として" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "調査に"
     });
 
     return withElsieLog({
@@ -5197,7 +5264,7 @@ function generateReport(expedition) {
       result: "追い払い",
       elsieRoleNote: "吠えと警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "追い払いに"
+        adv.stats?.courage >= 20 ? "前に出る判断で" : adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "追い払いに"
     });
 
     return withElsieLog({
@@ -5232,7 +5299,7 @@ function generateReport(expedition) {
       result: "討伐",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.courage >= 4 ? "前に出る判断で" : adv.stats?.caution >= 4 ? "慎重な距離取りで" : adv.stats?.kindness >= 4 ? "周囲への気配りで" : "討伐に"
+        adv.stats?.courage >= 20 ? "前に出る判断で" : adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "討伐に"
     });
 
     return withElsieLog({
@@ -5483,6 +5550,7 @@ function generateReport(expedition) {
     if (!battle) branch = "fail";
     else if (battle.outcome === "victory") branch = battle.stage === "軽" ? "great_unhurt" : "great_wound";
     else if ((battle.outcome === "withdraw_first" || battle.outcome === "withdraw_second") && battle.smoke.questContinues) branch = "evade";
+    else if (battle.outcome === "withdraw_emergency") branch = "bail"; // 荷を置いて退く（臨時判断による撤退）
     else branch = "fail";
 
     const soloAdv = isSoloHumanParty(party);
@@ -5503,6 +5571,7 @@ function generateReport(expedition) {
 
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
     add("action", outcomeInfo.line);
+    if (branch === "bail") add("action", `商人は荷の行方を目で追ったまま、しばらく口を開かなかった。`);
     add("afterglow", outcomeInfo.after);
 
     return finalizeQuestReport({
@@ -5883,8 +5952,9 @@ render();
 // 数値はすべて叩き台（CURRENT_SPEC.md「戦闘内部値」参照）。
 
 const BATTLE_TUNING = {
-  jobHp: { "戦士": 120, "見習い盾役": 110, "斥候": 90, "薬草師": 80 },
-  defaultHp: 100,
+  jobBaseHp: { "戦士": 95, "見習い盾役": 110, "斥候": 78, "薬草師": 72 },
+  defaultJobBaseHp: 85,
+  hpPerSurvival: 0.6,
   frontOrder: ["戦士", "見習い盾役", "斥候", "薬草師"],
   retreatJobBase: { "斥候": 50, "薬草師": 55, "見習い盾役": 65, "戦士": 80 },
   retreatJobDefault: 55,
@@ -5895,13 +5965,21 @@ const BATTLE_TUNING = {
   enemyLowHpRatio: 0.2,
   scoreEffectiveItemPenalty: -20,
   frontDamageShare: 0.6,
-  offensePerCombat: 4,
-  offensePerWeaponPower: 2,
-  varianceMin: 0.85,
-  varianceMax: 1.15,
+  attackSqrtCombatCoef: 3.5,
+  attackWeaponCoef: 2,
+  strongDealRatio: 1.08,
+  strongTakeHpRatio: 0.12,
+  varianceMin: 0.75,
+  varianceMax: 1.25,
   secondDecisionRound: 3,
   maxRounds: 8,
-  lightWoundRatio: 0.15
+  lightWoundRatio: 0.18,
+  healAmount: 15,
+  // 損耗による与ダメ低下（状態語連動・段階的）。因果が読めることを最優先（2026-07-24）
+  woundAttackMult: { "手負い": 0.8, "深手": 0.5 },
+  // 臨時撤退判断（スライス9）：仲間が深手/不能になった動揺のショック補正と、1戦闘あたりの発火上限
+  emergencyShock: { "深手": 30, "戦闘不能": 50 },
+  emergencyCap: 2
 };
 
 function getEnemyForQuest(quest) {
@@ -5943,12 +6021,13 @@ function computeBattleRetreatDecision(fighters, allyHpRatio, enemyHpRatio, conte
   return { score, votes, retreatCount, needed, retreat: retreatCount >= needed };
 }
 
-function battleStageLabel(outcome, allyHpRatio) {
+// stage（軽/中）は「累積被ダメ」基準（2026-07-23）：傷を負った事実は回復しても報告書に残す。
+function battleStageLabel(outcome, woundRatio) {
   if (outcome === "victory") {
-    return 1 - allyHpRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
+    return woundRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
   }
   if (outcome === "withdraw_first") return "軽";
-  if (outcome === "withdraw_second" || outcome === "stalemate") return "重";
+  if (outcome === "withdraw_second" || outcome === "withdraw_emergency" || outcome === "stalemate") return "重";
   return "致命";
 }
 
@@ -5969,21 +6048,29 @@ function simulateBattle(quest, party, itemIds, rng) {
   if (humans.length === 0) return null;
   const hasElsie = party.some((a) => a.species === "dog");
   const heldItems = Array.isArray(itemIds) ? itemIds : [];
+  let bandages = heldItems.filter((id) => id === "item_bandage").length; // 包帯総数（エルシーは運び手：所持分も人間が使う）
   const hasSmoke = heldItems.includes("item_smoke");
   const effectiveIds = Array.isArray(quest.battleEffectiveItemIds) ? quest.battleEffectiveItemIds : [];
   const hasEffectiveItem = effectiveIds.some((id) => heldItems.includes(id));
   const context = { hasElsie, hasSmoke, hasEffectiveItem };
 
   const fighters = humans.map((a) => {
-    const maxHp = BATTLE_TUNING.jobHp[a.job] ?? BATTLE_TUNING.defaultHp;
+    const combatStat = a.stats?.combat ?? 10;
+    const survivalStat = a.stats?.survival ?? 10;
+    const weaponPower = a.weapon?.power ?? 0;
+    // HP = job基礎値 + survival×0.6（2026-07-23 255スケール移行。盾役>戦士の序列）
+    const maxHp = Math.round((BATTLE_TUNING.jobBaseHp[a.job] ?? BATTLE_TUNING.defaultJobBaseHp) + survivalStat * BATTLE_TUNING.hpPerSurvival);
     return {
       id: a.id,
       name: getDisplayName(a),
       job: a.job,
       personality: a.personality,
-      courage: a.stats?.courage ?? 3,
-      combat: a.stats?.combat ?? 1,
-      weaponPower: a.weapon?.power ?? 0,
+      courage: a.stats?.courage ?? 15,
+      combat: combatStat,
+      support: a.stats?.support ?? 10,
+      // 与ダメは平方根型：成長を実感しつつ終盤のインフレを圧縮する
+      attack: Math.sqrt(combatStat) * BATTLE_TUNING.attackSqrtCombatCoef + weaponPower * BATTLE_TUNING.attackWeaponCoef,
+      weaponPower,
       weaponGuard: a.weapon?.guard ?? 0,
       hp: maxHp,
       maxHp,
@@ -5997,6 +6084,8 @@ function simulateBattle(quest, party, itemIds, rng) {
   const decisions = [];
   const roundLog = [];
   const events = []; // 交戦記録用イベント列（案B・スライス1）。既存ロジックからの派生記録のみ。
+  let totalDamageTaken = 0; // 累積被ダメ（回復で戻さない総被弾）。stage判定の基準（2026-07-23）
+  let emergencyCount = 0; // 臨時撤退判断の発火回数（emergencyCapまで）
   let outcome = null;
   let rounds = 0;
 
@@ -6022,19 +6111,18 @@ function simulateBattle(quest, party, itemIds, rng) {
         }
       }
       const alive = fighters.filter((f) => !f.downed);
-      const offense = alive.reduce(
-        (sum, f) => sum + f.combat * BATTLE_TUNING.offensePerCombat + f.weaponPower * BATTLE_TUNING.offensePerWeaponPower,
-        0
-      );
+      // 損耗DPS低下：状態語に応じて与ダメが段階的に落ちる（健在100%/手負い80%/深手50%）
+      const offense = alive.reduce((sum, f) => sum + f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1), 0);
       const dealt = Math.round(offense * variance());
       enemyHp -= dealt;
       // 与ダメージを各人の攻撃寄与で按分（表示用の派生値。合計 dealt は既存計算のまま）。
       if (offense > 0 && dealt > 0) {
         alive.forEach((f) => {
-          const contrib = f.combat * BATTLE_TUNING.offensePerCombat + f.weaponPower * BATTLE_TUNING.offensePerWeaponPower;
-          const personDealt = Math.round(dealt * (contrib / offense));
+          const effAttack = f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1);
+          const personDealt = Math.round(dealt * (effAttack / offense));
           if (personDealt > 0) {
-            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt });
+            // strong=自分の期待値（損耗後）より上振れした一撃。深手の者の上振れ＝「傷を押してなお重い一撃」
+            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt, strong: personDealt >= effAttack * BATTLE_TUNING.strongDealRatio, attackerStatus: f.status });
           }
         });
       }
@@ -6042,6 +6130,8 @@ function simulateBattle(quest, party, itemIds, rng) {
       const incoming = enemy.threat * variance();
       const others = alive.filter((f) => f.id !== front.id);
       const hits = [];
+      let woundedThisRound = false;
+      let crisis = null; // このラウンドで深手/戦闘不能になった最重度の者（臨時撤退判断のトリガー）
       alive.forEach((f) => {
         const frontShare = others.length > 0 ? BATTLE_TUNING.frontDamageShare : 1;
         const share = f.id === front.id
@@ -6051,14 +6141,18 @@ function simulateBattle(quest, party, itemIds, rng) {
         f.hp -= damage;
         if (f.hp <= 0) f.downed = true;
         hits.push({ id: f.id, damage, hp: Math.max(0, f.hp) });
+        totalDamageTaken += damage;
         if (damage > 0) {
-          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage });
+          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage, strong: damage >= f.maxHp * BATTLE_TUNING.strongTakeHpRatio });
         }
         // 状態語は遷移した瞬間だけ記録する（健在→手負い→深手→戦闘不能）。
         const newStatus = battleStatusWord(f.hp, f.maxHp);
         if (newStatus !== f.status) {
           events.push({ type: "status", round, targetId: f.id, targetName: f.name, from: f.status, to: newStatus });
           f.status = newStatus;
+          if (newStatus === "手負い" || newStatus === "深手") woundedThisRound = true;
+          if (newStatus === "深手" && (!crisis || crisis.to !== "戦闘不能")) crisis = { name: f.name, to: "深手" };
+          if (newStatus === "戦闘不能") crisis = { name: f.name, to: "戦闘不能" };
         }
       });
       roundLog.push({ round, dealt, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
@@ -6070,16 +6164,52 @@ function simulateBattle(quest, party, itemIds, rng) {
         outcome = "defeat";
         break;
       }
+      // 回復（B案・スライス5）：このラウンドで手負い/深手が出たら、support最大の生存者が包帯1個で手当てする。
+      // 勝敗が決したラウンドでは発動しない（上のbreakより後ろに置くことで保証）。1ラウンド1回まで。
+      if (woundedThisRound && bandages > 0) {
+        const standing = fighters.filter((f) => !f.downed);
+        const healer = [...standing].sort((a, b) => b.support - a.support)[0];
+        const severity = { "深手": 2, "手負い": 1 };
+        const target = [...standing].filter((f) => severity[f.status]).sort((a, b) => severity[b.status] - severity[a.status])[0];
+        if (healer && target) {
+          bandages -= 1;
+          const healed = Math.min(BATTLE_TUNING.healAmount, target.maxHp - target.hp);
+          target.hp += healed;
+          events.push({ type: "heal", round, healerId: healer.id, healerName: healer.name, targetId: target.id, targetName: target.name, amount: healed, self: healer.id === target.id });
+          const backStatus = battleStatusWord(target.hp, target.maxHp);
+          if (backStatus !== target.status) {
+            events.push({ type: "status", round, targetId: target.id, targetName: target.name, from: target.status, to: backStatus, recovered: true });
+            target.status = backStatus;
+          }
+        }
+      }
+      // ★臨時撤退判断（スライス9）：仲間が深手/戦闘不能になったラウンドの末、一行が迷う。
+      // 「動揺スコア」＝損耗＋ショック（＋エルシーの警告は本能なので維持）。
+      // 道具や敵の残り体力のそろばん（包帯-20/煙幕+30/敵瀕死-25）は動揺時には働かない。
+      // 成立は生存者の半数以上（動揺時は安全側に倒れる）。定期2回制はそのまま。
+      if (crisis && emergencyCount < BATTLE_TUNING.emergencyCap) {
+        emergencyCount++;
+        const shock = BATTLE_TUNING.emergencyShock[crisis.to] ?? 0;
+        const emScore = Math.round((1 - allyRatio()) * 100) + shock + (hasElsie ? BATTLE_TUNING.scoreElsieBonus : 0);
+        const standing = fighters.filter((f) => !f.downed);
+        const yes = standing.filter((f) => emScore >= ((BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault) + (BATTLE_TUNING.retreatPersonalityShift[f.personality] ?? 0))).length;
+        const retreatNow = yes >= Math.ceil(standing.length / 2);
+        decisions.push({ at: "emergency", score: emScore, retreat: retreatNow });
+        events.push({ type: "retreat", at: "emergency", round, retreat: retreatNow, causeName: crisis.name, causeTo: crisis.to });
+        if (retreatNow) { outcome = "withdraw_emergency"; break; }
+      }
     }
     if (!outcome) outcome = "stalemate";
   }
 
   const finalAllyRatio = allyRatio();
+  const woundRatio = totalDamageTaken / partyMaxHp;
   return {
     enemyId: enemy.id,
     enemyName: enemy.name,
     outcome,
-    stage: battleStageLabel(outcome, finalAllyRatio),
+    stage: battleStageLabel(outcome, woundRatio),
+    damageTakenRatio: Math.round(woundRatio * 100) / 100,
     rounds,
     allyHpRatio: Math.round(finalAllyRatio * 100) / 100,
     enemyHpRatio: Math.round(enemyRatio() * 100) / 100,
