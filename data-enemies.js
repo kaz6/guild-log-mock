@@ -9,7 +9,7 @@ window.masterEnemies = [
     id: "enemy_road_raiders",
     name: "街道の外れに現れた徒党",
     shortName: "野盗",
-    hp: 280,
-    threat: 40
+    hp: 320,
+    threat: 38
   }
 ];

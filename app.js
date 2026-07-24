@@ -662,7 +662,7 @@ function checkExpeditionCompletion() {
   state.reports.unshift(report);
 
   // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
-  if (report.hiddenTags?.caravan && report.hiddenTags?.branch === "fail" && !state.searchChain) {
+  if (report.hiddenTags?.caravan && (report.hiddenTags?.branch === "fail" || report.hiddenTags?.branch === "bail") && !state.searchChain) {
     state.searchChain = { stage: 1, sourceReportId: report.id };
   }
 
@@ -1736,7 +1736,7 @@ function renderResult(reportId) {
   const party = report.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
   const branch = report.hiddenTags?.branch;
   const safetyLine = branch === "lost" ? "全員帰還・隊商は戻らず"
-    : branch === "great_wound" || branch === "fail" ? "負傷者あり"
+    : branch === "great_wound" || branch === "fail" || branch === "bail" ? "負傷者あり"
     : "全員無事に帰還";
   const growth = report.growth;
   const growthAdv = growth ? getAdventurer(growth.advId) : null;
@@ -4417,6 +4417,13 @@ function caravanEscortOutcomeText(branch, party, rng) {
       after: `報告書には「交戦回避。煙幕により隊商を離脱させ、被害なし」と記されている。`,
       history: "街道の外れを行く隊商の護衛。煙幕で離脱回避、被害なく隊商を通した。"
     },
+    bail: {
+      result: "荷を置いて撤退",
+      summary: "野盗の狙いが荷にあると見て、荷を残して人を退かせた。商人と一行は外縁まで戻った。",
+      line: `荷は失われたが、商人も一行も外縁まで退いた。`,
+      after: `報告書には「荷の損失あり、負傷者あり、死者なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。荷を置いて退いた。負傷はあれど、死者はない。"
+    },
     fail: {
       result: "護衛失敗",
       summary: "野盗の数に押し込まれ、隊商を護り切れないまま街道から退いた。",
@@ -4557,6 +4564,23 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
 
   const retreatLines = (ev) => {
     const out = [];
+    // 臨時判断（スライス9）：仲間が倒れて一行が迷う。踏みとどまっても退いても、判断があったことを必ず出す。
+    if (ev.at === "emergency") {
+      const cname = ev.causeName ?? "仲間";
+      out.push(ev.causeTo === "戦闘不能"
+        ? pick([`${cname}が倒れたのを見て、一行の動きが一瞬止まった。`, `${cname}が崩れ落ち、一行の足並みが乱れた。`])
+        : pick([`${cname}の傷を見て、一行の動きが一瞬止まった。`, `${cname}の傷の深さに、一行の間に迷いがよぎった。`]));
+      if (ev.retreat) {
+        out.push(`これ以上は人が保たない。一行は荷を置いて退くことを決めた。`);
+        if (hasElsie) out.push(pick([
+          `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
+          `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
+        ]));
+      } else {
+        out.push(pick([`それでも、荷馬車の前を空けるわけにはいかなかった。`, `誰も口には出さず、ただ持ち場に戻った。`]));
+      }
+      return out;
+    }
     if (ev.at === "first") {
       if (ev.retreat) out.push(pick([
         `まともにやり合うのは危険と見て、一行は早々に距離を取った。`,
@@ -5526,6 +5550,7 @@ function generateReport(expedition) {
     if (!battle) branch = "fail";
     else if (battle.outcome === "victory") branch = battle.stage === "軽" ? "great_unhurt" : "great_wound";
     else if ((battle.outcome === "withdraw_first" || battle.outcome === "withdraw_second") && battle.smoke.questContinues) branch = "evade";
+    else if (battle.outcome === "withdraw_emergency") branch = "bail"; // 荷を置いて退く（臨時判断による撤退）
     else branch = "fail";
 
     const soloAdv = isSoloHumanParty(party);
@@ -5546,6 +5571,7 @@ function generateReport(expedition) {
 
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
     add("action", outcomeInfo.line);
+    if (branch === "bail") add("action", `商人は荷の行方を目で追ったまま、しばらく口を開かなかった。`);
     add("afterglow", outcomeInfo.after);
 
     return finalizeQuestReport({
@@ -5950,7 +5976,10 @@ const BATTLE_TUNING = {
   lightWoundRatio: 0.18,
   healAmount: 15,
   // 損耗による与ダメ低下（状態語連動・段階的）。因果が読めることを最優先（2026-07-24）
-  woundAttackMult: { "手負い": 0.8, "深手": 0.5 }
+  woundAttackMult: { "手負い": 0.8, "深手": 0.5 },
+  // 臨時撤退判断（スライス9）：仲間が深手/不能になった動揺のショック補正と、1戦闘あたりの発火上限
+  emergencyShock: { "深手": 30, "戦闘不能": 50 },
+  emergencyCap: 2
 };
 
 function getEnemyForQuest(quest) {
@@ -5998,7 +6027,7 @@ function battleStageLabel(outcome, woundRatio) {
     return woundRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
   }
   if (outcome === "withdraw_first") return "軽";
-  if (outcome === "withdraw_second" || outcome === "stalemate") return "重";
+  if (outcome === "withdraw_second" || outcome === "withdraw_emergency" || outcome === "stalemate") return "重";
   return "致命";
 }
 
@@ -6056,6 +6085,7 @@ function simulateBattle(quest, party, itemIds, rng) {
   const roundLog = [];
   const events = []; // 交戦記録用イベント列（案B・スライス1）。既存ロジックからの派生記録のみ。
   let totalDamageTaken = 0; // 累積被ダメ（回復で戻さない総被弾）。stage判定の基準（2026-07-23）
+  let emergencyCount = 0; // 臨時撤退判断の発火回数（emergencyCapまで）
   let outcome = null;
   let rounds = 0;
 
@@ -6101,6 +6131,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       const others = alive.filter((f) => f.id !== front.id);
       const hits = [];
       let woundedThisRound = false;
+      let crisis = null; // このラウンドで深手/戦闘不能になった最重度の者（臨時撤退判断のトリガー）
       alive.forEach((f) => {
         const frontShare = others.length > 0 ? BATTLE_TUNING.frontDamageShare : 1;
         const share = f.id === front.id
@@ -6120,6 +6151,8 @@ function simulateBattle(quest, party, itemIds, rng) {
           events.push({ type: "status", round, targetId: f.id, targetName: f.name, from: f.status, to: newStatus });
           f.status = newStatus;
           if (newStatus === "手負い" || newStatus === "深手") woundedThisRound = true;
+          if (newStatus === "深手" && (!crisis || crisis.to !== "戦闘不能")) crisis = { name: f.name, to: "深手" };
+          if (newStatus === "戦闘不能") crisis = { name: f.name, to: "戦闘不能" };
         }
       });
       roundLog.push({ round, dealt, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
@@ -6149,6 +6182,21 @@ function simulateBattle(quest, party, itemIds, rng) {
             target.status = backStatus;
           }
         }
+      }
+      // ★臨時撤退判断（スライス9）：仲間が深手/戦闘不能になったラウンドの末、一行が迷う。
+      // 「動揺スコア」＝損耗＋ショック（＋エルシーの警告は本能なので維持）。
+      // 道具や敵の残り体力のそろばん（包帯-20/煙幕+30/敵瀕死-25）は動揺時には働かない。
+      // 成立は生存者の半数以上（動揺時は安全側に倒れる）。定期2回制はそのまま。
+      if (crisis && emergencyCount < BATTLE_TUNING.emergencyCap) {
+        emergencyCount++;
+        const shock = BATTLE_TUNING.emergencyShock[crisis.to] ?? 0;
+        const emScore = Math.round((1 - allyRatio()) * 100) + shock + (hasElsie ? BATTLE_TUNING.scoreElsieBonus : 0);
+        const standing = fighters.filter((f) => !f.downed);
+        const yes = standing.filter((f) => emScore >= ((BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault) + (BATTLE_TUNING.retreatPersonalityShift[f.personality] ?? 0))).length;
+        const retreatNow = yes >= Math.ceil(standing.length / 2);
+        decisions.push({ at: "emergency", score: emScore, retreat: retreatNow });
+        events.push({ type: "retreat", at: "emergency", round, retreat: retreatNow, causeName: crisis.name, causeTo: crisis.to });
+        if (retreatNow) { outcome = "withdraw_emergency"; break; }
       }
     }
     if (!outcome) outcome = "stalemate";
