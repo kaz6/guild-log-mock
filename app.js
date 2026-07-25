@@ -148,17 +148,43 @@ function isOldScaleStats(stats) {
   return values.length > 0 && values.every((v) => v <= 5);
 }
 
+// 依頼種別→主成長stat（スライス10で配列化・捜索を追加）。戦闘は固定ログ依頼（畑・納屋）用＝行動ベース不可のため種別で2種。
 const GROWTH_STAT_BY_CATEGORY = {
-  戦闘: "combat",
-  探索: "exploration",
-  調査: "investigation",
-  輸送: "exploration",
-  保全: "support",
-  生活: "negotiation",
-  救助: "support",
-  護衛: "survival",
-  記録: "investigation"
+  戦闘: ["combat", "survival"],
+  探索: ["exploration"],
+  調査: ["investigation"],
+  輸送: ["exploration"],
+  保全: ["support"],
+  生活: ["negotiation"],
+  救助: ["exploration", "support"],
+  護衛: ["survival"],
+  捜索: ["exploration", "investigation"],
+  記録: ["investigation"]
 };
+
+// 成否補正（スライス10）：result文字列→3段階。**新しい依頼で result を増やしたら必ずここに登録すること**（未登録は完全成功扱い＝プレイヤー不利にしない安全側）。
+const GROWTH_OUTCOME_TIER = { full: 1.0, partial: 0.85, fail: 0.7 };
+const GROWTH_TIER_BY_RESULT = {
+  成功: "full", 討伐: "full", 追い払い: "full", 発見: "full", 保護: "full",
+  無事帰宅: "full", 納品完了: "full", 時刻内納品: "full", 整理完了: "full", 拓本完了: "full",
+  通行可: "full", 応急修理: "full", 安全確認: "full", 異常なし: "full", 感謝: "full",
+  帰還報告: "full", 軽微な対処: "full", 持ち帰り: "full",
+  採集優先: "full", 観察優先: "full", 保存優先: "full", // 方針選択＝完遂
+  護衛成功: "full", "護衛成功（負傷）": "full", // 負傷は生還補正の軸。任務は完遂
+  隊商奪還: "full",
+  部分成功: "partial", 小成功: "partial", 一部保留: "partial", 一部注意: "partial", 一部判読: "partial",
+  応急処置: "partial", 照合保留: "partial", 再確認: "partial", 要再確認: "partial", 再配達: "partial",
+  遠回り帰宅: "partial", 小さな違和感: "partial", 手がかりのみ: "partial", 痕跡確認: "partial",
+  辛くも奪還: "partial", "隊商通過（遅延あり）": "partial", "隊商通過（荷の一部損失）": "partial",
+  小さな失敗: "fail", 護衛失敗: "fail", 荷を置いて撤退: "fail", 隊商喪失: "fail"
+};
+
+// 生還補正（スライス10）：遠征単位でパーティ全員に適用。深手までは×1.0（被弾はsurvivalの学びそのもの。
+// ここで減衰させると成長テンポの主変数が運になり「依頼選択で間接操作」の設計が壊れる）。
+// missing は現状発火経路なし＝将来のロスト実装用の受け皿。
+const GROWTH_SURVIVAL_MULT = { safe: 1.0, downed: 0.8, missing: 0.2 };
+const GROWTH_MAIN_GAIN = 2.5;
+const GROWTH_MICRO_GAIN = 0.3;
 
 const GROWTH_STAT_LABELS = {
   combat: "戦い方",
@@ -174,8 +200,8 @@ const GROWTH_STAT_MAX = 255;
 // 能力ではなく性格なので成長させない（2026-07-23決定。全員が同じ性格へ収束するのを防ぐ）。
 const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
 
-function growthStatForCategory(category) {
-  return GROWTH_STAT_BY_CATEGORY[category] ?? "exploration";
+function growthStatsForCategory(category) {
+  return GROWTH_STAT_BY_CATEGORY[category] ?? ["exploration"];
 }
 
 function humanGrowthLogText(name, statKey, rng) {
@@ -196,13 +222,20 @@ function humanGrowthLogText(name, statKey, rng) {
   return templates[statKey] ?? `${name}は今回の遠征で、${GROWTH_STAT_LABELS[statKey] ?? "遠征"}の経験を少し積んだ。`;
 }
 
-function incrementGrowthStat(adv, statKey) {
-  if (!GROWTH_ELIGIBLE_STAT_KEYS.includes(statKey)) return;
+// 成長量の適用（スライス10・18章の式）：base×(1−現在値/255)×補正。性格値5種はここを通っても変化しない。
+function applyGrowthGain(adv, statKey, base, mult) {
+  if (!GROWTH_ELIGIBLE_STAT_KEYS.includes(statKey)) return 0;
   if (!adv.stats) adv.stats = {};
   const current = adv.stats[statKey] ?? 10;
-  if (current < GROWTH_STAT_MAX) adv.stats[statKey] = current + 1;
+  if (current >= GROWTH_STAT_MAX) return 0;
+  const gain = base * (1 - current / GROWTH_STAT_MAX) * mult;
+  if (gain <= 0) return 0;
+  adv.stats[statKey] = Math.min(GROWTH_STAT_MAX, current + gain); // 内部は小数のまま持つ（表示はMath.floor）
+  return adv.stats[statKey] - current;
 }
 
+// スライス10：2段成長式（主2.5＋微0.3重複／微0.3）×生還補正×成否補正をパーティ全員に適用する。
+// 主成長セット＝依頼種別のstat ∪ 戦闘での行動stat（hiddenTags.battleGrowth）。エルシーは種別＋微成長のみ。
 function appendGrowthLogToReport(report, expedition) {
   const quest = getQuest(expedition.questId);
   if (!quest || !report?.logs) return;
@@ -210,11 +243,30 @@ function appendGrowthLogToReport(report, expedition) {
   const humans = humanMembers(party);
   if (humans.length === 0) return;
 
-  const rng = makeRng((expedition.seed ?? 1) + 991);
-  const chosen = pickOne(humans, rng);
-  const statKey = growthStatForCategory(quest.category);
+  const categoryStats = growthStatsForCategory(quest.category);
+  const battleGrowth = report.hiddenTags?.battleGrowth ?? null;
+  const survivalMult = battleGrowth?.downed ? GROWTH_SURVIVAL_MULT.downed : GROWTH_SURVIVAL_MULT.safe;
+  const outcomeMult = GROWTH_OUTCOME_TIER[GROWTH_TIER_BY_RESULT[report.result] ?? "full"];
+  const mult = survivalMult * outcomeMult;
 
-  incrementGrowthStat(chosen, statKey);
+  let best = null; // 表示用：最も伸びた「人間」×stat（エルシーも成長するが、成長ログの主語は人間に限る）
+  party.forEach((adv) => {
+    const isDog = adv.species === "dog";
+    const actionStats = (!isDog && battleGrowth?.actorStats?.[adv.id]) || [];
+    const mainSet = new Set([...categoryStats, ...actionStats]);
+    GROWTH_ELIGIBLE_STAT_KEYS.forEach((statKey) => {
+      const base = mainSet.has(statKey) ? GROWTH_MAIN_GAIN + GROWTH_MICRO_GAIN : GROWTH_MICRO_GAIN;
+      const gained = applyGrowthGain(adv, statKey, base, mult);
+      if (!isDog && gained > 0 && (!best || gained > best.gained)) {
+        best = { advId: adv.id, statKey, gained };
+      }
+    });
+  });
+  if (!best) return;
+
+  const rng = makeRng((expedition.seed ?? 1) + 991);
+  const chosen = getAdventurer(best.advId);
+  const statKey = best.statKey;
   const line = humanGrowthLogText(getDisplayName(chosen), statKey, rng);
   report.growth = { advId: chosen.id, statKey };
 
@@ -4394,6 +4446,19 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
 }
 
 // 隊商護衛（掴み体験）：戦闘エンジンの結果を3分岐のドラマ型ログに翻訳する。
+// スライス10：成長の行動ベース判定用サマリー（人間のみ）。
+// 撤退判断への参加はイベントに参加者リストがないため「生存人間全員」で近似（会敵時判断は必ず発生する）。
+function caravanBattleGrowthSummary(battle, party) {
+  if (!battle) return null;
+  const actorStats = {};
+  party.filter((a) => a.species !== "dog").forEach((a) => { actorStats[a.id] = ["survival"]; });
+  battle.events.forEach((ev) => {
+    if (ev.type === "deal" && actorStats[ev.attackerId] && !actorStats[ev.attackerId].includes("combat")) actorStats[ev.attackerId].push("combat");
+    if (ev.type === "heal" && actorStats[ev.healerId] && !actorStats[ev.healerId].includes("support")) actorStats[ev.healerId].push("support");
+  });
+  return { downed: battle.members.some((m) => m.downed), actorStats };
+}
+
 function caravanEscortOutcomeText(branch, party, rng) {
   const variants = {
     great_light: {
@@ -5635,7 +5700,7 @@ function generateReport(expedition) {
       itemIds,
       tensionValue,
       tensionLevel,
-      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch },
+      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party) },
       wrapElsie: true
     });
   }
