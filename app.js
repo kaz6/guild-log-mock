@@ -1736,7 +1736,7 @@ function renderResult(reportId) {
   const party = report.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
   const branch = report.hiddenTags?.branch;
   const safetyLine = branch === "lost" ? "全員帰還・隊商は戻らず"
-    : branch === "great_wound" || branch === "fail" || branch === "bail" ? "負傷者あり"
+    : branch === "great_wound" || branch === "fail" || branch === "bail" || branch === "partial_loss" || branch === "partial_elsie" ? "負傷者あり"
     : "全員無事に帰還";
   const growth = report.growth;
   const growthAdv = growth ? getAdventurer(growth.advId) : null;
@@ -4396,12 +4396,12 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
 // 隊商護衛（掴み体験）：戦闘エンジンの結果を3分岐のドラマ型ログに翻訳する。
 function caravanEscortOutcomeText(branch, party, rng) {
   const variants = {
-    great_unhurt: {
+    great_light: {
       result: "護衛成功",
-      summary: "隊商を狙う野盗を正面から退け、荷を欠かさず外縁の先まで送り届けた。負傷者なし。",
+      summary: "隊商を狙う野盗を正面から退け、荷を欠かさず外縁の先まで送り届けた。傷は浅く、手当てのみで済んだ。",
       line: `野盗は間合いを詰めきれず、荷馬車は止まることなく街道を抜けた。`,
-      after: `報告書には「隊商、無事通過。負傷者なし」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。強行突破で無傷、隊商を送り届けた。"
+      after: `報告書には「隊商、無事通過。負傷は浅く、手当て済み」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。浅手のみで押し切り、隊商を送り届けた。"
     },
     great_wound: {
       result: "護衛成功（負傷）",
@@ -4410,12 +4410,26 @@ function caravanEscortOutcomeText(branch, party, rng) {
       after: `報告書には「隊商通過。護衛に負傷あり、荷の損失なし」と記されている。`,
       history: "街道の外れを行く隊商の護衛。負傷しつつ強行突破、隊商を送り届けた。"
     },
-    evade: {
-      result: "離脱・完遂",
-      summary: "正面からの突破は避け、煙幕で視界を奪って隊商を先に行かせ、戦わずに離脱した。",
-      line: `煙の中で野盗の足が止まった隙に、隊商は街道の先へ抜けていった。`,
-      after: `報告書には「交戦回避。煙幕により隊商を離脱させ、被害なし」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。煙幕で離脱回避、被害なく隊商を通した。"
+    partial_detour: {
+      result: "隊商通過（遅延あり）",
+      summary: "会敵の前に煙幕で視界を塞ぎ、戦わずに隊商を裏道へ回した。荷は無事だが、約束の刻限には遅れた。",
+      line: `煙の向こうで野盗の影が揺れるうち、荷馬車は裏道へ抜けていった。`,
+      after: `報告書には「隊商は通過。交戦なし。遠回りによる遅延あり」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。煙幕で会敵を避け、遠回りで送り届けた。"
+    },
+    partial_loss: {
+      result: "隊商通過（荷の一部損失）",
+      summary: "交戦の途中で煙幕を焚き、追撃を断って隊商と共に退いた。人は守ったが、荷の一部は置いてきた。",
+      line: `煙が野盗の足を止めている間に、一行は隊商を先へ急がせた。`,
+      after: `報告書には「隊商は通過。荷の一部を失う。負傷者あり、死者なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。煙幕で退き、荷の一部を失いつつ隊商を通した。"
+    },
+    partial_elsie: {
+      result: "隊商通過（荷の一部損失）",
+      summary: "エルシーが吠えたのは、まだ退けるうちだった。退き際が早かった分、荷の一部を確保したまま隊商と退いた。",
+      line: `エルシーの声に押されるように、一行は隊商を先へ急がせた。`,
+      after: `報告書には「隊商は通過。荷の一部を失う。負傷者あり、死者なし」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。早めの退き際で、荷の一部を失いつつ隊商を通した。"
     },
     bail: {
       result: "荷を置いて撤退",
@@ -4485,6 +4499,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   const jobById = {};
   party.forEach((a) => { jobById[a.id] = a.job; });
   const hasElsie = party.some((a) => a.id === "adv_elsie");
+  const smokeHeld = battle.smoke?.held ?? false;
 
   // 深手の者の攻撃行は専用文（損耗が動作に出る書き方・メタ用語なし）。連続で同じ文は使わない。
   let lastWeakenedIdx = -1;
@@ -4571,7 +4586,15 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
         ? pick([`${cname}が倒れたのを見て、一行の動きが一瞬止まった。`, `${cname}が崩れ落ち、一行の足並みが乱れた。`])
         : pick([`${cname}の傷を見て、一行の動きが一瞬止まった。`, `${cname}の傷の深さに、一行の間に迷いがよぎった。`]));
       if (ev.retreat) {
-        out.push(`これ以上は人が保たない。一行は荷を置いて退くことを決めた。`);
+        // 撤退の実行は道具と犬が助ける（判断は動揺のまま＝スライス9維持。煙幕S1・エルシーE2：2026-07-25）
+        if (smokeHeld) {
+          out.push(`これ以上は人が保たない――誰かが煙幕を叩きつけ、白い煙が${enemyN}の視界を塞いだ。`);
+          out.push(`一行は煙に紛れ、隊商を先へ急がせた。`);
+        } else if (hasElsie) {
+          out.push(`これ以上は人が保たない。一行は荷の一部をあきらめ、退き際を揃えた。`);
+        } else {
+          out.push(`これ以上は人が保たない。一行は荷を置いて退くことを決めた。`);
+        }
         if (hasElsie) out.push(pick([
           `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
           `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
@@ -4582,12 +4605,18 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
       return out;
     }
     if (ev.at === "first") {
-      if (ev.retreat) out.push(pick([
+      if (ev.retreat) out.push(smokeHeld ? pick([
+        `やり合う前に煙幕で視界を塞ぎ、一行は隊商を裏道へ回した。`,
+        `数が多すぎると見て煙幕を焚き、隊商ごと道を変えた。`
+      ]) : pick([
         `まともにやり合うのは危険と見て、一行は早々に距離を取った。`,
         `数が多すぎると見て、一行は交戦を避けて退いた。`
       ]));
     } else if (ev.retreat) {
-      out.push(pick([
+      out.push(smokeHeld ? pick([
+        `これ以上は保たないと見て煙幕を焚き、${enemyN}の足が止まるうちに隊商を先へ急がせた。`,
+        `煙が視界を塞ぐあいだに隊商を先に行かせ、一行は退いた。`
+      ]) : pick([
         `これ以上は保たないと見て、隊商を先に行かせ、一行は退いた。`,
         `踏みとどまる限界だった。隊商を逃がし、一行は街道の外へ退いた。`
       ]));
@@ -5546,10 +5575,15 @@ function generateReport(expedition) {
   // 護衛依頼：夕市帰りの親子の付き添い
   if (quest.id === "quest_caravan_escort") {
     const battle = simulateBattle(quest, party, itemIds, rng);
+    // 煙幕S1（2026-07-25）：煙幕による離脱は時点を問わず部分成功。完全成功は戦って勝つしかない。
+    // 部分成功は捜索チェーンを発火させない（fail/bailのみが発火）。
     let branch;
     if (!battle) branch = "fail";
-    else if (battle.outcome === "victory") branch = battle.stage === "軽" ? "great_unhurt" : "great_wound";
-    else if ((battle.outcome === "withdraw_first" || battle.outcome === "withdraw_second") && battle.smoke.questContinues) branch = "evade";
+    else if (battle.outcome === "victory") branch = battle.stage === "軽" ? "great_light" : "great_wound";
+    else if (battle.outcome === "withdraw_first" && battle.smoke.questContinues) branch = "partial_detour"; // 会敵回避＝遠回りの遅延
+    else if (battle.outcome === "withdraw_second" && battle.smoke.questContinues) branch = "partial_loss"; // 交戦離脱＝荷の一部損失
+    else if (battle.outcome === "withdraw_emergency" && battle.smoke.held) branch = "partial_loss"; // 臨時撤退も煙幕で追撃を断てる
+    else if (battle.outcome === "withdraw_emergency" && partyHasElsie(party)) branch = "partial_elsie"; // E2：エルシーの早い警告が退き際を整える
     else if (battle.outcome === "withdraw_emergency") branch = "bail"; // 荷を置いて退く（臨時判断による撤退）
     else branch = "fail";
 
@@ -5572,6 +5606,7 @@ function generateReport(expedition) {
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
     add("action", outcomeInfo.line);
     if (branch === "bail") add("action", `商人は荷の行方を目で追ったまま、しばらく口を開かなかった。`);
+    if (branch === "partial_loss" || branch === "partial_elsie") add("action", `商人は減った荷を数え直し、それでも歩みを止めなかった。`);
     add("afterglow", outcomeInfo.after);
 
     return finalizeQuestReport({
@@ -5973,7 +6008,9 @@ const BATTLE_TUNING = {
   varianceMax: 1.25,
   secondDecisionRound: 3,
   maxRounds: 8,
-  lightWoundRatio: 0.18,
+  // 軽（浅手）判定の累積被ダメ閾値。前衛60%集中のため真の無傷勝利は構造上0%であり、
+  // 軽＝「手負いはあったが浅く、手当てで戻した」（原設計の「軽傷で勝利」）。0.18→0.25（2026-07-25）
+  lightWoundRatio: 0.25,
   healAmount: 15,
   // 損耗による与ダメ低下（状態語連動・段階的）。因果が読めることを最優先（2026-07-24）
   woundAttackMult: { "手負い": 0.8, "深手": 0.5 },
@@ -6022,9 +6059,10 @@ function computeBattleRetreatDecision(fighters, allyHpRatio, enemyHpRatio, conte
 }
 
 // stage（軽/中）は「累積被ダメ」基準（2026-07-23）：傷を負った事実は回復しても報告書に残す。
-function battleStageLabel(outcome, woundRatio) {
+// 軽/中の対比軸は「深手が出たか」（2026-07-25裁定）：深手が出た戦闘は累積被ダメが浅くても軽にしない。
+function battleStageLabel(outcome, woundRatio, hadDeepWound) {
   if (outcome === "victory") {
-    return woundRatio <= BATTLE_TUNING.lightWoundRatio ? "軽" : "中";
+    return (woundRatio <= BATTLE_TUNING.lightWoundRatio && !hadDeepWound) ? "軽" : "中";
   }
   if (outcome === "withdraw_first") return "軽";
   if (outcome === "withdraw_second" || outcome === "withdraw_emergency" || outcome === "stalemate") return "重";
@@ -6204,11 +6242,12 @@ function simulateBattle(quest, party, itemIds, rng) {
 
   const finalAllyRatio = allyRatio();
   const woundRatio = totalDamageTaken / partyMaxHp;
+  const hadDeepWound = events.some((e) => e.type === "status" && (e.to === "深手" || e.to === "戦闘不能"));
   return {
     enemyId: enemy.id,
     enemyName: enemy.name,
     outcome,
-    stage: battleStageLabel(outcome, woundRatio),
+    stage: battleStageLabel(outcome, woundRatio, hadDeepWound),
     damageTakenRatio: Math.round(woundRatio * 100) / 100,
     rounds,
     allyHpRatio: Math.round(finalAllyRatio * 100) / 100,
