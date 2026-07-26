@@ -337,8 +337,7 @@ button {
 
 .quest-card,
 .adventurer-card,
-.item-card,
-.observation-card {
+.item-card {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -354,8 +353,7 @@ button {
 
 .quest-card h3,
 .adventurer-card h3,
-.item-card h3,
-.observation-card h3 {
+.item-card h3 {
   margin: 0 0 8px;
 }
 
@@ -597,14 +595,6 @@ textarea {
 
 .subtle-danger {
   color: var(--accent);
-}
-
-.new-observation-highlight {
-  background: rgba(201, 150, 74, 0.1);
-  border-left: 2px solid var(--accent);
-  border-radius: 0 4px 4px 0;
-  padding-left: 8px;
-  list-style-position: inside;
 }
 
 .assign-slots {

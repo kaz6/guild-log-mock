@@ -1,28 +1,11 @@
 const STORAGE_KEY = "expeditionGuildLogMockV011";
 const DEMO_DURATION_MS = 10000;
-const MOCK_VERSION = "v0.1.2";
+const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には使わない）
+// セーブデータの世代番号（体験版①・2026-07-26導入）。stateの破壊的変更時に+1する。
+// モック段階の方針：不一致なら初期化（旧セーブは捨てる割り切り）。体験版を配布した後は
+// 「捨てる」が使えなくなるので、その段階で個別の移行関数方式に見直すこと（DECISION_LOG参照）。
+const STATE_SCHEMA_VERSION = 2;
 const MAX_PARTY_SIZE = 4;
-
-const masterObservations = [
-  {
-    id: "obs_rabbit",
-    name: "森喰い兎",
-    category: "通常敵",
-    testimony: ["森の浅い場所で荷物を荒らす小型の獣。"],
-    facts: ["薬草袋や革袋を噛み破る。"],
-    inference: ["食料や薬草の匂いに寄ってくる可能性がある。"],
-    next: ["雨天時にも活動するか。", "火や金属音を恐れるか。"]
-  },
-  {
-    id: "obs_mushroom",
-    name: "泥被り茸",
-    category: "採集対象",
-    testimony: ["湿った倒木の近くに生える薬用茸。"],
-    facts: ["泥をかぶった個体ほど香りが強い。"],
-    inference: ["雨上がりに採集量が増える可能性がある。"],
-    next: ["調合時の効果差を確認する。"]
-  }
-];
 
 const app = document.getElementById("app");
 const viewTitle = document.getElementById("viewTitle");
@@ -50,10 +33,10 @@ let mockWeather = null;  // Mock検証用: null の場合は totalExpeditions �
 
 function createInitialState() {
   return {
+    schemaVersion: STATE_SCHEMA_VERSION,
     adventurers: structuredClone(masterAdventurers),
     quests: structuredClone(masterQuests),
     items: structuredClone(masterItems),
-    observations: structuredClone(masterObservations),
     reports: [],
     expedition: null,
     worldState: {
@@ -68,7 +51,6 @@ function createInitialState() {
     selectedQuestId: null,
     selectedAdventurerIds: [],
     selectedAdventurerItems: {},
-    lastObservationUpdate: null,
     beastLog: {},
     reportMemos: [],
     searchChain: null,
@@ -106,12 +88,22 @@ function loadState() {
     if (!raw) return createInitialState();
     const base = createInitialState();
     const parsed = JSON.parse(raw);
+    // schemaVersion 不在＝v2導入前の旧世代（既存の内容推定マイグレーションで受け入れる）。
+    // 番号が合わない＝未知の世代なので初期化（モック段階の割り切り）。
+    if (parsed.schemaVersion !== undefined && parsed.schemaVersion !== STATE_SCHEMA_VERSION) {
+      console.warn(`保存データの世代が異なるため初期化します（saved=${parsed.schemaVersion} / current=${STATE_SCHEMA_VERSION}）`);
+      return createInitialState();
+    }
     const merged = { ...base, ...parsed, worldState: { ...base.worldState, ...(parsed.worldState ?? {}) } };
+    merged.schemaVersion = STATE_SCHEMA_VERSION;
     merged.quests = mergeMasterList(masterQuests);
     merged.items = mergeMasterList(masterItems);
     merged.adventurers = mergeAdventurerList(masterAdventurers, parsed.adventurers);
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
     merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
+    // 削除済みの observations 系統（体験版①）の残骸キーを落とす
+    delete merged.observations;
+    delete merged.lastObservationUpdate;
     return merged;
   } catch (error) {
     console.warn("保存データの読み込みに失敗したため初期化します", error);
@@ -125,7 +117,7 @@ function mergeMasterList(masterList) {
 
 function mergeAdventurerList(masterList, savedList = []) {
   const savedById = new Map((Array.isArray(savedList) ? savedList : []).map((item) => [item.id, item]));
-  const savedKeys = ["favorite", "memo", "history", "status"];
+  const savedKeys = ["favorite", "memo", "history", "status", "nickname"]; // nickname: リロードで消えるバグ修正（体験版①）
   return masterList.map((masterItem) => {
     const saved = savedById.get(masterItem.id) ?? {};
     const savedFields = {};
@@ -881,8 +873,30 @@ function renderHome() {
   const unopened = state.reports.filter((report) => !report.opened);
   const latestReports = state.reports.slice(0, 3);
   const expedition = state.expedition;
+  // 案B（体験版①）：閉じている間に帰還が確定していた場合、全画面リザルトへ飛ばさず
+  // ホーム最上部に「今回の帰還」カードを差し込む（開封の主導権をプレイヤーに残す）。
+  const returnedReport = state.activeResultReportId
+    ? state.reports.find((r) => r.id === state.activeResultReportId)
+    : null;
+  const returnedQuest = returnedReport ? getQuest(returnedReport.questId) : null;
 
   app.innerHTML = `
+    ${returnedReport ? `
+    <section class="card">
+      <div class="card-body">
+        <div class="card-title">
+          <div>
+            <p class="eyebrow">Homecoming</p>
+            <h3>一行が戻っています</h3>
+          </div>
+          <span class="status-pill good">帰還</span>
+        </div>
+        <p class="muted">「${escapeHtml(returnedQuest?.title ?? "遠征")}」の報告が届いています。</p>
+        <div class="button-row" style="margin-top: 12px;">
+          <button class="primary-button" onclick="setRoute('result')">帰還を確認する</button>
+        </div>
+      </div>
+    </section>` : ""}
     <div class="grid-2">
       <section class="card">
         <div class="card-body reception">
@@ -1504,43 +1518,6 @@ function openBeastLogFromMemo(reportId, targetName) {
   }
 }
 
-function isNewObservationLine(obsId, key, line) {
-  const luo = state.lastObservationUpdate;
-  if (!luo) return false;
-  const item = luo.items.find((i) => i.id === obsId);
-  if (!item) return false;
-  return (item.keys[key] ?? []).includes(line);
-}
-
-function observationHtml(obs) {
-  return `
-    <article class="observation-card">
-      <div class="card-title">
-        <div>
-          <h3>${escapeHtml(obs.name)}</h3>
-          <p class="muted">分類：${escapeHtml(obs.category)}</p>
-        </div>
-      </div>
-      ${observationSectionHtml("証言", obs.testimony, obs.id, "testimony")}
-      ${observationSectionHtml("確認された事実", obs.facts, obs.id, "facts")}
-      ${observationSectionHtml("推定", obs.inference, obs.id, "inference")}
-      ${observationSectionHtml("次に調べること", obs.next, obs.id, "next")}
-    </article>
-  `;
-}
-
-function observationSectionHtml(title, lines, obsId, key) {
-  return `
-    <p class="meta-label">${escapeHtml(title)}</p>
-    <ul>
-      ${lines.map((line) => {
-        const isNew = obsId && key && isNewObservationLine(obsId, key, line);
-        return `<li class="muted${isNew ? " new-observation-highlight" : ""}">${escapeHtml(line)}</li>`;
-      }).join("")}
-    </ul>
-  `;
-}
-
 function observationNotesHtml(obsNotes) {
   return `
     <hr class="soft" />
@@ -1817,11 +1794,18 @@ function renderResult(reportId) {
         </div>` : ""}
         <div class="button-row" style="margin-top: 18px;">
           <button class="primary-button" onclick="openReport('${report.id}')">報告書を読む</button>
-          <button class="secondary-button" onclick="setRoute('home')">ギルドへ戻る</button>
+          <button class="secondary-button" onclick="returnFromResult()">ギルドへ戻る</button>
         </div>
       </div>
     </section>
   `;
+}
+
+// リザルトを見終えたら「今回の帰還」通知を消す（案B・体験版①）。報告書を読んだ場合は openReport 側で消える。
+function returnFromResult() {
+  state.activeResultReportId = null;
+  saveState();
+  setRoute("home");
 }
 
 function selectQuest(id) {
@@ -1914,6 +1898,7 @@ function openReport(id) {
     applyReport(report);
     report.applied = true;
   }
+  if (state.activeResultReportId === id) state.activeResultReportId = null; // 帰還通知を消化（案B）
   state.activeReportId = id;
   saveState();
   setRoute("report");
@@ -1928,31 +1913,9 @@ function applyReport(report) {
   });
 
   state.worldState.totalReportsOpened += 1;
-  state.worldState.recordDensity += 1 + report.observationUpdates.length;
+  state.worldState.recordDensity += 1;
   state.worldState.attachmentScore += report.adventurerIds.length;
-  if (report.observationUpdates.length > 0) state.worldState.anomalyPressure += 0;
-
-  const newHighlightItems = [];
-  report.observationUpdates.forEach((update) => {
-    const obs = state.observations.find((item) => item.id === update.id);
-    if (!obs) return;
-    const addedKeys = {};
-    for (const [key, lines] of Object.entries(update.add)) {
-      const added = [];
-      lines.forEach((line) => {
-        if (!obs[key].includes(line)) {
-          obs[key].push(line);
-          added.push(line);
-        }
-      });
-      if (added.length > 0) addedKeys[key] = added;
-    }
-    if (Object.keys(addedKeys).length > 0) newHighlightItems.push({ id: update.id, keys: addedKeys });
-  });
-
-  if (newHighlightItems.length > 0) {
-    state.lastObservationUpdate = { reportId: report.id, items: newHighlightItems };
-  }
+  // TODO: anomalyPressure はここで増やす（コアコンセプト10-4「記録の精度が反ミーム影響度に効く」の受け皿）
 
   // 観察記録票メモを時系列アーカイブに保存（1報告書につき1回のみ）
   if (report.observationNotes && report.observationNotes.notes && report.observationNotes.notes.length > 0) {
@@ -2946,50 +2909,6 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
     after: `報告書は受付へ提出された。`,
     history: `${quest.title}：完了。`
   };
-}
-
-function observationUpdateFor(quest, outcome, roadEvents) {
-  if (quest.id === "quest_herb") {
-    const addFacts = [];
-    const addInference = [];
-    const addNext = [];
-    if (roadEvents.includes("森喰い兎") || roadEvents.includes("薬草袋の破れ")) {
-      addFacts.push("薬草袋や荷紐に反応し、噛みつくことがある。");
-      addNext.push("香りの強い薬草を囮にできるか確認する。");
-    }
-    if (outcome === "観察優先") {
-      addFacts.push("荷袋を少し離して置くと、接近行動を観察しやすい。");
-    }
-    if (roadEvents.includes("泥被り茸の群生") || roadEvents.includes("倒木")) {
-      addFacts.push("泥被り茸は湿った倒木の陰に群生することがある。");
-      addInference.push("雨上がりや湿度の高い日に採集量が増える可能性がある。");
-    }
-    const updates = [];
-    if (addFacts.length || addInference.length || addNext.length) {
-      updates.push({
-        id: "obs_rabbit",
-        add: { facts: addFacts, inference: [], next: addNext }
-      });
-    }
-    if (addInference.length || roadEvents.includes("泥被り茸の群生")) {
-      updates.push({
-        id: "obs_mushroom",
-        add: { facts: roadEvents.includes("泥被り茸の群生") ? ["湿った倒木の陰に群生することがある。"] : [], inference: addInference, next: ["採集後すぐ乾かした場合の薬効差を確認する。"] }
-      });
-    }
-    return updates.filter((update) => Object.values(update.add).some((lines) => lines.length > 0));
-  }
-  return [];
-}
-
-function observationTextFor(updates) {
-  const texts = [];
-  updates.forEach((update) => {
-    const obs = state.observations.find((item) => item.id === update.id);
-    const count = Object.values(update.add).flat().length;
-    if (obs && count > 0) texts.push(`${obs.name}：${count}件の記録を追記。`);
-  });
-  return texts;
 }
 
 function generateRabbitNote(adv, rng) {
@@ -5248,8 +5167,6 @@ function finalizeQuestReport(options) {
       expedition.adventurerItemIds ??
         Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]))
     ),
-    observationUpdates = [],
-    observationText = [],
     observationNotes = null,
     hiddenTags = {},
     highlight = null,
@@ -5272,13 +5189,11 @@ function finalizeQuestReport(options) {
     historyLine,
     adventurerHistoryLines: adventurerHistoryLines ?? {},
     logs,
-    observationUpdates,
-    observationText,
     observationNotes,
     departConditions,
     highlight: highlight ?? (rng ? generateHighlight(quest, party, itemIds, departConditions, result, rng) : null),
     hiddenTags: {
-      recordDensityGain: 1 + logs.length + observationText.length,
+      recordDensityGain: 1 + logs.length,
       ...hiddenTags
     },
     createdAt: new Date().toISOString()
@@ -5339,8 +5254,6 @@ function generateReport(expedition) {
       historyLine: `${quest.title}：${isNight ? (hasLantern ? "ランタンありで夜間確認。" : "夜間に灯りを確認、接近は保留。") : "昼間確認では異常なし。"}`,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし", rng),
@@ -5374,8 +5287,6 @@ function generateReport(expedition) {
       historyLine: "畑を荒らす「なにか」を追い払い。未同定のまま、特徴のみ記録。",
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, "追い払い", rng),
@@ -5409,8 +5320,6 @@ function generateReport(expedition) {
       historyLine: "納屋の「なにか」を討伐。未同定のまま、特徴のみ記録。",
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, "討伐", rng),
@@ -5505,8 +5414,6 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -5563,8 +5470,6 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -5626,8 +5531,6 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -5805,8 +5708,6 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -5862,8 +5763,6 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -5936,8 +5835,6 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationUpdates: [],
-      observationText: [],
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -5961,10 +5858,6 @@ function generateReport(expedition) {
   if (quest.id === "quest_signpost" && itemIds.includes("item_map") && rng() < 0.5) outcome = pickOne(["成功", "応急処置", "照合保留"], rng);
 
   const outcomeInfo = outcomeText(quest, party, itemIds, outcome, rng);
-  // 観察記録票を持っている場合のみ、観察記録本体を更新する
-  const hasObsSheet = getAllItemIds(adventurerItemIds).includes("item_obs_sheet");
-  const observationUpdates = hasObsSheet ? observationUpdateFor(quest, outcome, roadEvents) : [];
-  const observationText = observationTextFor(observationUpdates);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng);
@@ -6009,8 +5902,6 @@ function generateReport(expedition) {
     adventurerHistoryLines,
     logs,
     adventurerItemIds,
-    observationUpdates,
-    observationText,
     observationNotes,
     departConditions,
     highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
@@ -6018,7 +5909,7 @@ function generateReport(expedition) {
       weather,
       roadEvents,
       outcome,
-      recordDensityGain: 1 + logs.length + observationText.length
+      recordDensityGain: 1 + logs.length
     },
     createdAt: new Date().toISOString()
   }, quest, party, rng);
