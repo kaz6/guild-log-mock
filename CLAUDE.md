@@ -2,6 +2,15 @@
 
 このファイルは、Claude Code がこのリポジトリで作業する際に必ず守るべきルールです。
 
+## ドキュメントの正本
+- **Notionが正本。`docs/` は実装参照用の写し。**
+- 競合したらNotionを優先する。`docs/` の記述を根拠に
+  仕様を判断しない。
+- `docs/DECISION_LOG.md` `SESSION_STATE.md` への追記は
+  作業中の暂定記録。**セッション終了時に必ずNotionへ反映する**
+  （反映前の `docs/` は未確定扱い）。
+- 詳細：Notion `00_shared/ドキュメント運用規約`
+
 ## プロジェクト概要
 
 「遠征ギルドログ Mock」は、ローカルで動く HTML/CSS/JavaScript のモックです。
