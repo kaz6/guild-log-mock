@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-07-26: 死蔵コード削除とバグ修正（体験版①・掃除）
+
+### 決定
+- **自動追記型の観察記録（observations系統）を一式削除**。理由：①記入型の生態目録（`beastLog`）が既に動作しており並走させる理由がない ②コアコンセプト30章「記録係が自分で書く」と自動追記はコンセプトが合わない ③描画関数の呼び出しがゼロで元々プレイヤーに見えていなかった（棚卸しで確認）。削除＝masterObservations／state.observations／lastObservationUpdate／observationHtml系／observationUpdateFor／observationTextFor／適用ループ／report.observationUpdates・observationText／専用CSS。
+- **★取り違え防止の記録：コード上のルート名・関数名 `observations`（renderObservations）は「報告メモ画面」であり、削除したobservations系統とは別物**（関数名だけが旧名の名残）。今回はリネームせず温存（改名は体験版第7段階・生態目録整備の候補としてNEXT_TASKSに記録）。
+- **`recordDensity` / `anomalyPressure` の式は簡素化**（+1固定化／行削除しTODOコメント化）。「常に空の配列を式が参照し続ける」状態は掃除対象の半死そのものであり、recordDensityは現状どこからも読まれていないため式の形に保存価値がない（作者裁定）。**worldStateのフィールド5つ（daysPassed/totalReportsOpened/attachmentScore/recordDensity/anomalyPressure）自体は未実装システムの受け皿として残す**。
+- **あだ名がリロードで消えるバグを修正**（`savedKeys` に nickname 追加。保存漏れは全調査の結果この1件のみ）。あだ名は愛着設計の中心（23章）。
+- **リロード帰還は案B**：閉じている間に帰還が確定していた場合、全画面リザルトへ強制遷移せず**ホーム最上部の「今回の帰還」カード**から自分で開く。理由：「ハラハラの主軸は開封の瞬間」＝自分で開ける行為を消さない（MPO原体験とも一致）。起動中の帰還（即帰還ボタン）は従来どおり全画面リザルト（案A）。
+- **セーブ世代管理＝案C採用**：`state.schemaVersion`（整数・今回=2）を導入。不在＝旧世代は内容推定移行（isOldScaleStats等）で受け入れ、番号不一致は初期化（モック段階の割り切り）。STORAGE_KEYは現行のまま、MOCK_VERSIONは表示専用。★**体験版を人に配った後は「捨てる」が使えなくなる。その段階で方針を見直し、個別移行関数を書くこと（必須の見直し条件）**。
+- 旧セーブ内の残骸キー（observations/lastObservationUpdate）はロード時に除去。
+
+### 実測・検証
+- ブラウザ実機で18項目全PASS（既存機能：隊商戦闘・報告書・成長・図鑑記入・報告メモ・観察記録票／あだ名リロード永続／帰還カードの表示・消化・クリア／schemaVersion不一致初期化・旧世代受け入れ）。Console赤エラー0。
+- 副作用（裁定で許容済み）：quest_herb＋観察記録票の稀ケースで recordDensity 加算が +1+N→+1 に変化。
+
+---
+
 ## 2026-07-25: 成長システムの実装（スライス10）
 
 ### 決定

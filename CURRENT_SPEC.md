@@ -371,7 +371,9 @@
 
 ---
 
-## 観察記録票 / 報告メモ / いきもの図鑑
+## 観察記録票 / 報告メモ / いきもの図鑑（更新: 2026-07-26）
+
+※ 体験版①で自動追記型の観察記録（旧 `state.observations` 系統）は削除済み。記録の主体はプレイヤー記入型（下記の報告メモ→いきもの図鑑の流れ）に一本化された。コード上のルート名 `observations` は報告メモ画面のことであり、削除した系統とは別物。
 
 ### 観察記録票
 
@@ -393,11 +395,13 @@
 
 ---
 
-## データ保存
+## データ保存（更新: 2026-07-26）
 
-- `localStorage` に保存
+- `localStorage` に保存（単一キー）
+- **`state.schemaVersion`（現在2）でセーブ世代を管理**：番号不一致なら初期化（モック段階の割り切り。体験版配布後は個別移行関数方式へ見直し＝DECISION_LOG参照）。schemaVersion不在の旧世代は内容推定の移行（旧statスケール置換等）で受け入れる
 - `quests` / `items` はマスターデータを正として使う
-- `adventurers` はマスターデータを基本にし、`favorite / memo / history / status` など保存対象を反映する
+- `adventurers` はマスターデータを基本にし、`favorite / memo / history / status / stats / nickname` を保存対象として反映する（nicknameは体験版①で保存漏れを修正）
+- 閉じている間に遠征が完了していた場合、再訪時はホーム最上部の「今回の帰還」カードから確認する（起動中の帰還は従来どおり全画面リザルト）
 - `selectedAdventurerItems` は旧形式（`advId: "itemId"`）から新形式（`advId: ["id1", "id2"]`）へ自動変換する
 - `reports` / `reportMemos` / `beastLog` を保存する
 
