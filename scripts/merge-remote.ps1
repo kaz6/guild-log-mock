@@ -1,4 +1,4 @@
-# merge-remote.ps1: Merge the remote work branch (Claude Code on the web output) into main.
+﻿# merge-remote.ps1: Merge the remote work branch (Claude Code on the web output) into main.
 # PowerShell port of merge-remote.sh, usable directly from PowerShell (no Git Bash needed).
 # Steps: fetch -> switch to main + pull -> merge work branch -> push main -> delete remote work branch
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\merge-remote.ps1 [work-branch-name]
