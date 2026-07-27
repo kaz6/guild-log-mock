@@ -61,7 +61,7 @@ window.masterQuests = [
     category: "生活",
     danger: "低",
     area: "町外れの古い家屋",
-    durationBand: "near_5m",
+    durationBand: "near_1m",
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",

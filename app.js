@@ -73,11 +73,14 @@ function formatRealDuration(ms) {
 // 「1日（実1時間）」の形。ゲーム内の長さと実時間の対応をそのまま見せる。
 function formatQuestDuration(quest) {
   const days = getQuestDurationDays(quest);
+  const gameHours = days * 24;
   const gameText = days >= 1
     ? `${Math.round(days * 10) / 10}日`
     : days >= 0.5
       ? "半日"
-      : `${Math.max(1, Math.round(days * 24))}時間`;
+      : gameHours >= 1
+        ? `${Math.round(gameHours * 10) / 10}時間`
+        : `${Math.max(1, Math.round(gameHours * 60))}分`;
   const base = `${gameText}（実${formatRealDuration(getQuestDurationMs(quest))}）`;
   const speed = getDemoSpeed();
   if (speed === 1) return base;
