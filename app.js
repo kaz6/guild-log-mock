@@ -1092,6 +1092,20 @@ function setMockWeather(w) {
   render();
 }
 
+// 依頼の解放判定（体験版②-3）。`unlockedBy` が指す依頼へ一度でも遠征していれば解放。
+// 成否は問わない（失敗で行き止まりにすると「失敗も物語として進む」設計と矛盾するため）。
+// ★ 解放状態は state.reports から都度導出している。将来「報告書を削除できる」ようにすると
+//   解放が巻き戻るので、そのときはここを見直すこと（DECISION_LOG 参照）。
+// ※ `hidden`（捜索チェーン専用＝掲示板には永久に並ばない）とは別概念。両方を並存させる。
+function isQuestUnlocked(quest, clearedQuestIds) {
+  if (!quest.unlockedBy) return true;
+  return clearedQuestIds.has(quest.unlockedBy);
+}
+
+function getClearedQuestIds() {
+  return new Set(state.reports.map((report) => report.questId));
+}
+
 function renderQuests() {
   const selectedQuest = getQuest(selectedQuestId);
   const expeditionBlock = expeditionBlockedMessage(selectedAdventurerIds);
@@ -1104,7 +1118,8 @@ function renderQuests() {
   const searchChain = state.searchChain;
   const urgentQuestId = searchChain ? (searchChain.stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search") : null;
   const urgentQuest = urgentQuestId ? getQuest(urgentQuestId) : null;
-  const boardQuests = state.quests.filter((quest) => !quest.hidden);
+  const clearedQuestIds = getClearedQuestIds();
+  const boardQuests = state.quests.filter((quest) => !quest.hidden && isQuestUnlocked(quest, clearedQuestIds));
   if (urgentQuest) boardQuests.unshift(urgentQuest);
 
   app.innerHTML = `
@@ -1211,6 +1226,7 @@ function questCardHtml(quest, isUrgent = false) {
         <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
         <span>${isLifeQuest ? "作業負荷" : "危険度"}</span><strong class="${isLifeQuest ? "subtle-danger" : ""}">${escapeHtml(quest.danger)}</strong>
         <span>地域</span><strong>${escapeHtml(quest.area)}</strong>
+        <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
         <span>観察対象</span><strong>${escapeHtml(quest.observationTarget)}</strong>
       </div>
       <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
