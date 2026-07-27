@@ -6,9 +6,12 @@
 - **Notionが正本。`docs/` は実装参照用の写し。**
 - 競合したらNotionを優先する。`docs/` の記述を根拠に
   仕様を判断しない。
-- `docs/DECISION_LOG.md` `SESSION_STATE.md` への追記は
-  作業中の暫定記録。**セッション終了時に必ずNotionへ反映する**
-  （反映前の `docs/` は未確定扱い）。
+- `docs/DECISION_LOG.md` への追記は作業中の暫定記録。
+  **セッション終了時に必ずNotionへ反映する**（反映前は未確定扱い）。
+- **例外：`docs/SESSION_STATE.md` だけは repo が正本**。
+  Claude Code が生成して Claude Code が読む文書なので、
+  Notion 側（SESSION_STATE（写し・閲覧用））は閲覧用の写しで、
+  session-end スキルが毎回同じ内容で上書きする。
 - 詳細：Notion `02_operations/ドキュメント運用規約`
 
 ## Notion ページID（このリポジトリの書き戻し先）
@@ -19,6 +22,7 @@
 |---|---|---|
 | DECISION_LOG（設計判断の記録・遠征） | `3a9a8a5dfd4581e3a8cfc3872a300766` | **遠征固有**の設計判断の正本。`docs/DECISION_LOG.md` はその写し。新しい決定を上に追記する |
 | CURRENT_SPEC（仕様の正本） | `3aaa8a5dfd45819294a9c359178bcc9a` | **仕様の正本**（2026-07-27 移行）。ルートの `CURRENT_SPEC.md` はその写し。実装が変わったらこちらを更新してから写しを同期する |
+| SESSION_STATE（**写し**・閲覧用） | `3aaa8a5dfd45814bb89bec0658128132` | **この文書だけ向きが逆。repo の `docs/SESSION_STATE.md` が正本**で、こちらは閲覧用の写し。session-end スキルが毎回同じ内容で上書きする（手で編集しない） |
 | `_tasks/進行中` | `39da8a5dfd4581a091f0ce2d0d6dcdfd` | タスクページの確認事項・実装結果を記入する（個別タスクページのIDは都度チャットで指定される） |
 | `_tasks/完了済み` | `39da8a5dfd4581f3904edda4ad2b0c79` | 完了したタスクページの移動先 |
 | コアコンセプト（正本・最重要） | `3a5a8a5dfd4581a7b73ce0eb6541635e` | 設計思想の正本。改訂注記の書き込み先 |
