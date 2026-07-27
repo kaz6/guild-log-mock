@@ -1,11 +1,91 @@
 const STORAGE_KEY = "expeditionGuildLogMockV011";
-const DEMO_DURATION_MS = 10000;
 const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には使わない）
 // セーブデータの世代番号（体験版①・2026-07-26導入）。stateの破壊的変更時に+1する。
 // モック段階の方針：不一致なら初期化（旧セーブは捨てる割り切り）。体験版を配布した後は
 // 「捨てる」が使えなくなるので、その段階で個別の移行関数方式に見直すこと（DECISION_LOG参照）。
 const STATE_SCHEMA_VERSION = 2;
 const MAX_PARTY_SIZE = 4;
+
+// === 時間スケール（体験版②・2026-07-26） ====================================
+// 時間の正本はこの定数1個。コアコンセプト16章「昼30分／夜30分＝実1時間でゲーム内1日」。
+// ここを変えるだけで全依頼の所要時間が伸び縮みする（実時間は必ずここから導出する）。
+const REAL_MINUTES_PER_GAME_DAY = 60;
+const MS_PER_REAL_MINUTE = 60000;
+
+// 実時間の分をゲーム内日数へ換算する。所要時間の一次情報はゲーム内日数だが、
+// 近場の帯は日数で書くと 0.0167 等になり読めないため、定義時だけ分で書いて日数へ変換する。
+function gameDaysFromRealMinutes(realMinutes) {
+  return realMinutes / REAL_MINUTES_PER_GAME_DAY;
+}
+
+// 依頼の所要時間の帯（コアコンセプト17章）。依頼データの durationBand がこのキーを指す。
+// ※ 帯名「近」は旧称「最序盤」。実態は進行段階ではなく距離なので改称した（体験版②裁定）。
+// ※ long_5h / long_7h は定義のみで該当依頼は未実装。北・東の遠方依頼が入ったときに使う。
+const QUEST_DURATION_BANDS = {
+  near_1m: { label: "近", days: gameDaysFromRealMinutes(1) },
+  near_5m: { label: "近", days: gameDaysFromRealMinutes(5) },
+  near_10m: { label: "近", days: gameDaysFromRealMinutes(10) },
+  short_30m: { label: "短", days: gameDaysFromRealMinutes(30) },
+  short_1h: { label: "短", days: gameDaysFromRealMinutes(60) },
+  mid_2h: { label: "中", days: gameDaysFromRealMinutes(120) },
+  mid_3h: { label: "中", days: gameDaysFromRealMinutes(180) },
+  long_5h: { label: "長", days: gameDaysFromRealMinutes(300) },
+  long_7h: { label: "長", days: gameDaysFromRealMinutes(420) }
+};
+const DEFAULT_DURATION_BAND = "short_30m";
+
+// 体験版モード（時間加速）。等倍＝本番の見え方、60倍＝人に見せる用、3600倍＝検証用。
+// 加速中だけ「Mock用：即帰還」ボタンを出す（素の状態＝人に見せる状態にするため）。
+const DEMO_SPEED_OPTIONS = [
+  { value: 1, label: "等倍" },
+  { value: 60, label: "60倍" },
+  { value: 3600, label: "3600倍" }
+];
+
+// 依頼の所要時間（ゲーム内日数）。帯が未設定・未知なら短の最小へ落とす。
+function getQuestDurationDays(quest) {
+  const band = QUEST_DURATION_BANDS[quest?.durationBand] ?? QUEST_DURATION_BANDS[DEFAULT_DURATION_BAND];
+  return band.days;
+}
+
+// 実時間（ms）は日数から導出する。ここに固定値を書かないこと。
+function getQuestDurationMs(quest) {
+  return getQuestDurationDays(quest) * REAL_MINUTES_PER_GAME_DAY * MS_PER_REAL_MINUTE;
+}
+
+function getDemoSpeed() {
+  const saved = state?.demoSpeed;
+  return DEMO_SPEED_OPTIONS.some((option) => option.value === saved) ? saved : 1;
+}
+
+function setDemoSpeed(value) {
+  state.demoSpeed = value;
+  saveState();
+  render();
+}
+
+function formatRealDuration(ms) {
+  if (ms < 60000) return `${Math.max(1, Math.round(ms / 1000))}秒`;
+  const minutes = Math.round(ms / 60000);
+  return minutes < 60 ? `${minutes}分` : `${Math.round((minutes / 60) * 10) / 10}時間`;
+}
+
+// 「1日（実1時間）」の形。ゲーム内の長さと実時間の対応をそのまま見せる。
+function formatQuestDuration(quest) {
+  const days = getQuestDurationDays(quest);
+  const gameHours = days * 24;
+  const gameText = days >= 1
+    ? `${Math.round(days * 10) / 10}日`
+    : days >= 0.5
+      ? "半日"
+      : gameHours >= 1
+        ? `${Math.round(gameHours * 10) / 10}時間`
+        : `${Math.max(1, Math.round(gameHours * 60))}分`;
+  const base = `${gameText}（実${formatRealDuration(getQuestDurationMs(quest))}）`;
+  const speed = getDemoSpeed();
+  if (speed === 1) return base;
+  return `${base} ／ 加速中：約${formatRealDuration(getQuestDurationMs(quest) / speed)}`;
+}
 
 const app = document.getElementById("app");
 const viewTitle = document.getElementById("viewTitle");
@@ -54,6 +134,7 @@ function createInitialState() {
     beastLog: {},
     reportMemos: [],
     searchChain: null,
+    demoSpeed: 1, // 体験版モードの時間加速倍率（1=等倍＝本番の見え方）
     player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
   };
 }
@@ -696,8 +777,12 @@ function escapeHtml(value) {
 
 function checkExpeditionCompletion() {
   if (!state.expedition) return;
-  const elapsed = Date.now() - state.expedition.startTime;
+  // durationMs は素の値を保存し、比較時に倍率を掛ける（出発済みの遠征も加速できる）。
+  const elapsed = (Date.now() - state.expedition.startTime) * getDemoSpeed();
   if (elapsed < state.expedition.durationMs) return;
+
+  // 依頼の所要日数だけ暦を進める（体験版②）。表示は②-2。
+  state.worldState.daysPassed += getQuestDurationDays(getQuest(state.expedition.questId));
 
   const report = generateReport(state.expedition);
   appendPresenceLogToReport(report, state.expedition);
@@ -954,7 +1039,7 @@ function reportCardHtml(report) {
 
 function expeditionProgressHtml(expedition) {
   const quest = getQuest(expedition.questId);
-  const elapsed = Math.max(0, Date.now() - expedition.startTime);
+  const elapsed = Math.max(0, Date.now() - expedition.startTime) * getDemoSpeed();
   const pct = Math.min(100, Math.floor((elapsed / expedition.durationMs) * 100));
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean).map(getDisplayName).join(" / ");
 
@@ -972,9 +1057,10 @@ function expeditionProgressHtml(expedition) {
         <div class="progress-shell" style="margin: 14px 0;">
           <div class="progress-bar" style="width: ${pct}%"></div>
         </div>
+        ${getDemoSpeed() > 1 ? `
         <div class="button-row">
           <button class="secondary-button" onclick="advanceTimeForMock()">Mock用：扉の音を待たず報告書を届ける</button>
-        </div>
+        </div>` : ""}
       </div>
     </section>
   `;
@@ -1040,6 +1126,10 @@ function renderQuests() {
       <span class="mock-time-label">🔧 天候：</span>
       ${weatherOptions.map((w) => `<button class="mock-time-btn${mockWeather === w ? " active" : ""}" onclick="setMockWeather('${w}')">${w}</button>`).join("")}
       ${mockWeather ? `<button class="mock-time-btn" onclick="setMockWeather(null)">自動</button>` : `<button class="mock-time-btn active" onclick="setMockWeather(null)">自動</button>`}
+    </div>
+    <div class="mock-time-bar">
+      <span class="mock-time-label">🔧 時間加速：</span>
+      ${DEMO_SPEED_OPTIONS.map((option) => `<button class="mock-time-btn${getDemoSpeed() === option.value ? " active" : ""}" onclick="setDemoSpeed(${option.value})">${option.label}</button>`).join("")}
     </div>
     <section class="card">
       <div class="card-body">
@@ -1202,7 +1292,7 @@ function dispatchSummaryHtml(quest, expeditionBlock = null) {
       <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
       <span>編成</span><strong>${party.length ? party.map(getDisplayName).map(escapeHtml).join(" / ") : "未選択"}</strong>
       <span>支給品</span><strong>${itemsText}</strong>
-      <span>所要時間</span><strong>Mockでは約10秒</strong>
+      <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
     </div>
     ${expeditionBlock ? `<p class="muted" style="margin-top: 12px;">${escapeHtml(expeditionBlock)}</p>` : ""}
   `;
@@ -1866,7 +1956,7 @@ function startExpedition() {
     adventurerItemIds: JSON.parse(JSON.stringify(selectedAdventurerItems)),
     itemIds: getAllItemIds(selectedAdventurerItems),
     startTime: Date.now(),
-    durationMs: DEMO_DURATION_MS,
+    durationMs: getQuestDurationMs(getQuest(selectedQuestId)),
     seed: Math.floor(Math.random() * 1000000),
     departTimeOfDay: departCond.timeOfDay,
     departWeather: departCond.weather
