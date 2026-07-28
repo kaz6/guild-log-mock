@@ -178,7 +178,7 @@ node scripts/gen-quest-table.js
 
 - `REAL_MINUTES_PER_GAME_DAY = 60`（コアコンセプト16章「昼30分／夜30分＝実1時間でゲーム内1日」）
 - **所要時間の一次情報はゲーム内日数**。実時間は必ずこの定数から導出します（実時間をデータに直書きしない）。
-- 依頼は `durationBand` で帯を指し、帯→日数は `QUEST_DURATION_BANDS` の1箇所で持ちます。
+- 依頼は `durationBand` で帯を指し、帯→日数は `data-time.js` の `masterDurationBands` の1箇所で持ちます（**2026-07-28 に `app.js` から移設**。帯の定義はデータでありロジックではないため。値は変えていません）。
 
 | 帯 | キー | ゲーム内 | 実時間 | 該当依頼 |
 | --- | --- | --- | --- | --- |

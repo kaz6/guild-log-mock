@@ -7,8 +7,9 @@
 //
 // 使い方: node scripts/gen-quest-table.js
 //
-// ※ 帯のラベルと実時間は app.js の QUEST_DURATION_BANDS から読む。
-//   ここに書き写すと、それ自体が第2の複製になるため。
+// ※ 帯のラベルと実時間は data-time.js から読む。ここに書き写すと第2の複製になるため。
+//   （2026-07-28 まではロジック側の app.js にあったので定義ブロックを抜き出していた。
+//     帯を data 側へ移したので、素直に読み込むだけで済むようになった。）
 
 const fs = require("fs");
 const path = require("path");
@@ -20,37 +21,26 @@ function readSource(file) {
   return fs.readFileSync(path.join(root, file), "utf8");
 }
 
-// data-quests.js は window へ代入するだけのファイルなので、window を用意して評価する。
-function loadQuests() {
+// data-*.js は window へ代入するだけのファイルなので、window を用意して丸ごと評価する。
+function loadDataFile(file) {
   const sandbox = { window: {} };
-  vm.runInNewContext(readSource("data-quests.js"), sandbox, { filename: "data-quests.js" });
-  const quests = sandbox.window.masterQuests;
+  vm.runInNewContext(readSource(file), sandbox, { filename: file });
+  return sandbox.window;
+}
+
+function loadQuests() {
+  const quests = loadDataFile("data-quests.js").masterQuests;
   if (!Array.isArray(quests)) throw new Error("data-quests.js から masterQuests を読めなかった");
   return quests;
 }
 
-// app.js は本体全体がブラウザ依存なので評価できない。帯の定義ブロックだけを抜いて評価する。
 function loadDurationBands() {
-  const src = readSource("app.js");
-  const pieces = [
-    /const REAL_MINUTES_PER_GAME_DAY = [\s\S]*?;/,
-    /function gameDaysFromRealMinutes\([\s\S]*?\n\}/,
-    /const QUEST_DURATION_BANDS = \{[\s\S]*?\n\};/,
-    /const DEFAULT_DURATION_BAND = [\s\S]*?;/
-  ].map((re) => {
-    const hit = src.match(re);
-    if (!hit) throw new Error(`app.js から定義を抜き出せなかった: ${re}`);
-    return hit[0];
-  });
-  const sandbox = {};
-  // const 宣言はサンドボックスのプロパティにならないので、明示的に外へ出す。
-  pieces.push("globalThis.__extracted = { QUEST_DURATION_BANDS, REAL_MINUTES_PER_GAME_DAY, DEFAULT_DURATION_BAND };");
-  vm.runInNewContext(pieces.join("\n"), sandbox, { filename: "app.js(抜粋)" });
-  const extracted = sandbox.__extracted;
+  const time = loadDataFile("data-time.js");
+  if (!time.masterDurationBands) throw new Error("data-time.js から masterDurationBands を読めなかった");
   return {
-    bands: extracted.QUEST_DURATION_BANDS,
-    minutesPerDay: extracted.REAL_MINUTES_PER_GAME_DAY,
-    defaultBand: extracted.DEFAULT_DURATION_BAND
+    bands: time.masterDurationBands,
+    minutesPerDay: time.REAL_MINUTES_PER_GAME_DAY,
+    defaultBand: time.defaultDurationBand
   };
 }
 

@@ -6,33 +6,12 @@ const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には�
 const STATE_SCHEMA_VERSION = 2;
 const MAX_PARTY_SIZE = 4;
 
-// === 時間スケール（体験版②・2026-07-26） ====================================
-// 時間の正本はこの定数1個。コアコンセプト16章「昼30分／夜30分＝実1時間でゲーム内1日」。
-// ここを変えるだけで全依頼の所要時間が伸び縮みする（実時間は必ずここから導出する）。
-const REAL_MINUTES_PER_GAME_DAY = 60;
-const MS_PER_REAL_MINUTE = 60000;
-
-// 実時間の分をゲーム内日数へ換算する。所要時間の一次情報はゲーム内日数だが、
-// 近場の帯は日数で書くと 0.0167 等になり読めないため、定義時だけ分で書いて日数へ変換する。
-function gameDaysFromRealMinutes(realMinutes) {
-  return realMinutes / REAL_MINUTES_PER_GAME_DAY;
-}
-
-// 依頼の所要時間の帯（コアコンセプト17章）。依頼データの durationBand がこのキーを指す。
-// ※ 帯名「近」は旧称「最序盤」。実態は進行段階ではなく距離なので改称した（体験版②裁定）。
-// ※ long_5h / long_7h は定義のみで該当依頼は未実装。北・東の遠方依頼が入ったときに使う。
-const QUEST_DURATION_BANDS = {
-  near_1m: { label: "近", days: gameDaysFromRealMinutes(1) },
-  near_5m: { label: "近", days: gameDaysFromRealMinutes(5) },
-  near_10m: { label: "近", days: gameDaysFromRealMinutes(10) },
-  short_30m: { label: "短", days: gameDaysFromRealMinutes(30) },
-  short_1h: { label: "短", days: gameDaysFromRealMinutes(60) },
-  mid_2h: { label: "中", days: gameDaysFromRealMinutes(120) },
-  mid_3h: { label: "中", days: gameDaysFromRealMinutes(180) },
-  long_5h: { label: "長", days: gameDaysFromRealMinutes(300) },
-  long_7h: { label: "長", days: gameDaysFromRealMinutes(420) }
-};
-const DEFAULT_DURATION_BAND = "short_30m";
+// === 時間スケール（体験版②・2026-07-26／2026-07-28 に定義を data 側へ移設） ===
+// 帯の定義はデータなので `data-time.js` が持つ。ここは参照するだけ（値は向こうが正）。
+const REAL_MINUTES_PER_GAME_DAY = window.REAL_MINUTES_PER_GAME_DAY;
+const MS_PER_REAL_MINUTE = window.MS_PER_REAL_MINUTE;
+const QUEST_DURATION_BANDS = window.masterDurationBands;
+const DEFAULT_DURATION_BAND = window.defaultDurationBand;
 
 // 体験版モード（時間加速）。等倍＝本番の見え方、60倍＝人に見せる用、3600倍＝検証用。
 // 加速中だけ「Mock用：即帰還」ボタンを出す（素の状態＝人に見せる状態にするため）。
