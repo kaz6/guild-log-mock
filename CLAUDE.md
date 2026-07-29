@@ -103,6 +103,12 @@ node --check data-adventurers.js data-enemies.js data-items.js data-quests.js
 - **typecheck は未整備**：TypeScript 設定がなく、`tsc --noEmit --allowJs --checkJs app.js` は型エラー多数（exit 2）で落ちる。
 - ※ `node --check` は構文エラーしか見ない。未定義参照・削除漏れは検出できないので、**削除や大きな変更のあとは必ずブラウザで動線を通すこと**（下記4）。
 
+### 3.5 戦闘の数値を触ったときの必須確認
+
+★ **戦闘まわりの数値（敵データ・`BATTLE_TUNING`・stat・武器）を変えたら、勝率だけでなく必ず結末分布を測ること。** スライス9の検証が勝率しか見ておらず、軽（浅手勝利）が消えた回帰に気づけなかった実例がある。
+
+`index.html` をブラウザで開き、DevTools のコンソールに `scripts/measure-battle.js` の中身を貼って `measureBattle()` を実行する（依存パッケージ不要・読み取り専用）。
+
 ### 4. 動作確認の手順
 
 起動後、次の順に触って**すべて満たせば正常**（各項目は実機で通ることを確認済み）。
