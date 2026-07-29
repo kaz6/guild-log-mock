@@ -3,7 +3,11 @@ const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には�
 // セーブデータの世代番号（体験版①・2026-07-26導入）。stateの破壊的変更時に+1する。
 // モック段階の方針：不一致なら初期化（旧セーブは捨てる割り切り）。体験版を配布した後は
 // 「捨てる」が使えなくなるので、その段階で個別の移行関数方式に見直すこと（DECISION_LOG参照）。
-const STATE_SCHEMA_VERSION = 2;
+// 3: 負傷の持続と回復クールダウン（第3段階・2026-07-29）で adventurer.injury を追加。
+// ★ 個別移行関数はまだ書かない（2026-07-29裁定）。ARCHITECTURE_PRINCIPLES が求めているのは
+//   「バージョンフィールドを持つこと」で、それは既に満たしている。移行関数を書くのは可逆なので後でよい。
+//   **発動条件：配布ビルドを作る前に必ず個別移行関数方式へ切り替える。** ここを飛ばさない。
+const STATE_SCHEMA_VERSION = 3;
 const MAX_PARTY_SIZE = 4;
 
 // === 時間スケール（体験版②・2026-07-26／2026-07-28 に定義を data 側へ移設） ===
@@ -77,6 +81,8 @@ let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
 let selectedAdventurerItems = state.selectedAdventurerItems ?? {};
 let editingAdventurerId = null;
+// 重症の冒険者に断られたときの一言。保存しない（画面だけの一時状態）。
+let departRefusal = null;
 let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
 
 // オープニング面接: プレイヤー（記録係）の気質選択肢。tags は将来の受付嬢・冒険者の会話反映用。
@@ -177,7 +183,7 @@ function mergeMasterList(masterList) {
 
 function mergeAdventurerList(masterList, savedList = []) {
   const savedById = new Map((Array.isArray(savedList) ? savedList : []).map((item) => [item.id, item]));
-  const savedKeys = ["favorite", "memo", "history", "status", "nickname"]; // nickname: リロードで消えるバグ修正（体験版①）
+  const savedKeys = ["favorite", "memo", "history", "status", "nickname", "injury"]; // injury: 負傷の持続（第3段階）
   return masterList.map((masterItem) => {
     const saved = savedById.get(masterItem.id) ?? {};
     const savedFields = {};
@@ -585,6 +591,84 @@ function partyHasElsie(party) {
   return party.some((a) => a.id === "adv_elsie");
 }
 
+// === 負傷の持続と回復（第3段階・2026-07-29） ==================================
+// ★ 負傷の重さは「結末（stage）」ではなく「帰還時の個人HP率」で決める。
+//   stage は物語の重さであって負傷の深さではない（実測：3つの stage で帰還時HP率がほぼ同じ。
+//   特に stage重＝撤退は HP が高い）。閾値は既存の状態語（battleStatusWord）をそのまま流用する。
+// ★ 負傷は戦闘の開始HPには影響させない。効くのは「出撃可否」と「回復待ち」だけ
+//   （2026-07-29裁定Aで戦闘の数値は不変と確定しているため）。
+function injuryLevelFromHpRatio(hpRatio) {
+  const word = battleStatusWord(hpRatio, 1);
+  if (word === "健在") return null;
+  return word === "手負い" ? "軽症" : "重症";
+}
+
+// 回復の残り。依頼と同じく素の値を保存し、比較時に倍率を掛ける（出発済みでも加速できる方式に合わせる）。
+function getInjuryRemainingMs(adventurer, now = Date.now()) {
+  const injury = adventurer?.injury;
+  if (!injury || !injury.level) return 0;
+  const total = injury.recoverMs ?? 0;
+  const elapsed = (now - (injury.injuredAt ?? 0)) * getDemoSpeed();
+  return Math.max(0, total - elapsed);
+}
+
+function getActiveInjury(adventurer, now = Date.now()) {
+  return getInjuryRemainingMs(adventurer, now) > 0 ? adventurer.injury : null;
+}
+
+function isRefusingExpedition(adventurer, now = Date.now()) {
+  return getActiveInjury(adventurer, now)?.level === "重症";
+}
+
+// 回復済みの負傷を落とす。時間が進むのは依頼中と回復中だけなので、描画のたびに現在時刻で判定する。
+function clearRecoveredInjuries() {
+  const now = Date.now();
+  let changed = false;
+  state.adventurers.forEach((adv) => {
+    if (adv.injury && getInjuryRemainingMs(adv, now) <= 0) {
+      adv.injury = null;
+      changed = true;
+    }
+  });
+  if (changed) saveState();
+}
+
+// 帰還時の個人HP率から負傷を確定する。HP率を持たない依頼（戦闘がない依頼）では何も起きない。
+function applyInjuriesFromReport(report) {
+  const ratios = report?.hiddenTags?.battleHpRatios;
+  if (!ratios) return;
+  const now = Date.now();
+  Object.entries(ratios).forEach(([advId, ratio]) => {
+    const level = injuryLevelFromHpRatio(ratio);
+    if (!level) return;
+    const adv = getAdventurer(advId);
+    if (!adv) return;
+    adv.injury = { level, injuredAt: now, recoverMs: window.masterRecoveryTimes[level] };
+  });
+}
+
+function battleHpRatiosOf(battle) {
+  if (!battle || !Array.isArray(battle.members)) return null;
+  return Object.fromEntries(battle.members.map((m) => [m.id, m.maxHp > 0 ? Math.max(0, m.hp) / m.maxHp : 1]));
+}
+
+function injuryBadgeHtml(adventurer) {
+  const injury = getActiveInjury(adventurer);
+  if (!injury) return "";
+  const remain = formatRealDuration(getInjuryRemainingMs(adventurer) / getDemoSpeed());
+  const cls = injury.level === "重症" ? "injury-severe" : "injury-light";
+  return `<span class="status-pill ${cls}">${escapeHtml(injury.level)}／あと${escapeHtml(remain)}</span>`;
+}
+
+// 重症は本人が断る（ボタンは塞がない＝「命じれば行く。ただし重症なら断る」）。
+function departRefusalMessage(adventurerIds) {
+  const now = Date.now();
+  const refusing = adventurerIds.map(getAdventurer).filter(Boolean).filter((a) => isRefusingExpedition(a, now));
+  if (refusing.length === 0) return null;
+  const names = refusing.map(getDisplayName).map(escapeHtml).join("、");
+  return `${names}は深手が癒えていません。「……この身体では、足を引っ張ります」と断られました。`;
+}
+
 function expeditionBlockedMessage(adventurerIds) {
   if (adventurerIds.length === 0) return null;
   const party = adventurerIds.map(getAdventurer).filter(Boolean);
@@ -788,6 +872,7 @@ function checkExpeditionCompletion() {
   }
 
   state.activeResultReportId = report.id;
+  applyInjuriesFromReport(report); // 負傷は依頼をまたいで残る（第3段階）
   state.expedition.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv) adv.status = "待機中";
@@ -798,6 +883,7 @@ function checkExpeditionCompletion() {
 
 function render() {
   checkExpeditionCompletion();
+  clearRecoveredInjuries(); // 回復はオフライン中も進む（絶対時刻で判定するため）
 
   // オープニング面接が未完なら、他の画面より先に面接シーンを出す（ゲート）。
   if (!state.player || !state.player.interviewDone) {
@@ -1226,7 +1312,10 @@ function selectableAdventurerHtml(adventurer) {
           <h3>${adventurer.favorite ? "★ " : ""}${escapeHtml(getDisplayName(adventurer))}</h3>
           <p class="muted">${subtitle}</p>
         </div>
-        <span class="status-pill ${disabled ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
+        <div class="status-pills">
+          <span class="status-pill ${disabled ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
+          ${injuryBadgeHtml(adventurer)}
+        </div>
       </div>
       <p class="muted">${escapeHtml(adventurer.memo)}</p>
     </article>
@@ -1290,6 +1379,7 @@ function dispatchSummaryHtml(quest, expeditionBlock = null) {
       <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
     </div>
     ${expeditionBlock ? `<p class="muted" style="margin-top: 12px;">${escapeHtml(expeditionBlock)}</p>` : ""}
+    ${departRefusal ? `<p class="depart-refusal">${escapeHtml(departRefusal)}</p>` : ""}
   `;
 }
 
@@ -1330,7 +1420,10 @@ function adventurerListCardHtml(adventurer) {
           <h3>${adventurer.favorite ? "★ " : "☆ "}${escapeHtml(getDisplayName(adventurer))}</h3>
           <p class="muted">本名：${escapeHtml(adventurer.name)}</p>
         </div>
-        <span class="status-pill ${adventurer.status !== "待機中" ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
+        <div class="status-pills">
+          <span class="status-pill ${adventurer.status !== "待機中" ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
+          ${injuryBadgeHtml(adventurer)}
+        </div>
       </div>
       <div class="tags">
         <span class="tag">${escapeHtml(adventurer.job)}</span>
@@ -1895,6 +1988,7 @@ function returnFromResult() {
 
 function selectQuest(id) {
   selectedQuestId = id;
+  departRefusal = null;
   saveState();
   render();
 }
@@ -1902,6 +1996,7 @@ function selectQuest(id) {
 function toggleAdventurer(id) {
   const adv = getAdventurer(id);
   if (!adv || adv.status !== "待機中") return;
+  departRefusal = null;
   if (selectedAdventurerIds.includes(id)) {
     selectedAdventurerIds = selectedAdventurerIds.filter((advId) => advId !== id);
     delete selectedAdventurerItems[id];
@@ -1928,6 +2023,7 @@ function assignItem(advId, slot, itemId) {
 }
 
 function clearSelections() {
+  departRefusal = null;
   selectedQuestId = null;
   selectedAdventurerIds = [];
   selectedAdventurerItems = {};
@@ -1938,6 +2034,14 @@ function clearSelections() {
 function startExpedition() {
   if (!selectedQuestId || selectedAdventurerIds.length === 0 || state.expedition) return;
   if (expeditionBlockedMessage(selectedAdventurerIds)) return;
+  // 重症は本人が断る。編成では選べる（バッジで見えている）ので、断られるのは強行したときだけ。
+  const refusal = departRefusalMessage(selectedAdventurerIds);
+  if (refusal) {
+    departRefusal = refusal;
+    render();
+    return;
+  }
+  departRefusal = null;
   selectedAdventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv) adv.status = "遠征中";
@@ -5688,7 +5792,8 @@ function generateReport(expedition) {
       itemIds,
       tensionValue,
       tensionLevel,
-      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party) },
+      // battleHpRatios: 帰還時の個人HP率。負傷の確定に使う（第3段階）。エルシーは戦闘のHP管理外なので含まれない。
+      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party), battleHpRatios: battleHpRatiosOf(battle) },
       wrapElsie: true
     });
   }

@@ -29,3 +29,12 @@ window.masterDurationBands = {
   long_7h: { label: "長", days: gameDaysFromRealMinutes(420) }
 };
 window.defaultDurationBand = "short_30m";
+
+// 負傷からの回復にかかる実時間（第3段階・2026-07-29）。単位はミリ秒。
+// ★ 軽症は「ほぼ即また出せる」長さにする。連続で出せることを守るための受け皿。
+// ※ 依頼の所要時間と同じく、体験版モードの倍率は比較時に掛ける（素の値をここに置く）。
+// ※ ゲーム内の日数へは換算しない。回復の残りは実時間だけで見せる。
+window.masterRecoveryTimes = {
+  軽症: 5 * 60 * 1000,
+  重症: 60 * 60 * 1000
+};
