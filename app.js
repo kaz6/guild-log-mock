@@ -6170,20 +6170,18 @@ function getEnemyForQuest(quest) {
   return window.masterEnemies.find((e) => e.id === quest.enemyId) ?? null;
 }
 
-// 前衛は毎ラウンド選び直す。★ ルールは1行＝「負傷した者は下がり、無傷の者が前に出る」（H1-a・2026-07-29）。
-// 境目は負傷の閾値と同じものを使う（battleStatusWord の「健在」＝HP率70%超）。しきい値を新設しない。
-//   ・前衛は70%まで削られてから交代するので、深手が出る余地が残る
-//   ・全員が順に70%まで削られるので、負傷は分散する
-// 無傷の者がいなくなったら下がる先がないので、従来どおり frontOrder の順に戻る。
-// frontOrder は初期の立ち位置も決める（1ラウンド目は全員が健在なのでここで決まる）。
+// 前衛は毎ラウンド選び直す。HP率のもっとも高い者が前へ出る（H1-a・2026-07-29）。
+// ★ 消耗した者を前に立たせ続けない＝「盾役が消耗したら次の者が前へ出る」。
+//   以前は frontOrder の先頭固定で、倒れたときしか交代しなかったため負傷が前衛1人に集中していた。
+// frontOrder は初期の立ち位置を決める役目として残す（1ラウンド目は全員HP率1.0なのでここで決まる）。
 function pickBattleFront(fighters) {
   const alive = fighters.filter((f) => !f.downed);
   if (alive.length === 0) return null;
-  const isUnhurt = (f) => battleStatusWord(f.hp, f.maxHp) === "健在";
+  const hpRatio = (f) => (f.maxHp > 0 ? Math.max(0, f.hp) / f.maxHp : 0);
   const sorted = [...alive].sort((a, b) => {
-    const au = isUnhurt(a);
-    const bu = isUnhurt(b);
-    if (au !== bu) return au ? -1 : 1;
+    const ah = hpRatio(a);
+    const bh = hpRatio(b);
+    if (ah !== bh) return bh - ah;
     const ai = BATTLE_TUNING.frontOrder.indexOf(a.job);
     const bi = BATTLE_TUNING.frontOrder.indexOf(b.job);
     const ar = ai === -1 ? 99 : ai;
