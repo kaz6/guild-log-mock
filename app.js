@@ -6170,10 +6170,18 @@ function getEnemyForQuest(quest) {
   return window.masterEnemies.find((e) => e.id === quest.enemyId) ?? null;
 }
 
+// 前衛は毎ラウンド選び直す。HP率のもっとも高い者が前へ出る（H1-a・2026-07-29）。
+// ★ 消耗した者を前に立たせ続けない＝「盾役が消耗したら次の者が前へ出る」。
+//   以前は frontOrder の先頭固定で、倒れたときしか交代しなかったため負傷が前衛1人に集中していた。
+// frontOrder は初期の立ち位置を決める役目として残す（1ラウンド目は全員HP率1.0なのでここで決まる）。
 function pickBattleFront(fighters) {
   const alive = fighters.filter((f) => !f.downed);
   if (alive.length === 0) return null;
+  const hpRatio = (f) => (f.maxHp > 0 ? Math.max(0, f.hp) / f.maxHp : 0);
   const sorted = [...alive].sort((a, b) => {
+    const ah = hpRatio(a);
+    const bh = hpRatio(b);
+    if (ah !== bh) return bh - ah;
     const ai = BATTLE_TUNING.frontOrder.indexOf(a.job);
     const bi = BATTLE_TUNING.frontOrder.indexOf(b.job);
     const ar = ai === -1 ? 99 : ai;
