@@ -4600,6 +4600,14 @@ function caravanEscortOutcomeText(branch, party, rng) {
       after: `報告書には「隊商は通過。交戦なし。遠回りによる遅延あり」と記されている。`,
       history: "街道の外れを行く隊商の護衛。煙幕で会敵を避け、遠回りで送り届けた。"
     },
+    // ★段階1＝接敵で引き返した（2026-07-30）。挑んでいないので負傷も損失もなく、依頼も達していない。
+    avoid: {
+      result: "交戦回避（依頼未達）",
+      summary: "相手の構えを見て、この編成では倒し切る前に保たないと判断した。隊商ごと引き返し、誰も傷を負わなかった。",
+      line: `荷馬車は向きを変え、来た道を戻っていった。剣を抜くことはなかった。`,
+      after: `報告書には「交戦なし。負傷なし。街道は通れず、隊商は引き返した」と記されている。`,
+      history: "街道の外れを行く隊商の護衛。勝ち目がないと見て交戦を避け、隊商ごと引き返した。"
+    },
     partial_loss: {
       result: "隊商通過（荷の一部損失）",
       summary: "交戦の途中で煙幕を焚き、追撃を断って隊商と共に退いた。人は守ったが、荷の一部は置いてきた。",
@@ -4772,40 +4780,43 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
 
   const retreatLines = (ev) => {
     const out = [];
-    // 臨時判断（スライス9）：仲間が倒れて一行が迷う。踏みとどまっても退いても、判断があったことを必ず出す。
+    // ★段階2＝動揺（2026-07-30）。仲間が倒れて一行が揺れる。
+    //   ここで決まるのは「引こうとなった」までで、実際に退くかは段階4（at:"resolve"）が決める。
     if (ev.at === "emergency") {
       const cname = ev.causeName ?? "仲間";
       out.push(ev.causeTo === "戦闘不能"
         ? pick([`${cname}が倒れたのを見て、一行の動きが一瞬止まった。`, `${cname}が崩れ落ち、一行の足並みが乱れた。`])
         : pick([`${cname}の傷を見て、一行の動きが一瞬止まった。`, `${cname}の傷の深さに、一行の間に迷いがよぎった。`]));
-      if (ev.retreat) {
-        // 撤退の実行は道具と犬が助ける（判断は動揺のまま＝スライス9維持。煙幕S1・エルシーE2：2026-07-25）
-        if (smokeHeld) {
-          out.push(`これ以上は人が保たない――誰かが煙幕を叩きつけ、白い煙が${enemyN}の視界を塞いだ。`);
-          out.push(`一行は煙に紛れ、隊商を先へ急がせた。`);
-        } else if (hasElsie) {
-          out.push(`これ以上は人が保たない。一行は荷の一部をあきらめ、退き際を揃えた。`);
-        } else {
-          out.push(`これ以上は人が保たない。一行は荷を置いて退くことを決めた。`);
-        }
-        if (hasElsie) out.push(pick([
-          `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
-          `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
-        ]));
-      } else {
-        out.push(pick([`それでも、荷馬車の前を空けるわけにはいかなかった。`, `誰も口には出さず、ただ持ち場に戻った。`]));
-      }
+      out.push(ev.retreat
+        ? pick([`これ以上は人が保たない――誰かがそう口にした。`, `退こう、と誰かが言った。反論は出なかった。`])
+        : pick([`それでも、荷馬車の前を空けるわけにはいかなかった。`, `誰も口には出さず、ただ持ち場に戻った。`]));
       return out;
     }
+    // ★段階1＝接敵。挑まずに引き返す判断がここで下りる（負傷も報酬もなく帰る）。
     if (ev.at === "first") {
-      if (ev.retreat) out.push(smokeHeld ? pick([
+      if (!ev.retreat) {
+        out.push(pick([
+          `相手の数と構えを測り、押し切れると見て、一行は荷馬車の前に出た。`,
+          `やれる、と誰かが短く言った。一行は荷馬車の前に並んだ。`
+        ]));
+        return out;
+      }
+      out.push(smokeHeld ? pick([
         `やり合う前に煙幕で視界を塞ぎ、一行は隊商を裏道へ回した。`,
         `数が多すぎると見て煙幕を焚き、隊商ごと道を変えた。`
       ]) : pick([
-        `まともにやり合うのは危険と見て、一行は早々に距離を取った。`,
-        `数が多すぎると見て、一行は交戦を避けて退いた。`
+        `相手の構えを見て、これは自分たちの手には合わないと判断した。`,
+        `倒し切る前にこちらが保たない――そう見て、一行は矛を収めた。`
       ]));
-    } else if (ev.retreat) {
+      return out;
+    }
+    // ★段階4＝相手を見て決める。撤退が成立するのはここだけ。
+    // 条件2：毎ラウンド回るので、動きがないラウンドには何も書かない（「まだやれる」を並べない）。
+    // 撤退に失敗したラウンドでは「退いた」と書かない（直後の失敗行が引き受ける）。
+    if (ev.retreat && ev.succeeded === false) {
+      return out;
+    }
+    if (ev.retreat) {
       out.push(smokeHeld ? pick([
         `これ以上は保たないと見て煙幕を焚き、${enemyN}の足が止まるうちに隊商を先へ急がせた。`,
         `煙が視界を塞ぐあいだに隊商を先に行かせ、一行は退いた。`
@@ -4813,19 +4824,38 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
         `これ以上は保たないと見て、隊商を先に行かせ、一行は退いた。`,
         `踏みとどまる限界だった。隊商を逃がし、一行は街道の外へ退いた。`
       ]));
-    } else {
+      // 撤退成立時のみエルシーの囮（撤退フレーバー＝ダメージ・状態行ではない）。
+      if (hasElsie) out.push(pick([
+        `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
+        `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
+      ]));
+    } else if (ev.afterShaken) {
+      // ★「引こうとなったが留まった」。動揺と計算を分けた成果がここに出る。
       out.push(pick([
-        `退くか一瞬迷ったが、隊商を置いてはいけないと、一行は踏みとどまった。`,
-        `ここが退き時かと思われたが、一行はもう一歩踏ん張ることを選んだ。`
+        `だが${enemyN}の動きが鈍くなっているのを見て、一行はもう一歩踏み込んだ。`,
+        `退き際を探る目が、${enemyN}の崩れかけた構えに止まった。まだ押せる。`
       ]));
     }
-    // 撤退成立時のみエルシーの囮（撤退フレーバー＝ダメージ・状態行ではない）。
-    if (ev.retreat && hasElsie) out.push(pick([
-      `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
-      `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
-    ]));
     return out;
   };
+
+  // ★論点4＝A（2026-07-30）。撤退まわりで「動いた瞬間」だけを書く。
+  const voteLine = (ev) => (ev.milestone === "first"
+    ? pick([`${ev.name}が、そろそろ引くべきだと口にした。`, `${ev.name}の目が、退路の方を一度だけ探った。`])
+    : pick([`引くべきだという声が、いつのまにか半分を超えていた。`, `残るべきだと言う者は、もういなかった。`]));
+  const faltererLine = () => pick([
+    `${enemyN}の動きが目に見えて鈍くなった。`,
+    `${enemyN}の息が上がり、間合いの詰め方が雑になってきた。`
+  ]);
+  const retreatFailedLine = () => pick([
+    `退こうとしたが、${enemyN}は間合いを詰めてきた。引き際を見失い、戦いは続いた。`,
+    `背を向けようとした一行に${enemyN}が食い下がり、退くことはできなかった。`,
+    `退く合図は出たが、${enemyN}の追いが速く、隊列は街道に押し戻された。`
+  ]);
+  const supplyOutLine = (ev) => pick([
+    `${ev.healerName}が、包帯はこれで最後だと短く告げた。`,
+    `巻けるものは、もう残っていなかった。`
+  ]);
 
   // victory時、最後の deal イベントをトドメ扱いにする。
   let killIndex = -1;
@@ -4851,6 +4881,10 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     else if (ev.type === "heal") lines.push(healLine(ev));
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
     else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push({ kind: "action", text: l }));
+    else if (ev.type === "vote") lines.push({ kind: "action", text: voteLine(ev) });
+    else if (ev.type === "enemy_falter") lines.push({ kind: "action", text: faltererLine() });
+    else if (ev.type === "retreat_failed") lines.push({ kind: "action", text: retreatFailedLine() });
+    else if (ev.type === "supply_out") lines.push({ kind: "action", text: supplyOutLine(ev) });
   });
   if (finisher) lines.push(finisher);
   return lines;
@@ -5759,8 +5793,8 @@ function generateReport(expedition) {
     if (!battle) branch = "fail";
     else if (battle.outcome === "victory") branch = battle.stage === "軽" ? "great_light" : "great_wound";
     else if (battle.outcome === "withdraw_first" && battle.smoke.questContinues) branch = "partial_detour"; // 会敵回避＝遠回りの遅延
-    else if (battle.outcome === "withdraw_second" && battle.smoke.questContinues) branch = "partial_loss"; // 交戦離脱＝荷の一部損失
-    else if (battle.outcome === "withdraw_emergency" && battle.smoke.held) branch = "partial_loss"; // 臨時撤退も煙幕で追撃を断てる
+    else if (battle.outcome === "withdraw_first") branch = "avoid"; // ★段階1＝挑まずに引き返す（負傷なし・報酬なし。2026-07-30）
+    else if (battle.outcome === "withdraw_emergency" && battle.smoke.held) branch = "partial_loss"; // 交戦離脱も煙幕で追撃を断てる
     else if (battle.outcome === "withdraw_emergency" && partyHasElsie(party)) branch = "partial_elsie"; // E2：エルシーの早い警告が退き際を整える
     else if (battle.outcome === "withdraw_emergency") branch = "bail"; // 荷を置いて退く（臨時判断による撤退）
     else branch = "fail";
@@ -6182,8 +6216,19 @@ const BATTLE_TUNING = {
   strongTakeHpRatio: 0.12,
   varianceMin: 0.75,
   varianceMax: 1.25,
-  secondDecisionRound: 3,
   maxRounds: 8,
+  // ★ 撤退判断の4段階（2026-07-30）。段階1＝接敵で引く／段階2＝想定超過の被害（動揺）／
+  //   段階3＝以後は毎ラウンド判定／段階4＝相手を見て決める。**撤退の最終決定は段階4だけ**。
+  //   旧 R3 の定期判断は段階3に吸収して廃止した（実測で発火 0件だった）。
+  // forecast＝「倒すまでのラウンド数 ÷ こちらが持たないラウンド数」。1.0 で互角、大きいほど絶望的。
+  //   ★ これで初めて敵の threat と最大HPの絶対値が式に入る（旧式は敵HPの割合しか見ていなかった）。
+  //   score = (比 − 1) × scale + offset。offset は閾値の最小（ミナ40）に合わせてある＝互角で誰も引かない。
+  forecastScoreScale: 50,
+  forecastScoreOffset: 40,
+  forecastRatioCap: 6, // 絶望の度合いに上限を置く（スコアが桁で暴れないように）
+  // 撤退は失敗しうる（失敗したら戦闘続行）。エルシーがいれば必ず成功する。
+  retreatSuccessBase: 0.6,
+  retreatSuccessSmokeBonus: 0.3,
   // 軽（浅手）判定の累積被ダメ閾値。前衛60%集中のため真の無傷勝利は構造上0%であり、
   // 軽＝「手負いはあったが浅く、手当てで戻した」（原設計の「軽傷で勝利」）。0.18→0.25（2026-07-25）
   // ★ 0.25→0.26（2026-07-30）。クリティカル＝深手にしたことで軽の2条件（累積≦閾値／深手なし）が
@@ -6234,15 +6279,42 @@ function pickBattleFront(fighters) {
   return sorted[0];
 }
 
-function computeBattleRetreatDecision(fighters, allyHpRatio, enemyHpRatio, context) {
+// 「倒すまでのラウンド数」と「こちらが持たないラウンド数」の比（2026-07-30）。
+// ★ これが「こいつに勝つ手段がもうない」の中身。1.0 で互角、1 を大きく超えると絶望的。
+//   1ラウンドに通る被ダメは threat から生存者の guard 合計を引いた値で近似する
+//   （実測と一致：野盗 38−13=25 に対し実測 25.0／大熊 46−13=33 に対し実測 33.0）。
+function computeBattleForecast(fighters, enemyHpNow, enemy) {
   const alive = fighters.filter((f) => !f.downed);
-  const base = (1 - allyHpRatio) * 100 + (enemyHpRatio - 0.5) * 30;
-  let modifiers = 0;
-  if (context.hasElsie) modifiers += BATTLE_TUNING.scoreElsieBonus;
-  if (context.hasSmoke) modifiers += BATTLE_TUNING.scoreSmokeBonus;
-  if (context.hasEffectiveItem) modifiers += BATTLE_TUNING.scoreEffectiveItemPenalty;
-  if (enemyHpRatio <= BATTLE_TUNING.enemyLowHpRatio) modifiers += BATTLE_TUNING.scoreEnemyLowHpPenalty;
-  const score = Math.round(base + modifiers);
+  if (alive.length === 0) return { roundsToKill: Infinity, roundsToFall: 0, ratio: Infinity };
+  const offense = alive.reduce((sum, f) => sum + f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1), 0);
+  const roundsToKill = offense > 0 ? Math.max(0, enemyHpNow) / offense : Infinity;
+  const guardSum = alive.reduce((sum, f) => sum + f.weaponGuard, 0);
+  const perRoundTake = Math.max(1, enemy.threat - guardSum);
+  const allyHp = alive.reduce((sum, f) => sum + Math.max(0, f.hp), 0);
+  const roundsToFall = allyHp / perRoundTake;
+  const ratio = roundsToFall > 0 ? roundsToKill / roundsToFall : Infinity;
+  return { roundsToKill, roundsToFall, ratio };
+}
+
+// 段階1（接敵）と段階4（相手を見て決める）の冷静な判断。相手の**残り**と相手の**強さ**の両方を見る。
+// ★ 損耗は forecast の中（現在HP）に入っているので、旧式のように別項で足さない（二重計上を避ける）。
+// ★ 医療系支給品は「残り個数」で効く（2026-07-30 裁定）。あるうちは粘り、使い切った瞬間に引く側へ倒れる。
+function computeBattleResolveDecision(fighters, enemyHpNow, enemy, context, at = "resolve") {
+  const alive = fighters.filter((f) => !f.downed);
+  const forecast = computeBattleForecast(fighters, enemyHpNow, enemy);
+  const enemyHpRatio = enemy.hp > 0 ? Math.max(0, enemyHpNow) / enemy.hp : 0;
+  const capped = Math.min(forecast.ratio, BATTLE_TUNING.forecastRatioCap);
+  let raw = (capped - 1) * BATTLE_TUNING.forecastScoreScale + BATTLE_TUNING.forecastScoreOffset;
+  // ★ 段階1（接敵）では逃げ道の道具（煙幕）と犬の警告を数えない（2026-07-30）。
+  //   接敵は「勝てるか」だけで判断する。道具は「引くと決めたあと」を助けるものなので、
+  //   ここに足すと勝てる編成が煙幕を持っただけで挑まなくなる（実測：3人+エルシー+煙幕で回避100%）。
+  if (at !== "first") {
+    if (context.hasElsie) raw += BATTLE_TUNING.scoreElsieBonus;
+    if (context.hasSmoke) raw += BATTLE_TUNING.scoreSmokeBonus;
+  }
+  if ((context.medicalLeft ?? 0) > 0) raw += BATTLE_TUNING.scoreEffectiveItemPenalty; // 手当てできるからまだやれる
+  if (enemyHpRatio <= BATTLE_TUNING.enemyLowHpRatio) raw += BATTLE_TUNING.scoreEnemyLowHpPenalty;
+  const score = Math.round(raw);
   const votes = alive.map((f) => {
     const jobBase = BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault;
     const shift = BATTLE_TUNING.retreatPersonalityShift[f.personality] ?? 0;
@@ -6251,7 +6323,16 @@ function computeBattleRetreatDecision(fighters, allyHpRatio, enemyHpRatio, conte
   });
   const retreatCount = votes.filter((v) => v.retreat).length;
   const needed = Math.floor(alive.length / 2) + 1;
-  return { score, votes, retreatCount, needed, retreat: retreatCount >= needed };
+  return {
+    score,
+    votes,
+    retreatCount,
+    needed,
+    retreat: retreatCount >= needed,
+    roundsToKill: Math.round(forecast.roundsToKill * 100) / 100,
+    roundsToFall: Math.round(forecast.roundsToFall * 100) / 100,
+    ratio: Math.round(forecast.ratio * 100) / 100
+  };
 }
 
 // stage（軽/中）は「累積被ダメ」基準（2026-07-23）：傷を負った事実は回復しても報告書に残す。
@@ -6260,8 +6341,8 @@ function battleStageLabel(outcome, woundRatio, hadDeepWound) {
   if (outcome === "victory") {
     return (woundRatio <= BATTLE_TUNING.lightWoundRatio && !hadDeepWound) ? "軽" : "中";
   }
-  if (outcome === "withdraw_first") return "軽";
-  if (outcome === "withdraw_second" || outcome === "withdraw_emergency" || outcome === "stalemate") return "重";
+  if (outcome === "withdraw_first") return "軽"; // 段階1＝挑まずに引き返す（負傷なし）
+  if (outcome === "withdraw_emergency" || outcome === "stalemate") return "重";
   return "致命";
 }
 
@@ -6286,8 +6367,10 @@ function simulateBattle(quest, party, itemIds, rng) {
   let bandages = heldItems.filter((id) => id === "item_bandage").length; // 包帯総数（エルシーは運び手：所持分も人間が使う）
   const hasSmoke = heldItems.includes("item_smoke");
   const effectiveIds = Array.isArray(quest.battleEffectiveItemIds) ? quest.battleEffectiveItemIds : [];
-  const hasEffectiveItem = effectiveIds.some((id) => heldItems.includes(id));
-  const context = { hasElsie, hasSmoke, hasEffectiveItem };
+  // ★ 有効な支給品は「残り個数」で判断に効く（2026-07-30）。持っているだけの固定値ではない。
+  let medicalLeft = heldItems.filter((id) => effectiveIds.includes(id)).length;
+  const bandageIsEffective = effectiveIds.includes("item_bandage");
+  const context = { hasElsie, hasSmoke, medicalLeft };
 
   const fighters = humans.map((a) => {
     const combatStat = a.stats?.combat ?? 10;
@@ -6323,7 +6406,12 @@ function simulateBattle(quest, party, itemIds, rng) {
   const roundLog = [];
   const events = []; // 交戦記録用イベント列（案B・スライス1）。既存ロジックからの派生記録のみ。
   let totalDamageTaken = 0; // 累積被ダメ（回復で戻さない総被弾）。stage判定の基準（2026-07-23）
-  let emergencyCount = 0; // 臨時撤退判断の発火回数（emergencyCapまで）
+  let emergencyCount = 0; // 段階2（動揺）の発火回数（emergencyCapまで）
+  let shakenOnce = false; // 段階2が一度でも起きたか。以後は毎ラウンド段階4を回す（段階3）
+  let retreatFailures = 0; // 撤退に失敗した回数（失敗したら戦闘続行）
+  let voteSeen = false; // 撤退票が初めて出たか（ログの節目・条件2）
+  let majoritySeen = false; // 撤退票が過半に達したか（ログの節目・条件2）
+  let falterSeen = false; // 敵の勢いが落ちたことを一度書いたか
   let outcome = null;
   let rounds = 0;
 
@@ -6331,23 +6419,40 @@ function simulateBattle(quest, party, itemIds, rng) {
   const enemyRatio = () => Math.max(0, enemyHp) / enemy.hp;
   const variance = () => BATTLE_TUNING.varianceMin + random() * (BATTLE_TUNING.varianceMax - BATTLE_TUNING.varianceMin);
 
-  const first = computeBattleRetreatDecision(fighters, allyRatio(), enemyRatio(), context);
+  // 撤退票の変化は節目だけ書く（条件2・2026-07-30）。初めて出た／過半に達した、の2回だけ。
+  const logVoteMilestone = (decision, round) => {
+    const majorityNow = decision.retreat && !majoritySeen;
+    // 初めて票が出た。ただし同じ判断で過半にも達したなら、そちらだけ書く（同趣旨の2行を並べない）。
+    if (decision.retreatCount > 0 && !voteSeen) {
+      voteSeen = true;
+      if (!majorityNow) {
+        const firstVoter = decision.votes.find((v) => v.retreat);
+        events.push({ type: "vote", milestone: "first", round, name: firstVoter?.name ?? "誰か", count: decision.retreatCount, needed: decision.needed });
+      }
+    }
+    if (majorityNow) {
+      majoritySeen = true;
+      events.push({ type: "vote", milestone: "majority", round, count: decision.retreatCount, needed: decision.needed });
+    }
+  };
+  // 撤退の実行判定。失敗したら戦闘続行（エルシーがいれば必ず成功する）。
+  const tryRetreat = () => {
+    if (hasElsie) return true;
+    const chance = BATTLE_TUNING.retreatSuccessBase + (hasSmoke ? BATTLE_TUNING.retreatSuccessSmokeBonus : 0);
+    return random() < chance;
+  };
+
+  // ★段階1（接敵）：戦うか、挑まずに引き返すか。予想ラウンド数で判断する（2026-07-30 裁定・論点1=A）。
+  context.medicalLeft = medicalLeft;
+  const first = computeBattleResolveDecision(fighters, enemyHp, enemy, context, "first");
   decisions.push({ at: "first", ...first });
-  events.push({ type: "retreat", at: "first", round: 0, retreat: first.retreat });
+  logVoteMilestone(first, 0);
+  events.push({ type: "retreat", at: "first", round: 0, retreat: first.retreat, ratio: first.ratio });
   if (first.retreat) {
     outcome = "withdraw_first";
   } else {
     for (let round = 1; round <= BATTLE_TUNING.maxRounds; round++) {
       rounds = round;
-      if (round === BATTLE_TUNING.secondDecisionRound) {
-        const second = computeBattleRetreatDecision(fighters, allyRatio(), enemyRatio(), context);
-        decisions.push({ at: "second", ...second });
-        events.push({ type: "retreat", at: "second", round, retreat: second.retreat });
-        if (second.retreat) {
-          outcome = "withdraw_second";
-          break;
-        }
-      }
       const alive = fighters.filter((f) => !f.downed);
       // 損耗DPS低下：状態語に応じて与ダメが段階的に落ちる（健在100%/手負い80%/深手50%）
       const offense = alive.reduce((sum, f) => sum + f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1), 0);
@@ -6404,6 +6509,11 @@ function simulateBattle(quest, party, itemIds, rng) {
         }
       });
       roundLog.push({ round, dealt: dealtTotal, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
+      // 敵の勢いが落ちた瞬間（撤退を留める根拠になるので、報告書にも一度だけ書く）
+      if (!falterSeen && enemyHp > 0 && enemyRatio() <= BATTLE_TUNING.enemyLowHpRatio) {
+        falterSeen = true;
+        events.push({ type: "enemy_falter", round });
+      }
       if (enemyHp <= 0) {
         outcome = "victory";
         break;
@@ -6421,6 +6531,7 @@ function simulateBattle(quest, party, itemIds, rng) {
         const target = [...standing].filter((f) => severity[f.status]).sort((a, b) => severity[b.status] - severity[a.status])[0];
         if (healer && target) {
           bandages -= 1;
+          if (bandageIsEffective) medicalLeft = Math.max(0, medicalLeft - 1);
           const healed = Math.min(BATTLE_TUNING.healAmount, target.maxHp - target.hp);
           target.hp += healed;
           events.push({ type: "heal", round, healerId: healer.id, healerName: healer.name, targetId: target.id, targetName: target.name, amount: healed, self: healer.id === target.id });
@@ -6432,22 +6543,42 @@ function simulateBattle(quest, party, itemIds, rng) {
             events.push({ type: "status", round, targetId: target.id, targetName: target.name, from: target.status, to: backStatus, recovered: true });
             target.status = backStatus;
           }
+          // ★ 使い切った瞬間を書く（論点3=A）。ここから先は「手当てできるから続ける」が効かなくなる。
+          if (bandages === 0) events.push({ type: "supply_out", round, healerName: healer.name });
         }
       }
-      // ★臨時撤退判断（スライス9）：仲間が深手/戦闘不能になったラウンドの末、一行が迷う。
+      // ★段階2＝想定超過の被害（スライス9の臨時判断をそのまま使う）：仲間が深手/戦闘不能になったラウンドの末、一行が動揺する。
       // 「動揺スコア」＝損耗＋ショック（＋エルシーの警告は本能なので維持）。
-      // 道具や敵の残り体力のそろばん（包帯-20/煙幕+30/敵瀕死-25）は動揺時には働かない。
-      // 成立は生存者の半数以上（動揺時は安全側に倒れる）。定期2回制はそのまま。
+      // 道具や敵の残り体力のそろばん（包帯-20/煙幕+30/敵瀕死-25）は動揺時には働かない（2026-07-24 の裁定を維持）。
+      // ★ ただし**ここで撤退は決まらない**（2026-07-30・論点2=B）。決まるのは「引こうとなった」までで、
+      //   実際に退くかは直後の段階4（冷静に相手を見る）が決める。動揺と計算を別の層に分けている。
+      let shakenThisRound = false;
       if (crisis && emergencyCount < BATTLE_TUNING.emergencyCap) {
         emergencyCount++;
         const shock = BATTLE_TUNING.emergencyShock[crisis.to] ?? 0;
         const emScore = Math.round((1 - allyRatio()) * 100) + shock + (hasElsie ? BATTLE_TUNING.scoreElsieBonus : 0);
         const standing = fighters.filter((f) => !f.downed);
         const yes = standing.filter((f) => emScore >= ((BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault) + (BATTLE_TUNING.retreatPersonalityShift[f.personality] ?? 0))).length;
-        const retreatNow = yes >= Math.ceil(standing.length / 2);
-        decisions.push({ at: "emergency", score: emScore, retreat: retreatNow });
-        events.push({ type: "retreat", at: "emergency", round, retreat: retreatNow, causeName: crisis.name, causeTo: crisis.to });
-        if (retreatNow) { outcome = "withdraw_emergency"; break; }
+        shakenThisRound = yes >= Math.ceil(standing.length / 2);
+        decisions.push({ at: "emergency", score: emScore, retreat: shakenThisRound });
+        events.push({ type: "retreat", at: "emergency", round, retreat: shakenThisRound, causeName: crisis.name, causeTo: crisis.to });
+        shakenOnce = true; // ★段階3：ここから先は毎ラウンド判定になる
+      }
+      // ★段階4＝相手の様子を見て決める。段階2が一度起きたら以降は毎ラウンド回る（段階3）。
+      // 撤退が成立するのはここだけ。「あと一撃で倒せる」ときは forecast と敵瀕死−25 が留める。
+      if (shakenOnce) {
+        context.medicalLeft = medicalLeft;
+        const resolve = computeBattleResolveDecision(fighters, enemyHp, enemy, context);
+        decisions.push({ at: "resolve", ...resolve });
+        logVoteMilestone(resolve, round);
+        // ★撤退は失敗しうる。成否をここで決めてからログに渡す（「退いた」と「退けなかった」を並べないため）。
+        const succeeded = resolve.retreat ? tryRetreat() : false;
+        events.push({ type: "retreat", at: "resolve", round, retreat: resolve.retreat, succeeded, afterShaken: shakenThisRound, ratio: resolve.ratio });
+        if (resolve.retreat) {
+          if (succeeded) { outcome = "withdraw_emergency"; break; }
+          retreatFailures++; // 失敗したら戦闘続行（次ラウンドにもう一度判断する）
+          events.push({ type: "retreat_failed", round });
+        }
       }
     }
     if (!outcome) outcome = "stalemate";
@@ -6467,10 +6598,11 @@ function simulateBattle(quest, party, itemIds, rng) {
     enemyHpRatio: Math.round(enemyRatio() * 100) / 100,
     frontId: pickBattleFront(fighters)?.id ?? fighters[0].id,
     members: fighters.map((f) => ({ id: f.id, name: f.name, job: f.job, hp: Math.max(0, f.hp), maxHp: f.maxHp, downed: f.downed, gotCrit: f.gotCrit })),
+    retreatFailures,
     decisions,
     roundLog,
     events,
-    smoke: { held: hasSmoke, questContinues: hasSmoke && (outcome === "withdraw_first" || outcome === "withdraw_second") }
+    smoke: { held: hasSmoke, questContinues: hasSmoke && outcome === "withdraw_first" }
   };
 }
 
