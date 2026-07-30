@@ -597,8 +597,11 @@ function partyHasElsie(party) {
 //   特に stage重＝撤退は HP が高い）。閾値は既存の状態語（battleStatusWord）をそのまま流用する。
 // ★ 負傷は戦闘の開始HPには影響させない。効くのは「出撃可否」と「回復待ち」だけ
 //   （2026-07-29裁定Aで戦闘の数値は不変と確定しているため）。
-function injuryLevelFromHpRatio(hpRatio) {
-  const word = battleStatusWord(hpRatio, 1);
+// ★ 2026-07-29：状態語の深手がクリティカル基準になったので、重症もそれに従う。
+//   閾値を流用する関係はそのまま＝深手なら重症、手負いなら軽症。
+//   手当てで深手から持ち直していれば重症にはならない（包帯が効く）。
+function injuryLevelFromHpRatio(hpRatio, gotCrit = false) {
+  const word = battleStatusWord(hpRatio, 1, gotCrit);
   if (word === "健在") return null;
   return word === "手負い" ? "軽症" : "重症";
 }
@@ -637,9 +640,10 @@ function clearRecoveredInjuries() {
 function applyInjuriesFromReport(report) {
   const ratios = report?.hiddenTags?.battleHpRatios;
   if (!ratios) return;
+  const critIds = new Set(report?.hiddenTags?.battleCritIds ?? []);
   const now = Date.now();
   Object.entries(ratios).forEach(([advId, ratio]) => {
-    const level = injuryLevelFromHpRatio(ratio);
+    const level = injuryLevelFromHpRatio(ratio, critIds.has(advId));
     if (!level) return;
     const adv = getAdventurer(advId);
     if (!adv) return;
@@ -650,6 +654,12 @@ function applyInjuriesFromReport(report) {
 function battleHpRatiosOf(battle) {
   if (!battle || !Array.isArray(battle.members)) return null;
   return Object.fromEntries(battle.members.map((m) => [m.id, m.maxHp > 0 ? Math.max(0, m.hp) / m.maxHp : 1]));
+}
+
+// 帰還時にクリティカル（＝深手）を抱えたままだった者。重症の判定に使う。
+function battleCritIdsOf(battle) {
+  if (!battle || !Array.isArray(battle.members)) return null;
+  return battle.members.filter((m) => m.gotCrit).map((m) => m.id);
 }
 
 function injuryBadgeHtml(adventurer) {
@@ -4690,6 +4700,16 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     return variants[idx];
   };
 
+  // クリティカル（＝深手）の行。赤文字は既に報告書で使っている表現なので、新しい色を増やさない。
+  const critDealLine = (ev) => ({
+    kind: "status-grave",
+    text: `${ev.attackerName}が渾身の一撃を叩き込んだ。致命の一撃を与えた！（${enemyN}に${ev.damage}ダメージ！）`
+  });
+  const critTakeLine = (ev) => ({
+    kind: "status-grave",
+    text: `${enemyN}の刃が深く入った。${ev.targetName}が致命の一撃を受けた！（${ev.targetName}に${ev.damage}ダメージ！）`
+  });
+
   const dealLine = (ev) => {
     if (ev.attackerStatus === "深手") return weakenedDealLine(ev);
     const n = ev.damage, big = ev.strong === true, name = ev.attackerName, job = jobById[ev.attackerId];
@@ -4824,9 +4844,10 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   battle.events.forEach((ev, i) => {
     if (ev.type === "deal") {
       if (i === killIndex) finisher = { kind: "action", text: finisherLine(ev) };
+      else if (ev.crit) lines.push(critDealLine(ev));
       else lines.push({ kind: "action", text: dealLine(ev) });
     }
-    else if (ev.type === "take") lines.push({ kind: "action", text: takeLine(ev) });
+    else if (ev.type === "take") lines.push(ev.crit ? critTakeLine(ev) : { kind: "action", text: takeLine(ev) });
     else if (ev.type === "heal") lines.push(healLine(ev));
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
     else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push({ kind: "action", text: l }));
@@ -5793,7 +5814,7 @@ function generateReport(expedition) {
       tensionValue,
       tensionLevel,
       // battleHpRatios: 帰還時の個人HP率。負傷の確定に使う（第3段階）。エルシーは戦闘のHP管理外なので含まれない。
-      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party), battleHpRatios: battleHpRatiosOf(battle) },
+      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party), battleHpRatios: battleHpRatiosOf(battle), battleCritIds: battleCritIdsOf(battle) },
       wrapElsie: true
     });
   }
@@ -6162,7 +6183,15 @@ const BATTLE_TUNING = {
   woundAttackMult: { "手負い": 0.8, "深手": 0.5 },
   // 臨時撤退判断（スライス9）：仲間が深手/不能になった動揺のショック補正と、1戦闘あたりの発火上限
   emergencyShock: { "深手": 30, "戦闘不能": 50 },
-  emergencyCap: 2
+  emergencyCap: 2,
+  // ★ クリティカル＝深手（2026-07-29）。深手を「累積」から「事件」に変える。
+  //   HP率での深手判定はやめ、クリティカルを受けたこと自体を深手とする。1発で届くので
+  //   連続ラウンド数を要さず、前衛の交代制（H1-a）と劇的な分岐が両立する。
+  // ★ 上限は設けない。HP0 は死ではなく行方不明（捜索チェーン行き）なので、
+  //   「2連続で即死しない」条件はもともと満たされている。上限を入れると
+  //   意図的に殴られることが安全になり、自爆成長を許可してしまう。
+  critRate: 0.05,
+  critMultiplier: 2
 };
 
 function getEnemyForQuest(quest) {
@@ -6223,13 +6252,14 @@ function battleStageLabel(outcome, woundRatio, hadDeepWound) {
   return "致命";
 }
 
-// 交戦記録用の状態語（案B・スライス1）。閾値：70%以下で手負い、35%以下で深手、HP0で戦闘不能。
-function battleStatusWord(hp, maxHp) {
+// 交戦記録用の状態語（案B・スライス1／2026-07-29 に深手の定義を差し替え）。
+// 健在＝HP率70%超／手負い＝70%以下／戦闘不能＝HP0。
+// ★ 深手だけは HP率ではなく「クリティカルを受けたか」で決まる（累積ではなく事件）。
+//   35% の閾値は使わない。gotCrit を渡さない呼び出しでは深手にならない。
+function battleStatusWord(hp, maxHp, gotCrit = false) {
   if (hp <= 0) return "戦闘不能";
-  const ratio = hp / maxHp;
-  if (ratio > 0.70) return "健在";
-  if (ratio > 0.35) return "手負い";
-  return "深手";
+  if (gotCrit) return "深手";
+  return hp / maxHp > 0.70 ? "健在" : "手負い";
 }
 
 function simulateBattle(quest, party, itemIds, rng) {
@@ -6267,6 +6297,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       hp: maxHp,
       maxHp,
       downed: false,
+      gotCrit: false, // クリティカルを受けたか。これが深手の定義（2026-07-29）
       status: "健在"
     };
   });
@@ -6306,18 +6337,23 @@ function simulateBattle(quest, party, itemIds, rng) {
       // 損耗DPS低下：状態語に応じて与ダメが段階的に落ちる（健在100%/手負い80%/深手50%）
       const offense = alive.reduce((sum, f) => sum + f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1), 0);
       const dealt = Math.round(offense * variance());
-      enemyHp -= dealt;
+      let dealtTotal = dealt;
       // 与ダメージを各人の攻撃寄与で按分（表示用の派生値。合計 dealt は既存計算のまま）。
+      // クリティカルは1発ごとに判定し、上振れした分だけ合計にも足す（与える側も同じ発生率・同じ表記）。
       if (offense > 0 && dealt > 0) {
         alive.forEach((f) => {
           const effAttack = f.attack * (BATTLE_TUNING.woundAttackMult[f.status] ?? 1);
-          const personDealt = Math.round(dealt * (effAttack / offense));
-          if (personDealt > 0) {
-            // strong=自分の期待値（損耗後）より上振れした一撃。深手の者の上振れ＝「傷を押してなお重い一撃」
-            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt, strong: personDealt >= effAttack * BATTLE_TUNING.strongDealRatio, attackerStatus: f.status });
+          const base = Math.round(dealt * (effAttack / offense));
+          if (base > 0) {
+            const crit = random() < BATTLE_TUNING.critRate;
+            const personDealt = crit ? base * BATTLE_TUNING.critMultiplier : base;
+            if (crit) dealtTotal += personDealt - base;
+            // strong=自分の期待値（損耗後）より上振れした一撃。クリティカルとは別軸なので素の値で判定する。
+            events.push({ type: "deal", round, attackerId: f.id, attackerName: f.name, damage: personDealt, crit, strong: !crit && base >= effAttack * BATTLE_TUNING.strongDealRatio, attackerStatus: f.status });
           }
         });
       }
+      enemyHp -= dealtTotal;
       const front = pickBattleFront(fighters);
       const incoming = enemy.threat * variance();
       const others = alive.filter((f) => f.id !== front.id);
@@ -6329,16 +6365,21 @@ function simulateBattle(quest, party, itemIds, rng) {
         const share = f.id === front.id
           ? incoming * frontShare
           : incoming * (1 - BATTLE_TUNING.frontDamageShare) / others.length;
-        const damage = Math.max(0, Math.round(share - f.weaponGuard));
+        const base = Math.max(0, Math.round(share - f.weaponGuard));
+        // ★ クリティカル＝深手。guard で削り切られた0ダメージの被弾では判定しない
+        //   （傷を負っていないのに深手になるのを避ける）。
+        const crit = base > 0 && random() < BATTLE_TUNING.critRate;
+        const damage = crit ? base * BATTLE_TUNING.critMultiplier : base;
+        if (crit) f.gotCrit = true;
         f.hp -= damage;
         if (f.hp <= 0) f.downed = true;
         hits.push({ id: f.id, damage, hp: Math.max(0, f.hp) });
         totalDamageTaken += damage;
         if (damage > 0) {
-          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage, strong: damage >= f.maxHp * BATTLE_TUNING.strongTakeHpRatio });
+          events.push({ type: "take", round, targetId: f.id, targetName: f.name, damage, crit, strong: !crit && damage >= f.maxHp * BATTLE_TUNING.strongTakeHpRatio });
         }
         // 状態語は遷移した瞬間だけ記録する（健在→手負い→深手→戦闘不能）。
-        const newStatus = battleStatusWord(f.hp, f.maxHp);
+        const newStatus = battleStatusWord(f.hp, f.maxHp, f.gotCrit);
         if (newStatus !== f.status) {
           events.push({ type: "status", round, targetId: f.id, targetName: f.name, from: f.status, to: newStatus });
           f.status = newStatus;
@@ -6347,7 +6388,7 @@ function simulateBattle(quest, party, itemIds, rng) {
           if (newStatus === "戦闘不能") crisis = { name: f.name, to: "戦闘不能" };
         }
       });
-      roundLog.push({ round, dealt, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
+      roundLog.push({ round, dealt: dealtTotal, enemyHp: Math.max(0, enemyHp), frontId: front.id, hits });
       if (enemyHp <= 0) {
         outcome = "victory";
         break;
@@ -6368,7 +6409,10 @@ function simulateBattle(quest, party, itemIds, rng) {
           const healed = Math.min(BATTLE_TUNING.healAmount, target.maxHp - target.hp);
           target.hp += healed;
           events.push({ type: "heal", round, healerId: healer.id, healerName: healer.name, targetId: target.id, targetName: target.name, amount: healed, self: healer.id === target.id });
-          const backStatus = battleStatusWord(target.hp, target.maxHp);
+          // ★ 手当てはクリティカルの深手からも持ち直させる（スライス8の「回復＝戦線を維持する」を保つ）。
+          //   これで包帯が「重症で帰さないための道具」として意味を持つ。
+          target.gotCrit = false;
+          const backStatus = battleStatusWord(target.hp, target.maxHp, target.gotCrit);
           if (backStatus !== target.status) {
             events.push({ type: "status", round, targetId: target.id, targetName: target.name, from: target.status, to: backStatus, recovered: true });
             target.status = backStatus;
@@ -6407,7 +6451,7 @@ function simulateBattle(quest, party, itemIds, rng) {
     allyHpRatio: Math.round(finalAllyRatio * 100) / 100,
     enemyHpRatio: Math.round(enemyRatio() * 100) / 100,
     frontId: pickBattleFront(fighters)?.id ?? fighters[0].id,
-    members: fighters.map((f) => ({ id: f.id, name: f.name, job: f.job, hp: Math.max(0, f.hp), maxHp: f.maxHp, downed: f.downed })),
+    members: fighters.map((f) => ({ id: f.id, name: f.name, job: f.job, hp: Math.max(0, f.hp), maxHp: f.maxHp, downed: f.downed, gotCrit: f.gotCrit })),
     decisions,
     roundLog,
     events,
