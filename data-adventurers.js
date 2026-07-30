@@ -16,7 +16,7 @@ window.masterAdventurers = [
       type: "弓 / 短剣",
       range: "中距離",
       power: 2,
-      guard: 2,
+      guard: 20,
       control: 5,
       tags: ["牽制", "足止め", "記録補助"]
     },
@@ -58,7 +58,7 @@ window.masterAdventurers = [
       type: "鈍器",
       range: "近距離",
       power: 5,
-      guard: 3,
+      guard: 30,
       control: 2,
       tags: ["押し返し", "威圧", "前衛"]
     },
@@ -100,7 +100,7 @@ window.masterAdventurers = [
       type: "杖",
       range: "近距離",
       power: 2,
-      guard: 3,
+      guard: 30,
       control: 4,
       tags: ["支援", "足場確認", "制止"]
     },
@@ -142,7 +142,7 @@ window.masterAdventurers = [
       type: "盾 / 槍",
       range: "近距離",
       power: 3,
-      guard: 5,
+      guard: 50,
       control: 3,
       tags: ["守り", "足止め", "前衛"]
     },

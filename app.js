@@ -6169,6 +6169,11 @@ const BATTLE_TUNING = {
   frontDamageShare: 0.6,
   attackSqrtCombatCoef: 3.5,
   attackWeaponCoef: 2,
+  // ★ guard のスケール（2026-07-30）。武器の guard は 0〜50 で持ち、被ダメから引くのはその 1/10。
+  //   刻みを細かくするためだけの変更で、実効引き量（ミナ2/ガッド3/エルネ3/ロウ5）は据え置き。
+  //   実効引き量が同じならバランスは変わらないことを実測で確認済み（軽・深手・ダメ0が誤差内一致）。
+  //   ★ guard は成長しない。装備が決めるものなので、育つ数値とは別に扱う（詳細は DECISION_LOG）。
+  guardScale: 0.1,
   strongDealRatio: 1.08,
   strongTakeHpRatio: 0.12,
   varianceMin: 0.75,
@@ -6297,7 +6302,8 @@ function simulateBattle(quest, party, itemIds, rng) {
       // 与ダメは平方根型：成長を実感しつつ終盤のインフレを圧縮する
       attack: Math.sqrt(combatStat) * BATTLE_TUNING.attackSqrtCombatCoef + weaponPower * BATTLE_TUNING.attackWeaponCoef,
       weaponPower,
-      weaponGuard: a.weapon?.guard ?? 0,
+      // 保存値は 0〜50、実際に引くのはその 1/10（2026-07-30。刻みを細かくするためのスケール）
+      weaponGuard: (a.weapon?.guard ?? 0) * BATTLE_TUNING.guardScale,
       hp: maxHp,
       maxHp,
       downed: false,
