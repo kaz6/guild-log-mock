@@ -6174,6 +6174,10 @@ const BATTLE_TUNING = {
   //   実効引き量が同じならバランスは変わらないことを実測で確認済み（軽・深手・ダメ0が誤差内一致）。
   //   ★ guard は成長しない。装備が決めるものなので、育つ数値とは別に扱う（詳細は DECISION_LOG）。
   guardScale: 0.1,
+  // ★ power も guard と同じ流儀（2026-07-30）。武器の power は 0〜50 で持ち、与ダメ式に入るのは
+  //   その 1/10。装備が決める値なので guard と揃えた。実効値（ミナ2/ガッド5/エルネ2/ロウ3）は据え置き。
+  //   ★ power も成長しない（guard と同じ理由）。
+  powerScale: 0.1,
   strongDealRatio: 1.08,
   strongTakeHpRatio: 0.12,
   varianceMin: 0.75,
@@ -6288,7 +6292,8 @@ function simulateBattle(quest, party, itemIds, rng) {
   const fighters = humans.map((a) => {
     const combatStat = a.stats?.combat ?? 10;
     const survivalStat = a.stats?.survival ?? 10;
-    const weaponPower = a.weapon?.power ?? 0;
+    // 保存値は 0〜50、与ダメ式に入るのはその 1/10（2026-07-30。guard と同じ流儀に揃えた）
+    const weaponPower = (a.weapon?.power ?? 0) * BATTLE_TUNING.powerScale;
     // HP = job基礎値 + survival×0.6（2026-07-23 255スケール移行。盾役>戦士の序列）
     const maxHp = Math.round((BATTLE_TUNING.jobBaseHp[a.job] ?? BATTLE_TUNING.defaultJobBaseHp) + survivalStat * BATTLE_TUNING.hpPerSurvival);
     return {

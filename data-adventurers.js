@@ -15,7 +15,7 @@ window.masterAdventurers = [
       name: "短弓と配達短剣",
       type: "弓 / 短剣",
       range: "中距離",
-      power: 2,
+      power: 20,
       guard: 20,
       control: 5,
       tags: ["牽制", "足止め", "記録補助"]
@@ -57,7 +57,7 @@ window.masterAdventurers = [
       name: "鉄鍋槌",
       type: "鈍器",
       range: "近距離",
-      power: 5,
+      power: 50,
       guard: 30,
       control: 2,
       tags: ["押し返し", "威圧", "前衛"]
@@ -99,7 +99,7 @@ window.masterAdventurers = [
       name: "薬草師の杖",
       type: "杖",
       range: "近距離",
-      power: 2,
+      power: 20,
       guard: 30,
       control: 4,
       tags: ["支援", "足場確認", "制止"]
@@ -141,7 +141,7 @@ window.masterAdventurers = [
       name: "見習い盾と短槍",
       type: "盾 / 槍",
       range: "近距離",
-      power: 3,
+      power: 30,
       guard: 50,
       control: 3,
       tags: ["守り", "足止め", "前衛"]
