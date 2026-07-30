@@ -50,7 +50,7 @@
     }
     const patched = src.replace(
       GUARD_LINE,
-      "const base = __GUARD_FN(share, f.weaponGuard);" +
+      "const base = __GUARD_FN(share, f.weaponGuard, f);" +
       " if (__PROBE) __PROBE.push({ g: f.weaponGuard, id: f.id, share: share, base: base, front: f.id === front.id });"
     );
     // new Function は関数本体を大域スコープで評価するので、BATTLE_TUNING などの参照はそのまま効く。
@@ -285,6 +285,138 @@
     console.table(out.sensitivity);
     console.log("--- 式ごとの個人別 平均被ダメ／0割合（誰が痛むかが動く）---");
     console.table(out.perPerson);
+    return out;
+  };
+
+  // ============================================================
+  // guard のスケールと成長（2026-07-30 の第2タスク）
+  // ★ 式は減算のまま変えない（guard の役割＝連続攻撃に強い、が確定済みのため）。
+  //   ここで見るのは「どの数で持つか」と「成長させるとどうなるか」だけ。
+  // ============================================================
+
+  // 実効引き量（＝share から実際に引かれる量）を id ごとに指定して測る。
+  // スケールをどう表現しても、実効引き量が同じならバランスは同一になるはず、を確かめる。
+  function makeSubFn(subById) {
+    return (share, g, f) => Math.max(0, Math.round(share - (subById[f.id] ?? g)));
+  }
+
+  function runStage(guardFn, trials, quest, party) {
+    const probe = [];
+    const sim = buildSim(guardFn, probe);
+    const stage = { 軽: 0, 中: 0, 重: 0, 致命: 0 };
+    let deep = 0;
+    for (let i = 0; i < trials; i++) {
+      const r = sim(quest, party, ["item_bandage"], Math.random);
+      stage[r.stage] = (stage[r.stage] ?? 0) + 1;
+      if (r.events.some((e) => e.type === "status" && (e.to === "深手" || e.to === "戦闘不能"))) deep++;
+    }
+    const per = {};
+    party.forEach((a) => {
+      const mine = probe.filter((h) => h.id === a.id);
+      if (mine.length) per[a.nickname || a.name] = round2(mine.reduce((s, h) => s + h.base, 0) / mine.length);
+    });
+    return {
+      軽: pct(stage.軽, trials),
+      中: pct(stage.中, trials),
+      重: pct(stage.重, trials),
+      深手発生: pct(deep, trials),
+      "ダメ0割合": pct(probe.filter((h) => h.base === 0).length, probe.length),
+      平均被ダメ: round2(probe.reduce((s, h) => s + h.base, 0) / probe.length),
+      per
+    };
+  }
+
+  // 2段成長式（スライス10）を guard に当てたときの推移。
+  // gain = base × (1 − 現在値/上限) × 補正。base は主成長 2.5＋微成長 0.3＝2.8。
+  function growCurve(start, statMax, expeditions, base) {
+    let v = start;
+    const at = {};
+    for (let n = 1; n <= expeditions; n++) {
+      v = Math.min(statMax, v + base * (1 - v / statMax));
+      if (n === 1 || n === 10 || n === 30 || n === 60 || n === 120) at[n] = round2(v);
+    }
+    return at;
+  }
+
+  window.measureGuardScale = function (opts = {}) {
+    const trials = opts.trials ?? 3000;
+    const quest = window.masterQuests.find((q) => q.id === QUEST_ID);
+    const party = getParty(BASE_PARTY);
+    const CUR = { adv_mina: 2, adv_gadd: 3, adv_elne: 3, adv_row: 5 };
+    const out = {};
+
+    // ---- A. スケール表現の等価性（実効引き量が同じなら同一になるはず）----
+    // どの持ち方でも「引く量」は 2/3/3/5 になるように係数を選んである。
+    const REPRS = [
+      { label: "現行 0〜5（整数）", stored: "2 / 3 / 3 / 5", coef: "×1", sub: CUR },
+      { label: "0〜50 で持ち ÷10", stored: "20 / 30 / 30 / 50", coef: "÷10", sub: CUR },
+      { label: "他statと同じ10〜30帯 ×0.2", stored: "10 / 15 / 15 / 25", coef: "×0.2", sub: CUR },
+      { label: "255スケール ×0.02", stored: "100 / 150 / 150 / 250", coef: "×0.02", sub: CUR }
+    ];
+    out.repr = REPRS.map((r) => {
+      const s = runStage(makeSubFn(r.sub), trials, quest, party);
+      return { 持ち方: r.label, 保存値: r.stored, 係数: r.coef, 軽: s.軽, 深手発生: s.深手発生, "ダメ0割合": s["ダメ0割合"], 平均被ダメ: s.平均被ダメ };
+    });
+
+    // ---- B. 解像度は意味があるか（実効引き量を 0.5 刻みで動かす）----
+    // ロウ（盾役）だけを動かし、軽・深手・盾役の差がどれだけ動くかを見る。
+    out.resolution = [];
+    [3.5, 4.0, 4.5, 5.0, 5.5, 6.0].forEach((rowGuard) => {
+      const sub = { ...CUR, adv_row: rowGuard };
+      const s = runStage(makeSubFn(sub), trials, quest, party);
+      out.resolution.push({
+        "ロウの引く量": rowGuard,
+        軽: s.軽,
+        深手発生: s.深手発生,
+        "ダメ0割合": s["ダメ0割合"],
+        "ロウ 平均被ダメ": s.per["ロウ"],
+        "ミナ 平均被ダメ": s.per["ミナ"],
+        "盾役の差(ミナ−ロウ)": round2((s.per["ミナ"] ?? 0) - (s.per["ロウ"] ?? 0))
+      });
+    });
+
+    // ---- C. 成長式を guard に当てたらどうなるか ----
+    // 上限は「そのスケールの最大値」。base は主成長セットに入った場合の 2.8。
+    const SCALES = [
+      // ★ 現行コードのまま guard を成長対象に入れた場合。GROWTH_STAT_MAX は 255 固定なので、
+      //   0〜5 の値でも「まだ 255 まで余裕がある」と判定されて満額の伸びが乗る。
+      { label: "現行 0〜5 をそのまま成長対象に（上限は255のまま）", start: 5, max: 255, coef: 1 },
+      { label: "現行 0〜5・上限も5に直した場合", start: 5, max: 5, coef: 1 },
+      { label: "0〜50（上限50・÷10）", start: 50, max: 50, coef: 0.1 },
+      { label: "10〜30帯（上限255・×0.2）", start: 25, max: 255, coef: 0.2 },
+      { label: "255スケール（上限255・×0.02）", start: 250, max: 255, coef: 0.02 }
+    ];
+    out.growth = SCALES.map((s) => {
+      const at = growCurve(s.start, s.max, 120, GROWTH_MAIN_GAIN + GROWTH_MICRO_GAIN);
+      const toSub = (v) => round2(v * s.coef);
+      return {
+        スケール: s.label,
+        "初期の引く量": toSub(s.start),
+        "1回後": toSub(at[1]),
+        "10回後": toSub(at[10]),
+        "30回後": toSub(at[30]),
+        "60回後": toSub(at[60]),
+        "120回後": toSub(at[120]),
+        "★1回で増える引く量": round2(toSub(at[1]) - toSub(s.start))
+      };
+    });
+
+    // 後衛の平均取り分は 5.07。引く量がそこを超えると後衛は常に0ダメになる。
+    out.growthNote = [{
+      "後衛の平均取り分（野盗 threat38・4人）": 5.07,
+      "後衛の取り分の上限": 6.33,
+      "中盤帯 threat56 の後衛平均取り分": round2(56 * 1.0 * 0.4 / 3),
+      "引く量がこれを超えると": "後衛は常にダメージ0＝クリティカル判定もされない＝深手にもならない"
+    }];
+
+    console.log(`--- A. スケール表現の等価性（実効引き量はどれも 2/3/3/5・${trials}回）---`);
+    console.table(out.repr);
+    console.log(`--- B. 解像度は意味があるか（ロウの引く量だけ 0.5 刻みで動かす・${trials}回）---`);
+    console.table(out.resolution);
+    console.log("--- C. 2段成長式を guard に当てたときの「引く量」の推移 ---");
+    console.table(out.growth);
+    console.log("--- C-2. 引く量の天井（ここを超えると後衛が無敵になる）---");
+    console.table(out.growthNote);
     return out;
   };
 })();
