@@ -669,9 +669,15 @@ function applyInjuriesFromReport(report) {
   });
 }
 
+// ★ 負傷の判定に渡すのは injuryHpRatio（かすり傷の分を戻したHP率。2026-07-31）。
+//   取るに足らない一撃だけで帰ってきた者は、HPが減っていても**無傷**として扱う。
+//   「何も起きない日」がないと、起きた日が際立たないため。
 function battleHpRatiosOf(battle) {
   if (!battle || !Array.isArray(battle.members)) return null;
-  return Object.fromEntries(battle.members.map((m) => [m.id, m.maxHp > 0 ? Math.max(0, m.hp) / m.maxHp : 1]));
+  return Object.fromEntries(battle.members.map((m) => [
+    m.id,
+    m.injuryHpRatio ?? (m.maxHp > 0 ? Math.max(0, m.hp) / m.maxHp : 1)
+  ]));
 }
 
 // 帰還時にクリティカル（＝深手）を抱えたままだった者。重症の判定に使う。
@@ -6548,6 +6554,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       maxHp,
       downed: false,
       gotCrit: false, // クリティカルを受けたか。これが深手の定義（2026-07-29）
+      scratch: 0, // かすり傷（取るに足らない一撃）の累計。負傷の判定から除くために持つ（2026-07-31）
       status: "健在"
     };
   });
@@ -6638,13 +6645,20 @@ function simulateBattle(quest, party, itemIds, rng) {
           ? incoming * frontShare
           : incoming * (1 - BATTLE_TUNING.frontDamageShare) / others.length;
         const base = Math.max(0, Math.round(share - f.weaponGuard));
+        // ★ 「取るに足らない被弾」＝素ダメージが受け手の maxHp の critMinHpRatio 未満の一撃。
+        //   この1つの概念で、クリティカルにも負傷にもしない（同じ概念に2つの値を持たない）。
+        const negligible = base < f.maxHp * BATTLE_TUNING.critMinHpRatio;
         // ★ クリティカル＝深手。guard で削り切られた0ダメージの被弾では判定しない
         //   （傷を負っていないのに深手になるのを避ける）。
         // ★ 2026-07-31：その延長で、**その人にとって軽すぎる一撃でも判定しない**。
         //   かすり傷で「致命の一撃を受けた」と書かれ、重症で帰されるのを止めるため。
-        const crit = base > 0 && base >= f.maxHp * BATTLE_TUNING.critMinHpRatio && random() < BATTLE_TUNING.critRate;
+        const crit = base > 0 && !negligible && random() < BATTLE_TUNING.critRate;
         const damage = crit ? base * BATTLE_TUNING.critMultiplier : base;
         if (crit) f.gotCrit = true;
+        // ★ かすり傷は HP は削るが「傷」としては数えない（2026-07-31）。
+        //   帰還後の負傷はこの分を戻したHP率で決める＝**かすり傷だけで帰った者は無傷**。
+        //   HP そのものから引かないのは、消耗が戦闘の継続（forecast・撤退判断）に効くのは正しいから。
+        if (negligible) f.scratch += damage;
         f.hp -= damage;
         if (f.hp <= 0) f.downed = true;
         hits.push({ id: f.id, damage, hp: Math.max(0, f.hp) });
@@ -6751,7 +6765,19 @@ function simulateBattle(quest, party, itemIds, rng) {
     allyHpRatio: Math.round(finalAllyRatio * 100) / 100,
     enemyHpRatio: Math.round(enemyRatio() * 100) / 100,
     frontId: pickBattleFront(fighters)?.id ?? fighters[0].id,
-    members: fighters.map((f) => ({ id: f.id, name: f.name, job: f.job, hp: Math.max(0, f.hp), maxHp: f.maxHp, downed: f.downed, gotCrit: f.gotCrit })),
+    // injuryHpRatio＝かすり傷の分を戻したHP率。負傷（軽症・重症）はこちらで決める。
+    // hp / maxHp は戦闘中の消耗そのものなので、報告書の状態語や forecast は今までどおりそちらを使う。
+    members: fighters.map((f) => ({
+      id: f.id,
+      name: f.name,
+      job: f.job,
+      hp: Math.max(0, f.hp),
+      maxHp: f.maxHp,
+      downed: f.downed,
+      gotCrit: f.gotCrit,
+      // 倒れた者はかすり傷を戻さない（HP0 は取るに足らない結末ではない）
+      injuryHpRatio: f.downed ? 0 : (f.maxHp > 0 ? Math.min(1, Math.max(0, f.hp + f.scratch) / f.maxHp) : 1)
+    })),
     retreatFailures,
     decisions,
     roundLog,
