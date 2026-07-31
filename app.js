@@ -251,8 +251,6 @@ const GROWTH_TIER_BY_RESULT = {
   小さな失敗: "fail", 護衛失敗: "fail", 荷を置いて撤退: "fail", 隊商喪失: "fail",
   // 非戦闘の共通経路（2026-07-31）。未達の結末を持たない依頼はここに落ちる。
   引き返し: "fail",
-  // 夜道の灯りの結末（未登録だったので既定の完全成功扱いになっていた）
-  調査成功: "full", 確認のみ: "partial",
   // 戦闘依頼の3分岐（2026-07-31・畑と納屋を simulateBattle に乗せた）
   追い払い中止: "partial", 追い払い失敗: "fail", 討伐中止: "partial", 討伐失敗: "fail"
 };
@@ -5564,34 +5562,17 @@ function generateReport(expedition) {
     const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
     const isNight = departTimeOfDay === "夜";
     const hasLantern = itemIds.includes("item_lantern");
-    // 調査依頼も共通経路を通す（2026-07-31）。結末は時間帯とランタンで決まっていたが、
-    // 工程がうまくいかなければ格下げされる（未達は共通の「引き返し」）。
-    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ" });
-    const fieldLines = fieldworkLogLines(fw, rng);
-    const baseResult = isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし";
-    const lightResult = fw && fw.tier === "fail" ? "引き返し"
-      : (fw && fw.tier === "partial" && baseResult === "調査成功" ? "確認のみ" : baseResult);
-    const lightSummary = lightResult === "引き返し"
-      ? `${fieldworkCauseWord(fw)}ため、${quest.area}の確認を途中で切り上げた。`
-      : lightResult === "調査成功" ? "夜道の灯りを安全な距離から確認し、消えた方角を記録した。"
-        : lightResult === "確認のみ" ? "夜道の灯りは確認したが、暗さのため接近調査は避けた。"
-          : "昼間の道に異常はなく、問題の灯りも確認されなかった。";
-    const lightHistory = lightResult === "引き返し"
-      ? `${quest.title}：引き返し。${fieldworkCauseWord(fw)}。`
-      : `${quest.title}：${lightResult === "調査成功" ? "ランタンありで夜間確認。" : lightResult === "確認のみ" ? "夜間に灯りを確認、接近は保留。" : "昼間確認では異常なし。"}`;
+    // ★ この依頼だけは共通経路に乗せない（2026-07-31 裁定）。結末が時間帯とランタンで決まる
+    //   特殊な作りで、時間帯の扱いは後回しと確定しているため。移行前の挙動のまま据え置く。
+    const lightResult = isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし";
+    const lightSummary = isNight
+      ? (hasLantern ? "夜道の灯りを安全な距離から確認し、消えた方角を記録した。" : "夜道の灯りは確認したが、暗さのため接近調査は避けた。")
+      : "昼間の道に異常はなく、問題の灯りも確認されなかった。";
+    const lightHistory = `${quest.title}：${isNight ? (hasLantern ? "ランタンありで夜間確認。" : "夜間に灯りを確認、接近は保留。") : "昼間確認では異常なし。"}`;
 
     const lightLogs = generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng);
-    lightLogs.forEach((text, index) => {
-      if (index === lightLogs.length - 1) {
-        fieldLines.forEach((line) => add(line.kind, line.text));
-        add("afterglow", text);
-      } else {
-        add("action", text);
-      }
-    });
-    const observationNotes = isNight && lightResult !== "引き返し"
-      ? generateObservationNotes(quest, party, adventurerItemIds, rng)
-      : null;
+    lightLogs.forEach((text, index) => add(index === lightLogs.length - 1 ? "afterglow" : "action", text));
+    const observationNotes = isNight ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null;
     const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
       result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
       elsieRoleNote: "鼻と警戒で",
@@ -5615,7 +5596,7 @@ function generateReport(expedition) {
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, lightResult, rng),
-      hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, ...fieldworkHiddenTags(fw), recordDensityGain: 1 + logs.length },
+      hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
