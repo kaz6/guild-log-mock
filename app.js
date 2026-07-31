@@ -195,9 +195,23 @@ function mergeAdventurerList(masterList, savedList = []) {
       ...savedFields,
       // 255スケール移行（2026-07-23）：旧スケール（全stat1〜5）のセーブはマスター初期値へ置換。
       // 旧値が新しい戦闘式に流入すると戦闘が成立しないため（成長分の破棄はモック段階の割り切り）。
-      stats: isOldScaleStats(saved.stats) ? { ...masterItem.stats } : { ...masterItem.stats, ...(saved.stats ?? {}) }
+      // ★ 性格値の分離（2026-07-31）：`stats` に取り込むのは**育つ6種だけ**にする。
+      //   旧セーブの `stats` には性格値5種が混ざっているが、いま性格値は `tendencies`（1〜5・マスター側）
+      //   なので、混ざったまま取り込むと使われない旧値が復活する。`schemaVersion` は上げない
+      //   （内容で吸収できるため。上げると報告書も名前も全部消えるので、モックの記録を守る方を採った）。
+      stats: isOldScaleStats(saved.stats) ? { ...masterItem.stats } : { ...masterItem.stats, ...pickGrowthStats(saved.stats) }
     };
   });
+}
+
+// セーブから取り込むのは育成6種だけ（性格値は tendencies へ移したので、旧セーブの残骸を入れない）
+function pickGrowthStats(saved) {
+  if (!saved || typeof saved !== "object") return {};
+  const out = {};
+  GROWTH_ELIGIBLE_STAT_KEYS.forEach((key) => {
+    if (typeof saved[key] === "number") out[key] = saved[key];
+  });
+  return out;
 }
 
 function isOldScaleStats(stats) {
@@ -1019,7 +1033,7 @@ function interviewComplete() {
     name: interviewDraft.name || "記録係",
     personality: interviewDraft.personality,
     personalityLabel: chosen?.label ?? null,
-    personalityTags: chosen?.tags ?? [],
+    personalityTags: chosen?.tags ?? [], // ★死蔵（保存されるだけで一度も読まれていない。2026-07-31 の棚卸し）
     interviewDone: true
   };
   saveState();
@@ -1467,14 +1481,10 @@ function adventurerRosterStatsLine(adventurer) {
   return `任務能力：${parts.join(" / ")}`;
 }
 
-const TENDENCY_STAT_KEYS = ["memory", "caution", "courage", "kindness", "curiosity"];
-const TENDENCY_STAT_LABELS = {
-  memory: "記憶",
-  caution: "慎重",
-  courage: "胆力",
-  kindness: "面倒見",
-  curiosity: "好奇心"
-};
+// ★ 性格値（tendencies）の一覧はここには置かない（2026-07-31）。
+//   ログ生成側の4箇所が**それぞれ違う順序**で5つを並べており、その順序が pickOne の抽選と
+//   同率時の選出結果を決めている。共通の配列にまとめると振る舞いが変わるので、まとめない。
+//   値の定義は `data-adventurers.js` の `tendencies`（1〜5）が正本。
 
 function adventurerRoleIntro(adventurer) {
   if (adventurer.memo?.trim()) return adventurer.memo.trim();
@@ -1498,13 +1508,13 @@ function adventurerTraitsDetailHtml(adventurer) {
   `;
 }
 
+// ★ 性格値（tendencies）は数値をUIに出さない（2026-07-31）。育つ数値ではなく人柄なので、
+//   名簿では特性ラベル（traits）と気質（personality）が担当する。数値は内部だけで使う。
 function adventurerStatsDetailHtml(adventurer) {
   const stats = adventurer.stats ?? {};
-  const tendency = TENDENCY_STAT_KEYS.map((key) => `${TENDENCY_STAT_LABELS[key]}${stats[key] != null ? Math.floor(stats[key]) : "—"}`).join(" / ");
   const mission = ROSTER_STAT_KEYS.map((key) => `${ROSTER_STAT_LABELS[key]}${Math.floor(stats[key] ?? 10)}`).join(" / ");
   return `
     <div class="kv adventurer-detail-stats">
-      <span>傾向</span><strong>${escapeHtml(tendency)}</strong>
       <span>任務能力</span><strong>${escapeHtml(mission)}</strong>
     </div>
   `;
@@ -2660,9 +2670,9 @@ function statsPersonalityLog(party, rng) {
   const soloStyle = usesSoloHumanStyle(party);
   const statKeys = ["memory", "caution", "courage", "kindness", "curiosity"];
   const chosen = pickOne(statKeys, rng);
-  const best = humans.reduce((a, b) => ((b.stats?.[chosen] ?? 0) > (a.stats?.[chosen] ?? 0) ? b : a));
-  const val = best.stats?.[chosen] ?? 0;
-  if (val < 14) return null;
+  const best = humans.reduce((a, b) => ((b.tendencies?.[chosen] ?? 0) > (a.tendencies?.[chosen] ?? 0) ? b : a));
+  const val = best.tendencies?.[chosen] ?? 0;
+  if (val < 3) return null;
   const name = getDisplayName(best);
   const lines = {
     memory: [
@@ -3110,8 +3120,10 @@ function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
   };
 }
 
+const REVIVE_MID_MEMORY_NOTE = false; // ★死蔵の分岐を止めている旗（下の memory === 3 を参照）
+
 function generateRabbitNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 15;
+  const memory = adv.tendencies?.memory ?? 3;
   const isCareful = adv.personality === "慎重";
   const isBold = adv.personality === "豪胆";
   const isCaregiver = adv.personality === "世話焼き";
@@ -3122,7 +3134,7 @@ function generateRabbitNote(adv, rng) {
   const isHerbalist = adv.job === "薬草師";
   const isWarrior = adv.job === "戦士";
 
-  if (memory >= 20) {
+  if (memory >= 4) {
     if (isScout || isCareful) return pickOne([
       "耳の先が黒く、荷物袋の匂いに反応する。草むらへ逃げる際、後ろ脚で泥を跳ね上げた。こちらを追う様子はなかった。距離を保てば接触は避けられる。",
       "雨の中でも匂いへの反応は鋭かった。逃走方向は一定で、草むらの奥へ消えた。荷物の位置を変えれば被害は防げると思う。"
@@ -3145,7 +3157,11 @@ function generateRabbitNote(adv, rng) {
     ], rng);
   }
 
-  if (memory === 3) {
+  // ★ 死蔵（2026-07-31 に明記）。1〜5スケール時代に書かれた分岐で、255スケール移行後は
+  //   到達不能だった（memory が 12〜28 になったため）。性格値を1〜5へ戻すとそのままでは復活し、
+  //   同一シードでの振る舞いが変わってしまうので、**到達不能のまま据え置く**。
+  //   文言を活かすなら、条件を設計し直したうえで別タスクで有効化すること。
+  if (REVIVE_MID_MEMORY_NOTE && memory === 3) {
     if (isBold || isGuard || isWarrior) return pickOne([
       "小さいが素早い。袋を狙う。追えば逃げる。大した危険はないが、荷物の管理には気をつけること。",
       "荷物袋に飛びついた小型の獣。追い払ったら逃げた。次も同じ対応でいい。"
@@ -3168,17 +3184,17 @@ function generateRabbitNote(adv, rng) {
 }
 
 function generateMysteryFieldNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 15;
-  const curiosity = adv.stats?.curiosity ?? 15;
+  const memory = adv.tendencies?.memory ?? 3;
+  const curiosity = adv.tendencies?.curiosity ?? 3;
   const name = getDisplayName(adv);
 
-  if (memory >= 20) {
+  if (memory >= 4) {
     return pickOne([
       `${name}は、耳の先が黒く、泥の跳ね方が左右で違っていたと記録している。足跡は畝の間から外側へ続いていた。`,
       `${name}の記録には、背丈は膝ほど、畑の柔らかい土を避けるように跳ねた、とある。正体は未確定。`
     ], rng);
   }
-  if (curiosity >= 20) {
+  if (curiosity >= 4) {
     return pickOne([
       `${name}は「なにか」が逃げた後の草の倒れ方を気にしていた。巣穴か通り道が近くにあるかもしれない。`,
       `${name}は姿よりも痕跡を気にしていた。畑の外で同じ足跡を探したが、途中で途切れている。`
@@ -3191,24 +3207,24 @@ function generateMysteryFieldNote(adv, rng) {
 }
 
 function generateLingeringLightNote(adv, rng) {
-  const memory = adv.stats?.memory ?? 15;
-  const curiosity = adv.stats?.curiosity ?? 15;
-  const caution = adv.stats?.caution ?? 15;
+  const memory = adv.tendencies?.memory ?? 3;
+  const curiosity = adv.tendencies?.curiosity ?? 3;
+  const caution = adv.tendencies?.caution ?? 3;
   const name = getDisplayName(adv);
 
-  if (memory >= 20) {
+  if (memory >= 4) {
     return pickOne([
       `${name}は、灯りが道の右手、古い曲がり角の先で二度揺れてから消えたと記録している。足跡は増えていなかった。`,
       `${name}の記録では、灯りは人の腰ほどの高さに見え、近づくほど遠ざかったように見えた。位置の記録は次回調査に使える。`
     ], rng);
   }
-  if (curiosity >= 20) {
+  if (curiosity >= 4) {
     return pickOne([
       `${name}は灯りそのものより、消えた後の暗さを気にしていた。道の先に反射するものがあるのかもしれない。`,
       `${name}は灯りが揺れる間隔を気にしていた。風や人の手とは違う動きだった、と報告している。`
     ], rng);
   }
-  if (caution >= 20) {
+  if (caution >= 4) {
     return `${name}は、帰り道の轍を見失わない位置で観察を止めた。安全な距離の記録として有用。`;
   }
   return `${name}は、小さな灯りが道の先に見え、しばらくして消えたと記録した。詳細は次回確認が必要。`;
@@ -3236,10 +3252,11 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
   return { target: quest.observationTarget, notes };
 }
 
-function bestByStat(party, statKey) {
+// 性格値（tendencies）で1人選ぶ。★ 読むのは stats ではなく tendencies（2026-07-31 に分離）。
+function bestByTendency(party, key) {
   const humans = humanMembers(party);
   const pool = humans.length > 0 ? humans : party;
-  return pool.reduce((best, adv) => ((adv.stats?.[statKey] ?? 0) > (best.stats?.[statKey] ?? 0) ? adv : best), pool[0]);
+  return pool.reduce((best, adv) => ((adv.tendencies?.[key] ?? 0) > (best.tendencies?.[key] ?? 0) ? adv : best), pool[0]);
 }
 
 function battleSupplyEventText(quest, party, adventurerItemIds, rng) {
@@ -3432,7 +3449,7 @@ function battlePushRepelText(quest, party, adventurerItemIds, behavior, rng) {
   const roles = battleRoleDivisionText(party, rng);
   if (roles.length > 0) lines.push(roles[0]);
 
-  const pusher = bestByStat(party, "courage");
+  const pusher = bestByTendency(party, "courage");
   const weaponLine = battleWeaponPushLine(pusher, rng);
   if (weaponLine && lines.length < 2) lines.push(weaponLine);
 
@@ -3452,7 +3469,7 @@ function battleStatEventText(party, rng) {
   const humans = humanMembers(party);
   if (!humans.length) return null;
   const stat = pickOne(["courage", "caution", "kindness", "memory", "curiosity"], rng);
-  const adv = bestByStat(party, stat);
+  const adv = bestByTendency(party, stat);
   const name = getDisplayName(adv);
   const solo = isSoloHumanParty(party);
   const other = humans.find((member) => member.id !== adv.id);
@@ -3564,7 +3581,7 @@ function battleRoleDivisionText(party, rng) {
     const adv = humans[0];
     const name = getDisplayName(adv);
     const top = ["courage", "caution", "memory", "kindness", "curiosity"]
-      .reduce((best, s) => (adv.stats?.[s] ?? 0) > (adv.stats?.[best] ?? 0) ? s : best, "courage");
+      .reduce((best, s) => (adv.tendencies?.[s] ?? 0) > (adv.tendencies?.[best] ?? 0) ? s : best, "courage");
     const soloLines = {
       courage:   `${name}は前に出て圧をかけながら、足元の安全と退路も確かめた。`,
       caution:   `${name}は間合いを測りながら、退路と逃げた先の方角を同時に確認した。`,
@@ -3587,10 +3604,10 @@ function battleRoleDivisionText(party, rng) {
 
   if (candidates.length === 0) {
     // ID に合致しない組み合わせ（フォールバック）
-    const front = bestByStat(party, "courage");
+    const front = bestByTendency(party, "courage");
     const rest = humans.filter((a) => a.id !== front.id);
     if (rest.length > 0) {
-      const rec = bestByStat(rest, "memory");
+      const rec = bestByTendency(rest, "memory");
       return [`${getDisplayName(front)}が前に出て距離を詰め、${getDisplayName(rec)}はその動きと「なにか」の反応を記録した。`];
     }
     return [];
@@ -3657,8 +3674,8 @@ function battleOutcomeLines(party, adventurerItemIds, behavior, rng, tensionValu
   // 最も高いパラメータで結果パターンを選ぶ
   const stats = ["caution", "courage", "memory", "curiosity", "kindness"];
   const dominant = stats.reduce((best, s) => {
-    const bv = statPool.reduce((mx, a) => Math.max(mx, a.stats?.[best] ?? 0), 0);
-    const sv = statPool.reduce((mx, a) => Math.max(mx, a.stats?.[s] ?? 0), 0);
+    const bv = statPool.reduce((mx, a) => Math.max(mx, a.tendencies?.[best] ?? 0), 0);
+    const sv = statPool.reduce((mx, a) => Math.max(mx, a.tendencies?.[s] ?? 0), 0);
     return sv > bv ? s : best;
   }, "courage");
 
@@ -3672,7 +3689,7 @@ function battleOutcomeLines(party, adventurerItemIds, behavior, rng, tensionValu
 
   // パターン2：正体不明・記録優先（memory or curiosity 優位）
   if (dominant === "memory" || dominant === "curiosity") {
-    const recorder = bestByStat(party, dominant);
+    const recorder = bestByTendency(party, dominant);
     const rname = getDisplayName(recorder);
     if (hasObsSheet) {
       // 観察記録票を持参している場合は記録済みの文体
@@ -3700,7 +3717,7 @@ function battleOutcomeLines(party, adventurerItemIds, behavior, rng, tensionValu
 function battleWithdrawalText(party, rng, tensionValue = 50) {
   if (rng() < 0.12) return null; // 約88%の確率で出す
   const stat = pickOne(["caution", "courage", "kindness", "memory", "curiosity"], rng);
-  const adv = bestByStat(party, stat);
+  const adv = bestByTendency(party, stat);
   const name = getDisplayName(adv);
   const solo = isSoloHumanParty(party);
   const other = humanMembers(party).find((m) => m.id !== adv.id);
@@ -3740,7 +3757,7 @@ function battleWithdrawalText(party, rng, tensionValue = 50) {
 
 function battleTensionReactionText(party, tensionValue, rng) {
   if (rng() < 0.45) return null;
-  const adv = bestByStat(party, tensionValue >= 55 ? "caution" : "courage");
+  const adv = bestByTendency(party, tensionValue >= 55 ? "caution" : "courage");
   const name = getDisplayName(adv);
   return pickTensionOne([
     { text: `${name}は畝の間で位置を取り直し、依頼人の背後を空けた。`, minTension: 35, maxTension: 65 },
@@ -3823,7 +3840,7 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   ], tensionValue, rng));
 
   // 4. 交戦
-  const fighter = bestByStat(party, "courage");
+  const fighter = bestByTendency(party, "courage");
   const fname = getDisplayName(fighter);
   const weapon = fighter.weapon;
   if (weapon) {
@@ -3895,7 +3912,7 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
 
 function lightInvestigationResponseText(party, isNight, hasLantern, rng) {
   const stat = pickOne(["caution", "memory", "curiosity", "courage", "kindness"], rng);
-  const adv = bestByStat(party, stat);
+  const adv = bestByTendency(party, stat);
   const name = getDisplayName(adv);
   const solo = isSoloHumanParty(party);
   const other = humanMembers(party).find((member) => member.id !== adv.id);
@@ -5143,7 +5160,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
   const pool = humans.length > 0 ? humans : party;
 
   // 武器・アクセサリー候補を先に準備する
-  const front = pool.reduce((best, a) => (a.stats?.courage ?? 0) > (best.stats?.courage ?? 0) ? a : best, pool[0]);
+  const front = pool.reduce((best, a) => (a.tendencies?.courage ?? 0) > (best.tendencies?.courage ?? 0) ? a : best, pool[0]);
   const frontName = getDisplayName(front);
   const frontWeapon = front.weapon ?? null;
   // アクセサリー持ちをランダムに1人取得
@@ -5361,15 +5378,15 @@ function defaultNewQuestRoleNote(quest, adv) {
     return "一員として";
   }
   if (category === "戦闘") {
-    if (adv.stats?.courage >= 20) return "前に出る判断で";
-    if (adv.stats?.caution >= 20) return "慎重な距離取りで";
-    if (adv.stats?.kindness >= 20) return "周囲への気配りで";
+    if (adv.tendencies?.courage >= 4) return "前に出る判断で";
+    if (adv.tendencies?.caution >= 4) return "慎重な距離取りで";
+    if (adv.tendencies?.kindness >= 4) return "周囲への気配りで";
     return "戦闘に";
   }
   if (category === "調査") {
-    if (adv.stats?.caution >= 20) return "慎重な距離取りで";
-    if (adv.stats?.memory >= 20) return "記録役として";
-    if (adv.stats?.kindness >= 20) return "周囲への気配りで";
+    if (adv.tendencies?.caution >= 4) return "慎重な距離取りで";
+    if (adv.tendencies?.memory >= 4) return "記録役として";
+    if (adv.tendencies?.kindness >= 4) return "周囲への気配りで";
     return "調査に";
   }
   if (adv.job === "斥候") return "確認役として";
@@ -5480,7 +5497,7 @@ function generateReport(expedition) {
       result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.memory >= 20 ? "記録役として" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "調査に"
+        adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.memory >= 4 ? "記録役として" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "調査に"
     });
 
     return withElsieLog({
@@ -5515,7 +5532,7 @@ function generateReport(expedition) {
       result: "追い払い",
       elsieRoleNote: "吠えと警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.courage >= 20 ? "前に出る判断で" : adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "追い払いに"
+        adv.tendencies?.courage >= 4 ? "前に出る判断で" : adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "追い払いに"
     });
 
     return withElsieLog({
@@ -5548,7 +5565,7 @@ function generateReport(expedition) {
       result: "討伐",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
-        adv.stats?.courage >= 20 ? "前に出る判断で" : adv.stats?.caution >= 20 ? "慎重な距離取りで" : adv.stats?.kindness >= 20 ? "周囲への気配りで" : "討伐に"
+        adv.tendencies?.courage >= 4 ? "前に出る判断で" : adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "討伐に"
     });
 
     return withElsieLog({
@@ -6402,7 +6419,7 @@ function simulateBattle(quest, party, itemIds, rng) {
       name: getDisplayName(a),
       job: a.job,
       personality: a.personality,
-      courage: a.stats?.courage ?? 15,
+      courage: a.tendencies?.courage ?? 3, // 前衛選出の第3キー（同率のときだけ効く）
       combat: combatStat,
       support: a.stats?.support ?? 10,
       // 与ダメは平方根型：成長を実感しつつ終盤のインフレを圧縮する

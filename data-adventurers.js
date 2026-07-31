@@ -1,3 +1,12 @@
+// ★ 死蔵の値（2026-07-31 の棚卸しで確認。**消さずに残す。次に触る人が「使われている」と誤解しないための注記**）
+//   - `weapon.control` … コードのどこからも読まれていない（4人分）
+//   - `accessory.capacity` … エルシーのハーネスのみ。スロット数は全員2で固定なので効いていない
+//   - `obsession.lie` / `obsession.triggerTags` / `obsession.type` … 参照ゼロ
+//   - `traits[].tags` … 表示されるのは name と type だけ
+//   ※ `obsession.dangerLine` は別タスクで出口を作るので**死蔵として扱わない**。
+//
+// ★ 性格値は `tendencies`（1〜5・**育たない**・UIに数値を出さない）、育成値は `stats`（0〜255・育つ）。
+//   2026-07-31 に分離した。目的が違うものを同じ入れ物に入れると、片方の規約がもう片方に伝染するため。
 window.masterAdventurers = [
   {
     id: "adv_mina",
@@ -10,14 +19,15 @@ window.masterAdventurers = [
     memo: "道をよく覚えている。無理をしない判断ができる。手紙配達系の依頼に向いていそう。",
     status: "待機中",
     history: [],
-    stats: { memory: 28, caution: 22, courage: 16, kindness: 16, curiosity: 22, combat: 12, exploration: 28, investigation: 10, negotiation: 10, support: 10, survival: 18 },
+    tendencies: { memory: 5, caution: 4, courage: 3, kindness: 3, curiosity: 4 },
+    stats: { combat: 12, exploration: 28, investigation: 10, negotiation: 10, support: 10, survival: 18 },
     weapon: {
       name: "短弓と配達短剣",
       type: "弓 / 短剣",
       range: "中距離",
       power: 20,
       guard: 20,
-      control: 5,
+      control: 5, // ★死蔵（参照ゼロ）
       tags: ["牽制", "足止め", "記録補助"]
     },
     accessory: {
@@ -29,7 +39,9 @@ window.masterAdventurers = [
       label: "贖罪",
       type: "atonement",
       core: "見捨てた側になりたくない",
+      // ★死蔵（参照ゼロ）
       lie: "自分だけ安全に帰る資格はない",
+      // ★死蔵（参照ゼロ）
       triggerTags: ["負傷", "撤退", "仲間", "救助"],
       positiveLine: "最後尾の足音を確認してから、ようやく歩き出した。",
       dangerLine: "撤退できる状況でも、倒れた影の方へ戻ろうとした。",
@@ -52,14 +64,18 @@ window.masterAdventurers = [
     memo: "前に出る癖がある。危険度が低い依頼でも、念のため包帯を持たせたい。",
     status: "待機中",
     history: [],
-    stats: { memory: 12, caution: 10, courage: 28, kindness: 22, curiosity: 12, combat: 30, exploration: 10, investigation: 10, negotiation: 13, support: 10, survival: 15 },
+    // ★ curiosity は 1（2026-07-31）。255スケールでは ガッド12 / ロウ13 と**1目盛だけ差**が付いており、
+    //   1〜5 に戻すとどちらも 2 になって「好奇心が最も高い人」の選出が入れ替わってしまう。
+    //   絶対値のしきい値（4以上／3未満）では 1 と 2 の違いは出ないので、順序を保つ方を採った。
+    tendencies: { memory: 2, caution: 1, courage: 5, kindness: 4, curiosity: 1 },
+    stats: { combat: 30, exploration: 10, investigation: 10, negotiation: 13, support: 10, survival: 15 },
     weapon: {
       name: "鉄鍋槌",
       type: "鈍器",
       range: "近距離",
       power: 50,
       guard: 30,
-      control: 2,
+      control: 2, // ★死蔵（参照ゼロ）
       tags: ["押し返し", "威圧", "前衛"]
     },
     accessory: {
@@ -71,7 +87,9 @@ window.masterAdventurers = [
       label: "収集",
       type: "hoarding",
       core: "欠乏に戻りたくない",
+      // ★死蔵（参照ゼロ）
       lie: "蓄えがなければ、また何も持たない自分に戻ってしまう",
+      // ★死蔵（参照ゼロ）
       triggerTags: ["食料", "道具", "畑", "村", "物資"],
       positiveLine: "使えそうな物を拾い集め、帰り道の荷を少しだけ重くした。",
       dangerLine: "捨ててよいはずの古道具を、どうしても置いていけなかった。",
@@ -94,14 +112,15 @@ window.masterAdventurers = [
     memo: "採集依頼で頼りになる。休憩時の観察が細かい。",
     status: "待機中",
     history: [],
-    stats: { memory: 22, caution: 22, courage: 12, kindness: 28, curiosity: 16, combat: 10, exploration: 10, investigation: 14, negotiation: 10, support: 28, survival: 12 },
+    tendencies: { memory: 4, caution: 4, courage: 2, kindness: 5, curiosity: 3 },
+    stats: { combat: 10, exploration: 10, investigation: 14, negotiation: 10, support: 28, survival: 12 },
     weapon: {
       name: "薬草師の杖",
       type: "杖",
       range: "近距離",
       power: 20,
       guard: 30,
-      control: 4,
+      control: 4, // ★死蔵（参照ゼロ）
       tags: ["支援", "足場確認", "制止"]
     },
     accessory: {
@@ -113,7 +132,9 @@ window.masterAdventurers = [
       label: "統制",
       type: "control",
       core: "不明なまま終わらせたくない",
+      // ★死蔵（参照ゼロ）
       lie: "名前も記録もないものは、存在しなかったことにされてしまう",
+      // ★死蔵（参照ゼロ）
       triggerTags: ["記録", "観察", "なにか", "不明", "図鑑"],
       positiveLine: "曖昧な輪郭を、震える字で報告書の余白に残した。",
       dangerLine: "逃げるべき場面で、もう一度だけ対象を見ようとした。",
@@ -136,14 +157,15 @@ window.masterAdventurers = [
     memo: "判断は少し遅いが、一度決めると粘る。仲間の前に立ち、退路をふさがない位置を気にする。",
     status: "待機中",
     history: [],
-    stats: { memory: 16, caution: 16, courage: 22, kindness: 16, curiosity: 13, combat: 22, exploration: 12, investigation: 10, negotiation: 10, support: 12, survival: 25 },
+    tendencies: { memory: 3, caution: 3, courage: 4, kindness: 3, curiosity: 2 },
+    stats: { combat: 22, exploration: 12, investigation: 10, negotiation: 10, support: 12, survival: 25 },
     weapon: {
       name: "見習い盾と短槍",
       type: "盾 / 槍",
       range: "近距離",
       power: 30,
       guard: 50,
-      control: 3,
+      control: 3, // ★死蔵（参照ゼロ）
       tags: ["守り", "足止め", "前衛"]
     },
     accessory: {
@@ -155,7 +177,9 @@ window.masterAdventurers = [
       label: "回帰",
       type: "return",
       core: "帰れる場所があると確認したい",
+      // ★死蔵（参照ゼロ）
       lie: "帰り道を見失ったら、自分もそこに置き去りになる",
+      // ★死蔵（参照ゼロ）
       triggerTags: ["帰還", "夜道", "地図", "退路", "迷子"],
       positiveLine: "戦う前に、まず帰り道のぬかるみを確かめていた。",
       dangerLine: "敵を見るより先に、退路がまだ同じ場所にあるかを確かめてしまった。",
@@ -181,18 +205,21 @@ window.masterAdventurers = [
     memo: "小柄で立ち耳のギルド犬。ふさふさの尾を振りおだやかな雰囲気だが、嗅覚と警戒に長け追跡や帰還を助ける。戦闘の主力にはならない。",
     status: "待機中",
     history: [],
-    stats: { memory: 16, caution: 22, courage: 10, kindness: 22, curiosity: 16, combat: 10, exploration: 14, investigation: 10, negotiation: 10, support: 20, survival: 18 },
+    tendencies: { memory: 3, caution: 4, courage: 1, kindness: 4, curiosity: 3 },
+    stats: { combat: 10, exploration: 14, investigation: 10, negotiation: 10, support: 20, survival: 18 },
     accessory: {
       name: "専用ハーネス",
       effect: "carry_support_item",
-      capacity: 1,
+      capacity: 1, // ★死蔵（スロット数は全員2で固定）
       tags: ["支給品", "運搬", "救助"]
     },
     obsession: {
       label: "散歩",
       type: "walk",
       core: "外に出て、誰かと一緒に歩きたい",
+      // ★死蔵（参照ゼロ）
       lie: "置いていかれると、もう呼んでもらえない",
+      // ★死蔵（参照ゼロ）
       triggerTags: ["待機", "出発", "帰還", "同行"],
       positiveLine: "エルシーは門を出る前から、しっぽを大きく振っていた。",
       dangerLine: "エルシーは離れた足音を追いかけようとして、何度も振り返った。",
