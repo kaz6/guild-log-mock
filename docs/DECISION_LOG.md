@@ -62,7 +62,7 @@
 
 ### 根拠・参考
 - タスクページ「撤退判断を作り直す（4段階・相手を見る）」`3ada8a5dfd45815d81dcfc8b08edd648`
-- commit `2525a83`（第1版）→ `RETREAT_FIX_COMMIT`（裁定に合わせた修正）。測定は `scripts/measure-retreat.js`
+- commit `2525a83`（第1版）→ `67bf12b`（裁定に合わせた修正）。測定は `scripts/measure-retreat.js`
 
 ## 2026-07-30: 撤退判断を4段階に作り直す（相手の「強さ」を見る）
 
