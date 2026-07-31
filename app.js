@@ -248,7 +248,13 @@ const GROWTH_TIER_BY_RESULT = {
   応急処置: "partial", 照合保留: "partial", 再確認: "partial", 要再確認: "partial", 再配達: "partial",
   遠回り帰宅: "partial", 小さな違和感: "partial", 手がかりのみ: "partial", 痕跡確認: "partial",
   辛くも奪還: "partial", "隊商通過（遅延あり）": "partial", "隊商通過（荷の一部損失）": "partial",
-  小さな失敗: "fail", 護衛失敗: "fail", 荷を置いて撤退: "fail", 隊商喪失: "fail"
+  小さな失敗: "fail", 護衛失敗: "fail", 荷を置いて撤退: "fail", 隊商喪失: "fail",
+  // 非戦闘の共通経路（2026-07-31）。未達の結末を持たない依頼はここに落ちる。
+  引き返し: "fail",
+  // 夜道の灯りの結末（未登録だったので既定の完全成功扱いになっていた）
+  調査成功: "full", 確認のみ: "partial",
+  // 戦闘依頼の3分岐（2026-07-31・畑と納屋を simulateBattle に乗せた）
+  追い払い中止: "partial", 追い払い失敗: "fail", 討伐中止: "partial", 討伐失敗: "fail"
 };
 
 // 生還補正（スライス10）：遠征単位でパーティ全員に適用。深手までは×1.0（被弾はsurvivalの学びそのもの。
@@ -3785,10 +3791,15 @@ function generateBattleLogs(quest, party, adventurerItemIds, rng, context = {}) 
   logs.push(battleStatEventText(party, rng));
   const tensionLine = battleTensionReactionText(party, tensionValue, rng);
   if (tensionLine) logs.push(tensionLine);
+  // ★ 2026-07-31：結末は simulateBattle が決めるようになった。押し切れなかったときに
+  //   「追い払った」文が出ないよう、ここから先は交戦できたかどうかで切る。
+  const battleOutcome = context.battleOutcome ?? "victory";
+  if (battleOutcome === "withdraw_first") return logs; // 挑まずに引き返した＝押し合いに入っていない
   // 4. 押し合い・牽制・追い払い
   battlePushRepelText(quest, party, adventurerItemIds, behavior, rng).forEach((line) => logs.push(line));
   const obsMid = battleObsSheetMidBattleText(party, adventurerItemIds, behavior, rng);
   if (obsMid) logs.push(obsMid);
+  if (battleOutcome !== "victory") return logs; // 押し切れなかった＝相手が退く行と結果行は書かない
   // 4→5. 相手が退き始める
   logs.push(battleOpponentRetreatText(behavior, rng));
   // 5. 切り上げ判断
@@ -3839,6 +3850,11 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
     { text: `暗い納屋の中で、牙の光だけが一瞬見えた。`, minTension: 80 }
   ], tensionValue, rng));
 
+  // ★ 2026-07-31：結末は simulateBattle が決める。仕留められなかったときに「動きが止まった」が
+  //   出ないよう、交戦できたか・押し切れたかでここから先を切る。
+  const battleOutcome = context.battleOutcome ?? "victory";
+  if (battleOutcome === "withdraw_first") return logs; // 挑まずに引き返した＝交戦していない
+
   // 4. 交戦
   const fighter = bestByTendency(party, "courage");
   const fname = getDisplayName(fighter);
@@ -3886,6 +3902,7 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   if (hasWhistle && rng() < 0.4) {
     logs.push(`${solo ? fname : "誰か"}が短く笛を鳴らし、「なにか」の動きを一瞬乱した。`);
   }
+  if (battleOutcome !== "victory") return logs; // 仕留められなかった＝討伐判断と結果行は書かない
 
   // 5. 討伐判断
   logs.push(pickTensionOne([
@@ -3908,6 +3925,63 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   ], tensionValue, rng));
 
   return logs;
+}
+
+// 戦闘依頼（畑の追い払い／納屋の討伐）の結末（2026-07-31）。
+// ★ simulateBattle の outcome をそのまま結末に写す。データ（enemyId）とロジックが食い違っていた
+//   状態を解消するためで、勝てば従来どおり、押し切れなければ中止・失敗になる。
+function questBattleOutcomeText(quest, battleOutcome, party) {
+  const hunt = quest.id === "quest_barn_bite";
+  const subject = partySubject(party);
+  if (battleOutcome === "victory") {
+    return hunt
+      ? {
+        result: "討伐",
+        summary: "納屋に巣食っていた未同定の相手を仕留めた。正体はまだ不明。",
+        history: "納屋の「なにか」を討伐。未同定のまま、特徴のみ記録。",
+        line: null,
+        after: null
+      }
+      : {
+        result: "追い払い",
+        summary: "畑を荒らしていた未同定の相手を、畑の外へ追い払った。正体はまだ不明。",
+        history: "畑を荒らす「なにか」を追い払い。未同定のまま、特徴のみ記録。",
+        line: null,
+        after: null
+      };
+  }
+  if (battleOutcome === "withdraw_first" || battleOutcome === "withdraw_emergency") {
+    return hunt
+      ? {
+        result: "討伐中止",
+        summary: "納屋の相手には手が届かず、討伐を切り上げて引き上げた。",
+        history: "納屋の「なにか」の討伐は中止。相手は納屋に残ったまま。",
+        line: `${subject}は納屋の戸を閉め直し、依頼人に「今日は仕留められない」と伝えた。`,
+        after: `報告書には「討伐中止。相手は納屋に残っている」と記されている。`
+      }
+      : {
+        result: "追い払い中止",
+        summary: "畑の相手には近づき切れず、追い払いを切り上げて引き上げた。",
+        history: "畑の「なにか」の追い払いは中止。畑には手つかずの荒れが残った。",
+        line: `${subject}は畑の縁で足を止め、依頼人に「今日は押し返せない」と伝えた。`,
+        after: `報告書には「追い払い中止。畑の荒れはそのまま」と記されている。`
+      };
+  }
+  return hunt
+    ? {
+      result: "討伐失敗",
+      summary: "納屋の相手に押し切られ、討伐を果たせないまま退いた。",
+      history: "納屋の「なにか」の討伐に失敗。負傷を抱えての帰還。",
+      line: `納屋の外まで押し戻され、それ以上は踏み込めなかった。`,
+      after: `報告書には「討伐失敗。相手は納屋の奥に残っている」と記されている。`
+    }
+    : {
+      result: "追い払い失敗",
+      summary: "畑の相手に押し切られ、追い払えないまま退いた。",
+      history: "畑の「なにか」の追い払いに失敗。畑は荒らされたまま。",
+      line: `畑の外まで押し戻され、それ以上は近づけなかった。`,
+      after: `報告書には「追い払い失敗。畑の荒れは広がっている」と記されている。`
+    };
 }
 
 function lightInvestigationResponseText(party, isNight, hasLantern, rng) {
@@ -5488,11 +5562,36 @@ function generateReport(expedition) {
 
   if (quest.id === "quest_lingering_light") {
     const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
-    const lightLogs = generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng);
-    lightLogs.forEach((text, index) => add(index === lightLogs.length - 1 ? "afterglow" : "action", text));
     const isNight = departTimeOfDay === "夜";
-    const observationNotes = isNight ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null;
     const hasLantern = itemIds.includes("item_lantern");
+    // 調査依頼も共通経路を通す（2026-07-31）。結末は時間帯とランタンで決まっていたが、
+    // 工程がうまくいかなければ格下げされる（未達は共通の「引き返し」）。
+    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ" });
+    const fieldLines = fieldworkLogLines(fw, rng);
+    const baseResult = isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし";
+    const lightResult = fw && fw.tier === "fail" ? "引き返し"
+      : (fw && fw.tier === "partial" && baseResult === "調査成功" ? "確認のみ" : baseResult);
+    const lightSummary = lightResult === "引き返し"
+      ? `${fieldworkCauseWord(fw)}ため、${quest.area}の確認を途中で切り上げた。`
+      : lightResult === "調査成功" ? "夜道の灯りを安全な距離から確認し、消えた方角を記録した。"
+        : lightResult === "確認のみ" ? "夜道の灯りは確認したが、暗さのため接近調査は避けた。"
+          : "昼間の道に異常はなく、問題の灯りも確認されなかった。";
+    const lightHistory = lightResult === "引き返し"
+      ? `${quest.title}：引き返し。${fieldworkCauseWord(fw)}。`
+      : `${quest.title}：${lightResult === "調査成功" ? "ランタンありで夜間確認。" : lightResult === "確認のみ" ? "夜間に灯りを確認、接近は保留。" : "昼間確認では異常なし。"}`;
+
+    const lightLogs = generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng);
+    lightLogs.forEach((text, index) => {
+      if (index === lightLogs.length - 1) {
+        fieldLines.forEach((line) => add(line.kind, line.text));
+        add("afterglow", text);
+      } else {
+        add("action", text);
+      }
+    });
+    const observationNotes = isNight && lightResult !== "引き返し"
+      ? generateObservationNotes(quest, party, adventurerItemIds, rng)
+      : null;
     const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
       result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
       elsieRoleNote: "鼻と警戒で",
@@ -5508,31 +5607,59 @@ function generateReport(expedition) {
       itemIds,
       opened: false,
       applied: false,
-      result: isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし",
-      summary: isNight
-        ? (hasLantern ? "夜道の灯りを安全な距離から確認し、消えた方角を記録した。" : "夜道の灯りは確認したが、暗さのため接近調査は避けた。")
-        : "昼間の道に異常はなく、問題の灯りも確認されなかった。",
-      historyLine: `${quest.title}：${isNight ? (hasLantern ? "ランタンありで夜間確認。" : "夜間に灯りを確認、接近は保留。") : "昼間確認では異常なし。"}`,
+      result: lightResult,
+      summary: lightSummary,
+      historyLine: lightHistory,
       adventurerHistoryLines,
       logs,
       observationNotes,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし", rng),
-      hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
+      highlight: generateHighlight(quest, party, itemIds, departConditions, lightResult, rng),
+      hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, ...fieldworkHiddenTags(fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
   }
 
-  if (quest.id === "quest_field_mystery") {
-    const battleLogs = generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    battleLogs.forEach((text, index) => add(index === battleLogs.length - 1 ? "afterglow" : "action", text));
-    const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
+  // 戦闘依頼（畑の追い払い／納屋の討伐）：2026-07-31 に simulateBattle へ接続した。
+  // ★ enemyId を持ちながら戦闘経路を通っていなかった＝データとロジックの食い違いそのものだった。
+  if (quest.id === "quest_field_mystery" || quest.id === "quest_barn_bite") {
+    const hunt = quest.id === "quest_barn_bite";
+    const battle = simulateBattle(quest, party, itemIds, rng);
+    const battleOutcome = battle ? battle.outcome : "victory";
+    const won = battleOutcome === "victory";
+    const outcomeInfo = questBattleOutcomeText(quest, battleOutcome, party);
+
+    const questLogs = hunt
+      ? generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome })
+      : generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome });
+    const dramaLines = generateSimpleBattleDramaLog(battle, party, rng);
+    if (won) {
+      // 勝ったときの並びは従来どおり（最後の1行が余韻）。交戦記録はその手前に差し込む。
+      questLogs.forEach((text, index) => {
+        if (index === questLogs.length - 1) {
+          dramaLines.forEach((line) => add(line.kind, line.text));
+          add("afterglow", text);
+        } else {
+          add("action", text);
+        }
+      });
+    } else {
+      questLogs.forEach((text) => add("action", text));
+      dramaLines.forEach((line) => add(line.kind, line.text));
+      add("action", outcomeInfo.line);
+      add("afterglow", outcomeInfo.after);
+    }
+
+    // 挑まずに引き返したときは相手を観察していない
+    const observationNotes = battleOutcome === "withdraw_first"
+      ? null
+      : generateObservationNotes(quest, party, adventurerItemIds, rng);
     const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
-      result: "追い払い",
-      elsieRoleNote: "吠えと警戒で",
+      result: outcomeInfo.result,
+      elsieRoleNote: hunt ? "鼻と警戒で" : "吠えと警戒で",
       roleNoteFor: (adv) =>
-        adv.tendencies?.courage >= 4 ? "前に出る判断で" : adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "追い払いに"
+        adv.tendencies?.courage >= 4 ? "前に出る判断で" : adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : (hunt ? "討伐に" : "追い払いに")
     });
 
     return withElsieLog({
@@ -5543,48 +5670,22 @@ function generateReport(expedition) {
       itemIds,
       opened: false,
       applied: false,
-      result: "追い払い",
-      summary: "畑を荒らしていた未同定の相手を、畑の外へ追い払った。正体はまだ不明。",
-      historyLine: "畑を荒らす「なにか」を追い払い。未同定のまま、特徴のみ記録。",
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
       observationNotes,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, "追い払い", rng),
-      hiddenTags: { combat: true, target: "「なにか」", recordDensityGain: 1 + logs.length },
-      ...tensionMeta,
-      createdAt: new Date().toISOString()
-    }, quest, party, rng);
-  }
-
-  if (quest.id === "quest_barn_bite") {
-    const huntLogs = generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    huntLogs.forEach((text, index) => add(index === huntLogs.length - 1 ? "afterglow" : "action", text));
-    const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
-    const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
-      result: "討伐",
-      elsieRoleNote: "鼻と警戒で",
-      roleNoteFor: (adv) =>
-        adv.tendencies?.courage >= 4 ? "前に出る判断で" : adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "討伐に"
-    });
-
-    return withElsieLog({
-      id: `report_${Date.now()}`,
-      questId: quest.id,
-      adventurerIds: expedition.adventurerIds,
-      adventurerItemIds,
-      itemIds,
-      opened: false,
-      applied: false,
-      result: "討伐",
-      summary: "納屋に巣食っていた未同定の相手を仕留めた。正体はまだ不明。",
-      historyLine: "納屋の「なにか」を討伐。未同定のまま、特徴のみ記録。",
-      adventurerHistoryLines,
-      logs,
-      observationNotes,
-      departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, "討伐", rng),
-      hiddenTags: { combat: true, target: "嚙みつく「なにか」", recordDensityGain: 1 + logs.length },
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: {
+        combat: true,
+        target: hunt ? "嚙みつく「なにか」" : "「なにか」",
+        battleOutcome,
+        battleHpRatios: battleHpRatiosOf(battle),
+        battleCritIds: battleCritIdsOf(battle),
+        recordDensityGain: 1 + logs.length
+      },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
@@ -5592,9 +5693,8 @@ function generateReport(expedition) {
 
   // 保全依頼：辺境教会周辺の定期巡回
   if (quest.id === "quest_church_patrol") {
-    let outcome = pickOne(["異常なし", "軽微な対処", "要再確認", "小さな違和感"], rng);
-    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.45) outcome = pickOne(["異常なし", "軽微な対処"], rng);
-    if (itemIds.includes("item_map") && rng() < 0.35) outcome = pickOne(["異常なし", "要再確認"], rng);
+    const field = resolveFieldwork(quest, party, itemIds, ["異常なし", "軽微な対処", "要再確認", "小さな違和感"], expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5605,8 +5705,11 @@ function generateReport(expedition) {
 
     const patrolLogs = generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     patrolLogs.forEach((text) => add("action", text));
+    field.logLines.forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = churchPatrolOutcomeText(outcome, party, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : churchPatrolOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -5625,15 +5728,15 @@ function generateReport(expedition) {
       itemIds,
       tensionValue,
       tensionLevel,
-      hiddenTags: { preservation: true, outcome },
+      hiddenTags: { preservation: true, outcome, ...fieldworkHiddenTags(field.fw) },
       wrapElsie: true
     });
   }
 
   // 保全依頼：古い小橋の応急修理
   if (quest.id === "quest_old_bridge_repair") {
-    let outcome = pickOne(["応急修理", "通行可", "一部保留"], rng);
-    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["通行可", "応急修理"], rng);
+    const field = resolveFieldwork(quest, party, itemIds, ["応急修理", "通行可", "一部保留"], expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5647,8 +5750,11 @@ function generateReport(expedition) {
 
     const bridgeLogs = generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     bridgeLogs.forEach((text) => add("action", text));
+    field.logLines.forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = bridgeRepairOutcomeText(outcome, party, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : bridgeRepairOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -5678,7 +5784,7 @@ function generateReport(expedition) {
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
-      hiddenTags: { preservation: true, outcome, recordDensityGain: 1 + logs.length },
+      hiddenTags: { preservation: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     };
@@ -5686,10 +5792,9 @@ function generateReport(expedition) {
 
   // 輸送依頼：薬草包みの納品
   if (quest.id === "quest_herb_delivery") {
-    const weather = expedition.departWeather ?? "晴れ";
-    let outcome = pickOne(["納品完了", "時刻内納品", "一部注意"], rng);
-    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["納品完了", "時刻内納品"], rng);
-    if ((weather === "小雨" || weather === "雨") && !itemIds.includes("item_oilcase") && rng() < 0.4) outcome = "一部注意";
+    // 雨と油紙の効きは共通経路（天候の負荷と油紙の軽減）に移した（2026-07-31）
+    const field = resolveFieldwork(quest, party, itemIds, ["納品完了", "時刻内納品", "一部注意"], expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5703,8 +5808,11 @@ function generateReport(expedition) {
 
     const deliveryLogs = generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     deliveryLogs.forEach((text) => add("action", text));
+    field.logLines.forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = herbDeliveryOutcomeText(outcome, party, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : herbDeliveryOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -5734,7 +5842,7 @@ function generateReport(expedition) {
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
-      hiddenTags: { transport: true, outcome, recordDensityGain: 1 + logs.length },
+      hiddenTags: { transport: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     };
@@ -5742,10 +5850,9 @@ function generateReport(expedition) {
 
   // 救助依頼：帰ってこない薬草採りの確認
   if (quest.id === "quest_missing_herbalist") {
-    let outcome = pickOne(["保護", "発見", "痕跡確認"], rng);
-    if (hasPartyTrait(party, "job", "斥候") && rng() < 0.45) outcome = pickOne(["保護", "発見"], rng);
-    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.4) outcome = pickOne(["発見", "保護"], rng);
-    if (!itemIds.includes("item_whistle") && rng() < 0.35) outcome = pickOne(["痕跡確認", "発見"], rng);
+    // 笛の効きは共通経路（はぐれかけた工程の立て直し）に移した（2026-07-31）
+    const field = resolveFieldwork(quest, party, itemIds, ["保護", "発見", "痕跡確認"], expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5759,8 +5866,11 @@ function generateReport(expedition) {
 
     const rescueLogs = generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, outcome });
     rescueLogs.forEach((text) => add("action", text));
+    field.logLines.forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = missingHerbalistOutcomeText(outcome, party, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : missingHerbalistOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
     if (partyHasElsie(party) && (outcome === "保護" || outcome === "発見")) {
       add("action", outcome === "保護"
@@ -5795,7 +5905,7 @@ function generateReport(expedition) {
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
-      hiddenTags: { rescue: true, outcome, recordDensityGain: 1 + logs.length },
+      hiddenTags: { rescue: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     };
@@ -5873,7 +5983,11 @@ function generateReport(expedition) {
   // 隊商捜索チェーン：護衛失敗の後日談（stage1＝緊急捜索／stage2＝最後の手がかり）
   if (quest.id === "quest_caravan_search" || quest.id === "quest_caravan_lastchance") {
     const stage = quest.id === "quest_caravan_search" ? 1 : 2;
+    // ★ 結末（見つかるか）は編成で決まるまま据え置く（2026-07-31）。ロストは
+    //   「最後のチャンスで不適切な編成を選んだときだけ」と確定済みで、天候や疲労で
+    //   隊商を失わせるのはその確定事項を壊す。共通経路は消耗と工程ログにだけ効かせる。
     const found = party.some((a) => a.job === "斥候") || party.some((a) => a.id === "adv_elsie");
+    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ" });
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5887,6 +6001,7 @@ function generateReport(expedition) {
 
     const searchLogs = generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, stage, found });
     searchLogs.forEach((text) => add("action", text));
+    fieldworkLogLines(fw, rng).forEach((line) => add(line.kind, line.text));
 
     const outcomeInfo = caravanSearchOutcomeText(stage, found, party, rng);
     add("action", outcomeInfo.line);
@@ -5919,6 +6034,7 @@ function generateReport(expedition) {
         searchChain: true,
         searchStage: stage,
         searchSuccess: found,
+        ...fieldworkHiddenTags(fw),
         branch: found ? "recovered" : (stage === 2 ? "lost" : "fail")
       },
       wrapElsie: true
@@ -5926,9 +6042,9 @@ function generateReport(expedition) {
   }
 
   if (quest.id === "quest_evening_market_escort") {
-    let outcome = pickOne(["無事帰宅", "安全確認", "遠回り帰宅"], rng);
-    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["安全確認", "無事帰宅"], rng);
-    if (itemIds.includes("item_map") && rng() < 0.4) outcome = pickOne(["遠回り帰宅", "安全確認", "無事帰宅"], rng);
+    // 古地図の効きは共通経路（道の負荷の軽減）に移した（2026-07-31）
+    const field = resolveFieldwork(quest, party, itemIds, ["無事帰宅", "安全確認", "遠回り帰宅"], expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5942,8 +6058,11 @@ function generateReport(expedition) {
 
     const escortLogs = generateEveningEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     escortLogs.forEach((text) => add("action", text));
+    field.logLines.forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = eveningEscortOutcomeText(outcome, party, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : eveningEscortOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -5973,7 +6092,7 @@ function generateReport(expedition) {
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
-      hiddenTags: { escort: true, outcome, recordDensityGain: 1 + logs.length },
+      hiddenTags: { escort: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     };
@@ -5981,9 +6100,8 @@ function generateReport(expedition) {
 
   // 記録依頼：古い石碑の拓本
   if (quest.id === "quest_old_stele_rubbing") {
-    let outcome = pickOne(["拓本完了", "一部判読", "保存優先"], rng);
-    if (hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["保存優先", "拓本完了"], rng);
-    if (hasPartyTrait(party, "job", "薬草師") && rng() < 0.45) outcome = pickOne(["拓本完了", "一部判読"], rng);
+    const field = resolveFieldwork(quest, party, itemIds, ["拓本完了", "一部判読", "保存優先"], expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5997,8 +6115,11 @@ function generateReport(expedition) {
 
     const steleLogs = generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     steleLogs.forEach((text) => add("action", text));
+    field.logLines.forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = steleRubbingOutcomeText(outcome, party, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : steleRubbingOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
@@ -6028,7 +6149,7 @@ function generateReport(expedition) {
       observationNotes: null,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
-      hiddenTags: { record: true, outcome, recordDensityGain: 1 + logs.length },
+      hiddenTags: { record: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     };
@@ -6038,12 +6159,12 @@ function generateReport(expedition) {
   if (lifeQuestEventPools[quest.id]) {
     const pool = lifeQuestEventPools[quest.id];
     const workEvents = pickMany(pool.workEvents, 3 + Math.floor(rng() * 2), rng);
-    let outcome = pickOne(pool.outcomes, rng);
+    const field = resolveFieldwork(quest, party, itemIds, pool.outcomes, expedition.departWeather ?? "晴れ", rng);
+    const outcome = field.outcome;
 
-    if (quest.id === "quest_wedding_support" && hasPartyTrait(party, "personality", "世話焼き") && rng() < 0.5) outcome = pickOne(["感謝", "成功"], rng);
-    if (quest.id === "quest_old_house_cleanup" && hasPartyTrait(party, "personality", "慎重") && rng() < 0.5) outcome = pickOne(["成功", "整理完了"], rng);
-
-    const outcomeInfo = lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
+    const outcomeInfo = field.turnBack
+      ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+      : lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
     const personal = lifeQuestPersonalEventText(quest, party, rng, tensionValue ?? 50);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
     const statsLog = statsPersonalityLog(party, rng);
@@ -6070,6 +6191,7 @@ function generateReport(expedition) {
     add("", `支給品：${lifeSupplyDesc.length > 0 ? lifeSupplyDesc.join(" / ") : "なし"}。`);
     add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
     workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
+    field.logLines.forEach((line) => add(line.kind, line.text));
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
     if (statsLog) add("drama", statsLog);
@@ -6100,7 +6222,7 @@ function generateReport(expedition) {
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
-      hiddenTags: { workEvents, outcome, recordDensityGain: 1 + logs.length },
+      hiddenTags: { workEvents, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
@@ -6111,15 +6233,14 @@ function generateReport(expedition) {
 
   const weather = expedition.departWeather ?? "晴れ";
   const roadEvents = pickMany(pool.roadEvents, 2 + Math.floor(rng() * 2), rng);
-  let outcome = pickOne(pool.outcomes, rng);
+  // 支給品と編成の効きは共通経路へ移した（2026-07-31）。油紙＝天候、古地図＝道の負荷、
+  // 薬草師や配達人の腕＝その依頼で使う育成値、として工程の判定に入る。
+  const field = resolveFieldwork(quest, party, itemIds, pool.outcomes, weather, rng);
+  const outcome = field.outcome;
 
-  // 支給品や人物特性で、納得感のある結果へ少しだけ寄せる。
-  if (quest.id === "quest_letter" && itemIds.includes("item_oilcase") && rng() < 0.45) outcome = pickOne(["成功", "持ち帰り", "再配達"], rng);
-  if (quest.id === "quest_letter" && hasPartyTrait(party, "background", "郵便配達人") && rng() < 0.45) outcome = pickOne(["成功", "部分成功", "再配達"], rng);
-  if (quest.id === "quest_herb" && hasPartyTrait(party, "job", "薬草師") && rng() < 0.5) outcome = pickOne(["成功", "小成功", "採集優先"], rng);
-  if (quest.id === "quest_signpost" && itemIds.includes("item_map") && rng() < 0.5) outcome = pickOne(["成功", "応急処置", "照合保留"], rng);
-
-  const outcomeInfo = outcomeText(quest, party, itemIds, outcome, rng);
+  const outcomeInfo = field.turnBack
+    ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
+    : outcomeText(quest, party, itemIds, outcome, rng);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng);
@@ -6137,6 +6258,7 @@ function generateReport(expedition) {
   add("", `編成：${formatNames(party)}。支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
   add("", generateWeatherLog(quest, party, weather, rng));
   roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng)));
+  field.logLines.forEach((line) => add(line.kind, line.text));
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
   if (statsLog) add("drama", statsLog);
@@ -6171,6 +6293,7 @@ function generateReport(expedition) {
       weather,
       roadEvents,
       outcome,
+      ...fieldworkHiddenTags(field.fw),
       recordDensityGain: 1 + logs.length
     },
     createdAt: new Date().toISOString()
@@ -6667,3 +6790,328 @@ window.debugBattleSim = function (questId = "quest_barn_bite", trials = 20, part
   return tally;
 };
 // === 戦闘エンジンここまで ====================================================
+
+// === 非戦闘依頼の共通経路（工程エンジン） ====================================
+// ★ なぜあるか（2026-07-29 裁定B／2026-07-31 論点1〜4=A）：
+//   17件のうち戦闘を通るのは隊商護衛だけで、残りは候補配列から pickOne するだけだった。
+//   編成も支給品も成否に届いていない＝依頼の性質ではなく実装都合で安全度が分かれていた。
+// ★ 全件を simulateBattle に寄せる案は却下済み（手紙の配達に敵を作るのは設定を曲げている）。
+//   非戦闘の「敵」は**天候と疲労の2つだけ**。道中の事故・時間帯・依頼固有の脅威は後回し。
+// ★ 撤退判断は入れない（論点1=A）。**非戦闘には勝敗がない。** 撤退判断は
+//   「こいつに勝つ手段がもうない」を判定する仕組みで、草むしりや配達には対応する概念がない。
+//   「引き返す」は成果の程度なので、結末の格下げ（完遂→部分→未達）で表す。
+//   ★ 共有しないことで、戦闘側の撤退を直しても非戦闘は動かない（切り分けが保てる）。
+// ★ 判定入力は「その依頼で伸びる stat」（論点2=A）。GROWTH_STAT_BY_CATEGORY をそのまま使い、
+//   **伸びる stat ＝ 使う stat** で一貫させる。対応表を2つ持たない（成長用と判定用で腐るため）。
+//   これで exploration / investigation / negotiation が初めて判定入力になる。
+// ★ 天候と疲労は別々に持つ（論点3=A）。畳むと「何のせいで失敗したか」が報告書に書けない。
+// ★ ログは工程ログ型（論点4=A）。工程を2〜4回し、**動いた工程だけ**書く。
+const FIELDWORK_TUNING = {
+  phasesMin: 2,
+  phasesMax: 4,
+  // 天候＝依頼の難度に乗る固定値。遠征の間ずっと同じ重さでかかる。
+  weatherLoad: { "晴れ": 0, "雨上がり": 3, "曇り": 4, "強風": 7, "霧": 8, "小雨": 8, "雨": 11 },
+  defaultWeatherLoad: 4,
+  // 危険度の基礎負荷。★ 育成値と同じ目盛りで置く（現状の値は 10〜28）。
+  dangerLoad: { "低": 17, "中": 24, "高": 30 },
+  defaultDangerLoad: 17,
+  // 疲労＝**遠征中だけ**のカウンタ。工程をこなすごとに増える。ユニットの永続状態としては持たない。
+  //   人数が少ないほど1人あたりの負担が重い（少人数の不利はここで出す）。
+  fatigueBase: 3,
+  fatigueSmallPartyExtra: 1.5,
+  fatigueSetbackExtra: 3,
+  // 工程が滞る確率＝ floor + (負荷 − 力量) ÷ scale。★ 乱数の閾値ではなく確率で置くのは、
+  //   「力量が1上がると何%変わるか」がそのまま読めるようにするため（1/60 ＝ 育成値1でおよそ1.7%）。
+  setbackFloor: 0.10,
+  setbackScale: 60,
+  setbackMin: 0.03,
+  setbackMax: 0.6,
+  // 支給品。ランタンは時間帯の話なので入れない（時間帯は後回しと確定済み）。観察記録票は記録用で判定に効かない。
+  mapLoadRelief: 5,
+  mapCategories: ["探索", "輸送", "捜索", "護衛", "記録", "救助"],
+  potFatigueRelief: 6,
+  oilcaseWeatherRelief: 0.5,
+  whistleRecoverMax: 1,
+  bandageStaminaBack: 14,
+  // 消耗（＝負傷の元）。★ 1回の滞りでは負傷しない大きさにしてある（軽症の閾値は余力70%）。
+  //   同じ者に2回続けて来たときだけ負傷する＝人数が多いほど散る（前衛集中は戦闘の話）。
+  // ★ 下限を 0.5 に置いているので、非戦闘では構造的に軽症までしか出ない
+  //   （重症になるのはクリティカルを受けたか HP0 のときだけで、どちらもここでは起こらない）。
+  staminaHitMin: 12,
+  staminaHitMax: 22,
+  minStaminaRatio: 0.5,
+  setbacksForPartial: 1,
+  setbacksForFail: 2
+};
+
+// 依頼で使う stat の平均力量。★ その stat を一番持っている者が担当する、という読み方（最大値を採る）。
+// エルシーも数えるのは、鼻と警戒が実際に工程の助けになるため（消耗は負わない＝下の workers から外す）。
+function fieldworkCapability(quest, party) {
+  const statKeys = growthStatsForCategory(quest.category);
+  const total = statKeys.reduce((sum, key) => {
+    const best = party.reduce((max, adv) => Math.max(max, adv.stats?.[key] ?? 0), 0);
+    return sum + best;
+  }, 0);
+  return { statKeys, capability: statKeys.length > 0 ? total / statKeys.length : 0 };
+}
+
+function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
+  const random = rng ?? Math.random;
+  const workers = party.filter((a) => isHumanAdventurer(a)); // 消耗を負うのは人間だけ（犬は工程の負傷対象にしない）
+  if (workers.length === 0) return null;
+  const { statKeys, capability } = fieldworkCapability(quest, party);
+  const held = Array.isArray(itemIds) ? itemIds : [];
+  const events = [];
+
+  const weather = options.weather ?? "晴れ";
+  let weatherLoad = FIELDWORK_TUNING.weatherLoad[weather] ?? FIELDWORK_TUNING.defaultWeatherLoad;
+  if (held.includes("item_oilcase") && weatherLoad > 0) {
+    const relieved = Math.round(weatherLoad * FIELDWORK_TUNING.oilcaseWeatherRelief);
+    events.push({ type: "item", itemId: "item_oilcase", weather });
+    weatherLoad = relieved;
+  }
+  let baseLoad = FIELDWORK_TUNING.dangerLoad[quest.danger] ?? FIELDWORK_TUNING.defaultDangerLoad;
+  if (held.includes("item_map") && FIELDWORK_TUNING.mapCategories.includes(quest.category)) {
+    baseLoad = Math.max(0, baseLoad - FIELDWORK_TUNING.mapLoadRelief);
+    events.push({ type: "item", itemId: "item_map" });
+  }
+
+  const fatigueStep = FIELDWORK_TUNING.fatigueBase +
+    FIELDWORK_TUNING.fatigueSmallPartyExtra * Math.max(0, MAX_PARTY_SIZE - party.length);
+  let fatigue = 0;
+  let potLeft = held.filter((id) => id === "item_pot").length;
+  let whistleLeft = Math.min(FIELDWORK_TUNING.whistleRecoverMax, held.filter((id) => id === "item_whistle").length);
+  let bandages = held.filter((id) => id === "item_bandage").length;
+  const stamina = {};
+  workers.forEach((adv) => { stamina[adv.id] = 100; });
+
+  const phases = FIELDWORK_TUNING.phasesMin +
+    Math.floor(random() * (FIELDWORK_TUNING.phasesMax - FIELDWORK_TUNING.phasesMin + 1));
+  let setbacks = 0;
+  const causeCount = { weather: 0, fatigue: 0, skill: 0 };
+
+  for (let phase = 1; phase <= phases; phase++) {
+    // 携帯鍋：疲労が積もったところで一度だけ休憩を挟む
+    if (potLeft > 0 && fatigue >= FIELDWORK_TUNING.potFatigueRelief) {
+      potLeft -= 1;
+      fatigue = Math.max(0, fatigue - FIELDWORK_TUNING.potFatigueRelief);
+      events.push({ type: "rest", phase, itemId: "item_pot" });
+    }
+    const fatigueNow = Math.round(fatigue);
+    const load = baseLoad + weatherLoad + fatigueNow;
+    const chance = Math.min(FIELDWORK_TUNING.setbackMax, Math.max(FIELDWORK_TUNING.setbackMin,
+      FIELDWORK_TUNING.setbackFloor + (load - capability) / FIELDWORK_TUNING.setbackScale));
+    const stalled = random() < chance;
+    fatigue += fatigueStep;
+    if (!stalled) continue; // 動かなかった工程は書かない（論点4=A）
+    // 笛：一度だけ、はぐれかけた工程を立て直す
+    if (whistleLeft > 0) {
+      whistleLeft -= 1;
+      events.push({ type: "recover", phase, itemId: "item_whistle" });
+      continue;
+    }
+    // 何のせいで滞ったか。★ ここを残すために天候と疲労を分けて持っている（論点3=A）。
+    let cause = "skill";
+    if (weatherLoad > 0 && weatherLoad >= fatigueNow) cause = "weather";
+    else if (fatigueNow > 0) cause = "fatigue";
+    causeCount[cause] += 1;
+    setbacks += 1;
+    fatigue += FIELDWORK_TUNING.fatigueSetbackExtra;
+    const hitAdv = workers[Math.floor(random() * workers.length)]; // 前衛集中は戦闘の話。非戦闘では偏らせない
+    const hit = Math.round(FIELDWORK_TUNING.staminaHitMin +
+      random() * (FIELDWORK_TUNING.staminaHitMax - FIELDWORK_TUNING.staminaHitMin));
+    stamina[hitAdv.id] = Math.max(FIELDWORK_TUNING.minStaminaRatio * 100, stamina[hitAdv.id] - hit);
+    events.push({ type: "setback", phase, cause, weather, id: hitAdv.id, name: getDisplayName(hitAdv) });
+    if (bandages > 0 && stamina[hitAdv.id] <= 70) {
+      bandages -= 1;
+      stamina[hitAdv.id] = Math.min(100, stamina[hitAdv.id] + FIELDWORK_TUNING.bandageStaminaBack);
+      events.push({ type: "care", phase, itemId: "item_bandage", name: getDisplayName(hitAdv) });
+    }
+  }
+
+  const tier = setbacks >= FIELDWORK_TUNING.setbacksForFail ? "fail"
+    : setbacks >= FIELDWORK_TUNING.setbacksForPartial ? "partial" : "full";
+  const mainCause = ["weather", "fatigue", "skill"].reduce((a, b) => (causeCount[b] > causeCount[a] ? b : a), "skill");
+  return {
+    tier,
+    setbacks,
+    phases,
+    statKeys,
+    capability: Math.round(capability * 10) / 10,
+    weather,
+    weatherLoad,
+    baseLoad,
+    fatigue: Math.round(fatigue),
+    mainCause: setbacks > 0 ? mainCause : null,
+    turnedBack: tier === "fail",
+    // 帰還時の余力率。負傷の確定は戦闘と同じ経路（applyInjuriesFromReport）に乗せる。
+    hpRatios: Object.fromEntries(workers.map((adv) => [adv.id, stamina[adv.id] / 100])),
+    events
+  };
+}
+
+function fieldworkHpRatiosOf(fw) {
+  return fw && fw.hpRatios ? fw.hpRatios : null;
+}
+
+// 工程ログ（論点4=A）：動いた瞬間だけを1行ずつ書く。順調だった工程は書かない。
+function fieldworkLogLines(fw, rng) {
+  if (!fw || !Array.isArray(fw.events)) return [];
+  const lines = [];
+  fw.events.forEach((ev) => {
+    if (ev.type === "item" && ev.itemId === "item_map") {
+      lines.push({ kind: "drama", text: `古地図と照らし合わせ、余計な回り道をせずに済んだ。` });
+    } else if (ev.type === "item" && ev.itemId === "item_oilcase") {
+      lines.push({ kind: "drama", text: `油紙の包みが${ev.weather}を防ぎ、濡らさずに運べた。` });
+    } else if (ev.type === "rest") {
+      lines.push({ kind: "drama", text: `携帯鍋で湯を沸かし、短い休憩を挟んだ。息が戻った。` });
+    } else if (ev.type === "recover") {
+      lines.push({ kind: "drama", text: `一度は間が空きかけたが、短い笛の音ですぐ立て直した。` });
+    } else if (ev.type === "setback") {
+      lines.push({ kind: "action", text: pickOne(fieldworkSetbackTexts(ev), rng) });
+    } else if (ev.type === "care") {
+      lines.push({ kind: "drama", text: `${ev.name}の擦り傷に包帯が巻かれ、そのまま作業に戻った。` });
+    }
+  });
+  return lines;
+}
+
+function fieldworkSetbackTexts(ev) {
+  if (ev.cause === "weather") {
+    return [
+      `${ev.weather}に足元と手元を取られ、${ev.name}の手が止まった。`,
+      `${ev.weather}が続き、${ev.name}は同じ工程をやり直すことになった。`
+    ];
+  }
+  if (ev.cause === "fatigue") {
+    return [
+      `工程が長引き、${ev.name}の動きから精度が落ち始めた。`,
+      `息が上がってきた頃、${ev.name}が手順をひとつ取りこぼした。`
+    ];
+  }
+  return [
+    `${ev.name}は勝手の分からない工程に手こずり、やり直しになった。`,
+    `${ev.name}は思っていたより手間のかかる工程に足を止められた。`
+  ];
+}
+
+// 結末の格下げ（論点1=A）。★ 依頼ごとの結末の良し悪しは GROWTH_TIER_BY_RESULT が既に持っている。
+//   ここで新しい対応表を作らない（成長用と判定用で2つ持たない、は論点2=A と同じ理由）。
+function pickOutcomeByTier(candidates, tier, rng) {
+  const byTier = { full: [], partial: [], fail: [] };
+  candidates.forEach((name) => {
+    const t = GROWTH_TIER_BY_RESULT[name] ?? "full";
+    (byTier[t] ?? byTier.full).push(name);
+  });
+  const order = tier === "full" ? ["full", "partial", "fail"]
+    : tier === "partial" ? ["partial", "full", "fail"]
+      : ["fail", "partial", "full"];
+  const found = order.map((t) => byTier[t]).find((list) => list.length > 0);
+  return found ? pickOne(found, rng) : candidates[0];
+}
+
+// 未達の結末を持たない依頼のための共通の「引き返し」。個別に16通り書かず、1つで受ける。
+function fieldworkOutcome(quest, fw, candidates, rng) {
+  if (fw && fw.tier === "fail" && !candidates.some((name) => GROWTH_TIER_BY_RESULT[name] === "fail")) {
+    return { outcome: "引き返し", turnBack: true };
+  }
+  return { outcome: pickOutcomeByTier(candidates, fw ? fw.tier : "full", rng), turnBack: false };
+}
+
+// 各依頼の分岐から同じ形で呼ぶための入口。工程を回し、結末を格下げし、工程ログを作るまで。
+function resolveFieldwork(quest, party, itemIds, candidates, weather, rng) {
+  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather });
+  const picked = fieldworkOutcome(quest, fw, candidates, rng);
+  return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines: fieldworkLogLines(fw, rng) };
+}
+
+// 報告書の裏に残す値。battleHpRatios は戦闘と同じ鍵で、負傷の確定は同じ経路に乗る。
+function fieldworkHiddenTags(fw) {
+  if (!fw) return {};
+  return {
+    fieldwork: {
+      tier: fw.tier,
+      setbacks: fw.setbacks,
+      phases: fw.phases,
+      cause: fw.mainCause,
+      capability: fw.capability,
+      stats: fw.statKeys,
+      weatherLoad: fw.weatherLoad,
+      fatigue: fw.fatigue
+    },
+    battleHpRatios: fieldworkHpRatiosOf(fw)
+  };
+}
+
+function fieldworkCauseWord(fw) {
+  if (!fw || !fw.mainCause) return "続けられる状態ではなくなった";
+  if (fw.mainCause === "weather") return `${fw.weather}が収まらなかった`;
+  if (fw.mainCause === "fatigue") return "工程が長引き、消耗が重なった";
+  return "手が足りず、工程が進まなかった";
+}
+
+function fieldworkTurnBackOutcomeText(quest, party, fw) {
+  const reason = fieldworkCauseWord(fw);
+  return {
+    result: "引き返し",
+    summary: `${reason}ため、${quest.area}での作業を途中で切り上げた。`,
+    line: `これ以上は続けられないと見て、${partySubject(party)}は道具をまとめ、来た道を引き返した。`,
+    after: `報告書には「引き返し。${reason}」と記されている。`,
+    history: `${quest.title}：引き返し。${reason}。`
+  };
+}
+
+// 戦闘依頼の交戦記録（隊商護衛の drama ログとは別。あちらは隊商・荷馬車の文言を含むので分ける）。
+// 動いた瞬間だけ書く方針は共通：決定的な一撃・状態の変化・手当て・退き際の4種に絞る。
+function generateSimpleBattleDramaLog(battle, party, rng) {
+  if (!battle || !Array.isArray(battle.events) || battle.events.length === 0) return [];
+  const random = rng ?? Math.random;
+  const enemyRow = Array.isArray(window.masterEnemies) ? window.masterEnemies.find((e) => e.id === battle.enemyId) : null;
+  const enemyN = enemyRow?.shortName ?? "相手";
+  const lines = [];
+  battle.events.forEach((ev) => {
+    if (ev.type === "deal" && ev.crit) {
+      lines.push({ kind: "status-grave", text: `${ev.attackerName}が渾身の一撃を叩き込んだ！（${enemyN}に${ev.damage}ダメージ！）` });
+    } else if (ev.type === "deal" && ev.strong) {
+      lines.push({ kind: "action", text: `${ev.attackerName}の一撃が深く入った（${enemyN}に${ev.damage}ダメージ！）` });
+    } else if (ev.type === "take" && ev.crit) {
+      lines.push({ kind: "status-grave", text: `${enemyN}の牙が深く入った。${ev.targetName}が致命の一撃を受けた！（${ev.targetName}に${ev.damage}ダメージ！）` });
+    } else if (ev.type === "status" && ev.recovered) {
+      lines.push({ kind: "drama", text: `手当てが間に合い、${ev.targetName}は${ev.to}まで持ち直した。` });
+    } else if (ev.type === "status" && (ev.to === "深手" || ev.to === "戦闘不能")) {
+      lines.push({ kind: "status-grave", text: `${ev.targetName}が${ev.to}になった。` });
+    } else if (ev.type === "heal") {
+      lines.push({ kind: "drama", text: `${ev.healerName}が${ev.self ? "自分の傷" : `${ev.targetName}の傷`}に包帯を巻いた。` });
+    } else if (ev.type === "retreat" && ev.at === "first" && ev.retreat) {
+      lines.push({ kind: "action", text: `相手の構えを見て、${enemyN}に挑まずに引き返す判断をした。` });
+    } else if (ev.type === "retreat" && ev.at === "resolve" && ev.retreat && ev.succeeded) {
+      lines.push({ kind: "action", text: `これ以上は保たないと見て、${enemyN}から距離を取って退いた。` });
+    } else if (ev.type === "retreat_failed") {
+      lines.push({ kind: "action", text: `退こうとしたが、${enemyN}は間合いを詰めたまま離れなかった。` });
+    }
+  });
+  // 行数が増えすぎないよう、決定打だけを残す（後ろの節目を優先して残す）
+  const cap = 6;
+  return lines.length <= cap ? lines : lines.slice(lines.length - cap);
+}
+
+window.debugFieldworkSim = function (questId = "quest_herb", trials = 200, partyIds = null, itemIds = [], weather = "晴れ") {
+  const quest = window.masterQuests.find((q) => q.id === questId);
+  if (!quest) return console.warn(`依頼が見つかりません: ${questId}`);
+  const ids = partyIds ?? ["adv_mina", "adv_gadd", "adv_elne", "adv_row"];
+  const party = ids.map((id) => window.masterAdventurers.find((a) => a.id === id)).filter(Boolean);
+  const tally = { full: 0, partial: 0, fail: 0 };
+  let injured = 0;
+  let last = null;
+  for (let i = 0; i < trials; i++) {
+    last = simulateFieldwork(quest, party, itemIds, Math.random, { weather });
+    if (!last) return console.warn("人間の冒険者がいません");
+    tally[last.tier] += 1;
+    if (Object.values(last.hpRatios).some((r) => r <= 0.7)) injured += 1;
+  }
+  console.log(`--- debugFieldworkSim: ${quest.title} × ${trials}回 / ${party.map((a) => getDisplayName(a)).join("、")} / ${weather} ---`);
+  console.table({ ...tally, 負傷が出た回数: injured, 力量: last.capability, 使う値: last.statKeys.join("+") });
+  console.log("最終試行の詳細:", last);
+  return tally;
+};
+// === 非戦闘依頼の共通経路ここまで ============================================

@@ -85,6 +85,8 @@ window.masterQuests = [
     observationTarget: "「なにか」",
     tensionBase: 45,
     tensionRange: 15,
+    enemyId: "enemy_field_pest",
+    battleEffectiveItemIds: ["item_bandage"],
     summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
   },
   {
@@ -101,6 +103,7 @@ window.masterQuests = [
     tensionBase: 72,
     tensionRange: 18,
     enemyId: "enemy_barn_biter",
+    battleEffectiveItemIds: ["item_bandage"],
     summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
   },
   {
