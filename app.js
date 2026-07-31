@@ -5623,7 +5623,13 @@ function generateReport(expedition) {
     const questLogs = hunt
       ? generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome })
       : generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome });
-    const dramaLines = generateSimpleBattleDramaLog(battle, party, rng);
+    // 交戦記録＋「防げた瞬間」＋「持たせたのに使わなかった支給品」。
+    // ★ 畑は戦闘のチュートリアルなので、**うまく送れたときも理由が読める**ようにする（2026-07-31）。
+    const dramaLines = [
+      ...generateSimpleBattleDramaLog(battle, party, rng),
+      ...battleDefenseHighlights(battle, party, rng),
+      ...unusedSupplyLines(battle, party, adventurerItemIds, rng)
+    ];
     if (won) {
       // 勝ったときの並びは従来どおり（最後の1行が余韻）。交戦記録はその手前に差し込む。
       questLogs.forEach((text, index) => {
@@ -7117,6 +7123,105 @@ function generateSimpleBattleDramaLog(battle, party, rng) {
   // 行数が増えすぎないよう、決定打だけを残す（後ろの節目を優先して残す）
   const cap = 6;
   return lines.length <= cap ? lines : lines.slice(lines.length - cap);
+}
+
+// ★ 防げた瞬間（2026-07-31・論点3=A）。
+//   被害が出なかった戦闘は報告書に何も残らず、**「何も起きなかった」としか読めなかった**。
+//   畑は戦闘のチュートリアルなので、**うまく送れたときも理由が読めないと学習にならない**。
+// ★★ 全部は拾わない。**最も効いた1〜2個だけ**（2026-07-30 の「書くのは変化があったときだけ」を守る。
+//    長くすることと、起きたこと全部を書くことは別）。
+// ★ 新しい値は使わない。`roundLog` に既にある事実（0ダメージに抑えた被弾・前衛の交代）を拾うだけ。
+function battleDefenseHighlights(battle, party, rng) {
+  if (!battle || !Array.isArray(battle.roundLog) || battle.roundLog.length === 0) return [];
+  // 深手や戦闘不能が出た戦闘では、そちらが「書くべき変化」なのでここは黙る
+  const hadDeep = battle.events.some((e) => e.type === "status" && (e.to === "深手" || e.to === "戦闘不能"));
+  if (hadDeep) return [];
+  const random = rng ?? Math.random;
+  const enemyRow = Array.isArray(window.masterEnemies) ? window.masterEnemies.find((e) => e.id === battle.enemyId) : null;
+  const enemyN = enemyRow?.shortName ?? "相手";
+  const memberById = Object.fromEntries(battle.members.map((m) => [m.id, m]));
+  const advById = Object.fromEntries(party.map((a) => [a.id, a]));
+
+  // guard で 0 に抑えた被弾の回数
+  const blocked = {};
+  battle.roundLog.forEach((r) => {
+    r.hits.forEach((h) => { if (h.damage === 0) blocked[h.id] = (blocked[h.id] ?? 0) + 1; });
+  });
+  const frontIds = battle.roundLog.map((r) => r.frontId);
+  const wasFront = new Set(frontIds);
+  const nameOf = (id) => memberById[id]?.name ?? "誰か";
+  const weaponOf = (id) => advById[id]?.weapon?.name ?? null;
+  // 受け切った回数が最も多い者。前に立った者と後ろにいた者は書き分ける。
+  const ranked = Object.keys(blocked).sort((a, b) => blocked[b] - blocked[a]);
+  const frontBlocker = ranked.find((id) => wasFront.has(id));
+  const rearBlocker = ranked.find((id) => !wasFront.has(id));
+
+  const lines = [];
+  if (frontBlocker) {
+    // 前に立った当人が guard で受け切った＝装備がそのまま場面になっている
+    const w = weaponOf(frontBlocker);
+    lines.push({ kind: "drama", text: w
+      ? `${nameOf(frontBlocker)}は${w}で受け、${enemyN}の一撃は通らなかった。`
+      : `${nameOf(frontBlocker)}が正面で受け止め、${enemyN}の一撃は通らなかった。` });
+  } else if (rearBlocker) {
+    // ★ 誰が前を塞いだから後ろに届かなかったのかを、名前で結ぶ（編成の効果を因果で書く）
+    const frontId = frontIds[frontIds.length - 1];
+    const w = weaponOf(frontId);
+    lines.push({ kind: "drama", text: w
+      ? `${nameOf(frontId)}が${w}で前を塞いでいるあいだ、${nameOf(rearBlocker)}のところまで${enemyN}の牙は届かなかった。`
+      : `${nameOf(frontId)}が前を塞いでいるあいだ、${nameOf(rearBlocker)}のところまで${enemyN}の牙は届かなかった。` });
+  }
+  // 前衛が入れ替わったこと自体が「編成が効いた瞬間」
+  if (lines.length < 2 && new Set(frontIds).size >= 2) {
+    const lastName = memberById[frontIds[frontIds.length - 1]]?.name ?? "次の者";
+    lines.push({ kind: "drama", text: `消耗した者を下げ、${lastName}が前へ出た。順に前を代わったので、深い傷は誰にも残らなかった。` });
+  }
+  // 拾えるものが何もなかったときだけ、無傷そのものを書く。
+  // ★ 本当に全員が無傷のときに限る（消耗して帰った者がいるのに「傷を負わず」と書かない）。
+  if (lines.length === 0 && battleAllClean(battle)) {
+    lines.push({ kind: "drama", text: pickOne([
+      `誰も傷を負わずに戻ってきた。かすった跡が残っている者はいたが、手当てはいらなかった。`,
+      `帰ってきた一行に、手当ての要る者はいなかった。`
+    ], random) });
+  }
+  return lines.slice(0, 2);
+}
+
+// 帰還後に負傷が1件も付かなかったか（名簿と同じ判定を使う）
+function battleAllClean(battle) {
+  if (!battle || !Array.isArray(battle.members)) return false;
+  return battle.members.every((m) => !injuryLevelFromHpRatio(
+    m.injuryHpRatio ?? (m.maxHp > 0 ? Math.max(0, m.hp) / m.maxHp : 1),
+    m.gotCrit
+  ));
+}
+
+// ★ 持たせたのに使わなかった支給品（2026-07-31・論点3=B）。
+//   「使わなかった」と書くと読み物として弱いので、**物の状態**として書く
+//   （遺品の設計と同じ形＝物の状態を書くと、使われ方が読める）。
+// ★ 持たせていないものは書かない。そうすると**支給品を持たせた判断が正しかったか**の手がかりになる
+//   （「要らなかった」も学習になる）。
+function unusedSupplyLines(battle, party, adventurerItemIds, rng) {
+  if (!battle) return [];
+  // 挑まずに引き返した回は、そもそも道具の出番がない（要らなかった、とは書けない）
+  if (!Array.isArray(battle.roundLog) || battle.roundLog.length === 0) return [];
+  // ★ 誰かが傷を負って帰ったなら「要らなかった」ではない（道具は要ったが間に合わなかっただけ）。
+  //   持たせた判断の手がかりとして書くので、本当に要らなかったときに限る。
+  if (!battleAllClean(battle)) return [];
+  const random = rng ?? Math.random;
+  const held = getAllItemIds(adventurerItemIds);
+  const lines = [];
+  if (held.includes("item_bandage") && !battle.events.some((e) => e.type === "heal")) {
+    const holder = supplyItemHolderName(party, adventurerItemIds, "item_bandage");
+    lines.push({ kind: "drama", text: pickOne(holder ? [
+      `包帯は封を切られないまま、${holder}の荷に戻ってきた。`,
+      `${holder}の包帯は巻いた形のまま、結び目もほどかれずに戻ってきた。`
+    ] : [
+      `包帯は封を切られないまま戻ってきた。`,
+      `包帯は巻いた形のまま、結び目もほどかれずに戻ってきた。`
+    ], random) });
+  }
+  return lines;
 }
 
 window.debugFieldworkSim = function (questId = "quest_herb", trials = 200, partyIds = null, itemIds = [], weather = "晴れ") {
