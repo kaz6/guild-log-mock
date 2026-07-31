@@ -6310,25 +6310,22 @@ function computeBattleForecast(fighters, enemyHpNow, enemy) {
 // 段階1（接敵）と段階4（相手を見て決める）の冷静な判断。相手の**残り**と相手の**強さ**の両方を見る。
 // ★ 損耗は forecast の中（現在HP）に入っているので、旧式のように別項で足さない（二重計上を避ける）。
 // ★ 医療系支給品は「残り個数」で効く（2026-07-30 裁定）。あるうちは粘り、使い切った瞬間に引く側へ倒れる。
-// ★ 煙幕は判断に入れない（2026-07-31）。煙幕S1ドクトリン「判断は動揺のまま、道具は結果に効く」
-//   （2026-07-25）どおり、煙幕は撤退の成否と結末にだけ効く。判断に足すと、勝てる編成が
-//   煙幕を持っただけで離脱するようになる（実測：3人+エルシーの交戦後撤退が 1.3%→35.1%）。
-// ★ エルシーの +10 は残す。これは道具のそろばんではなく犬の警告＝本能（2026-07-24 の区分）。
+// ★★ 一般則（2026-07-31 裁定）：**判断に入るのは「勝てるか」に関わるものだけ。
+//    「逃げやすいか」は撤退の成否にだけ効く。** 人が撤退を決めるのは「勝つ手段がもうない」と
+//    思ったときで、「逃げ道があるから逃げよう」ではない。
+//   → 煙幕（逃げる手段）もエルシー（逃げる手段）も、段階1・段階4のどちらでも判断に入れない。
+//     効くのは撤退の成否（`retreatSuccessSmokeBonus` / エルシーは必ず成功）と結末だけ。
+//     判断に足していたときは、勝てる編成が煙幕を持っただけで離脱していた（1.3%→35.1%）。
+//   ※ 段階2（動揺）のエルシー+10 は別（犬の警告＝本能。2026-07-24 の裁定のまま残す）。
+//   ※ 包帯は「勝つ手段がまだある」側なので判断に入れてよい（継続寄り）。
 function computeBattleResolveDecision(fighters, enemyHpNow, enemy, context, at = "resolve") {
   const alive = fighters.filter((f) => !f.downed);
   const forecast = computeBattleForecast(fighters, enemyHpNow, enemy);
   const enemyHpRatio = enemy.hp > 0 ? Math.max(0, enemyHpNow) / enemy.hp : 0;
   const capped = Math.min(forecast.ratio, BATTLE_TUNING.forecastRatioCap);
   let raw = (capped - 1) * BATTLE_TUNING.forecastScoreScale + BATTLE_TUNING.forecastScoreOffset;
-  if (context.hasElsie) raw += BATTLE_TUNING.scoreElsieBonus;
-  // ★ 段階1（接敵）は「勝てるか」だけで判断する（2026-07-31）。
-  //   包帯は勝敗をほとんど動かさない（実測でミナ+ガッドの勝率 1.6%→5.9%）のに、
-  //   −20 は比にして 0.4 相当＝「4割ぶん長く保つ」という過大評価になっていた。
-  //   医療品が効くのは戦いが始まったあとの「まだやれる」＝段階4（論点3=A の意図はそこ）。
-  if (at !== "first") {
-    if ((context.medicalLeft ?? 0) > 0) raw += BATTLE_TUNING.scoreEffectiveItemPenalty; // 手当てできるからまだやれる
-    if (enemyHpRatio <= BATTLE_TUNING.enemyLowHpRatio) raw += BATTLE_TUNING.scoreEnemyLowHpPenalty;
-  }
+  if ((context.medicalLeft ?? 0) > 0) raw += BATTLE_TUNING.scoreEffectiveItemPenalty; // 手当てできるからまだやれる
+  if (enemyHpRatio <= BATTLE_TUNING.enemyLowHpRatio) raw += BATTLE_TUNING.scoreEnemyLowHpPenalty;
   const score = Math.round(raw);
   const votes = alive.map((f) => {
     const jobBase = BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault;
@@ -6337,10 +6334,13 @@ function computeBattleResolveDecision(fighters, enemyHpNow, enemy, context, at =
     return { id: f.id, name: f.name, threshold, score, retreat: score >= threshold };
   });
   const retreatCount = votes.filter((v) => v.retreat).length;
-  // ★ 段階1だけ「半数以上」（2026-07-31）。挑む前に失うのは報酬だけなので安全側に倒す。
-  //   過半数のままだと2人編成で成立に2票が要り、閾値90の豪胆な戦士が単独で押し切れてしまった
-  //   （ミナ+ガッドが勝率1.6〜16%の戦いに挑んでいた）。「安全側に倒れる」は動揺判断の先例に倣う。
-  const needed = at === "first" ? Math.ceil(alive.length / 2) : Math.floor(alive.length / 2) + 1;
+  // ★ 撤退の成立は「半数以上」（2026-07-31 裁定。4人→2票／3人→2票／2人→1票／1人→1票）。
+  //   過半数だと2人編成で全員一致が要り、豪胆な戦士が1人いれば永久に引かない＝
+  //   **少人数ほど危険なのに、少人数ほど引きにくくなる**という逆転が起きていた。
+  //   半数以上なら人数が減るほど引きやすくなり、危険度と一致する。
+  //   ★ 主題とも合う：1人が「もう無理だ」と言ったら引く（＝仲間を置いていく方向に寄せない）。
+  //   ※ 2026-06-29 の「4人中3人以上」は4人編成だけを想定した保留付きの値で、この裁定が優先する。
+  const needed = Math.ceil(alive.length / 2);
   return {
     score,
     votes,
