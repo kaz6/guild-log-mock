@@ -6371,7 +6371,20 @@ const BATTLE_TUNING = {
   //   「2連続で即死しない」条件はもともと満たされている。上限を入れると
   //   意図的に殴られることが安全になり、自爆成長を許可してしまう。
   critRate: 0.05,
-  critMultiplier: 2
+  critMultiplier: 2,
+  // ★ 素ダメージが小さすぎる一撃はクリティカル判定をしない（2026-07-31）。
+  //   「0ダメージの被弾では判定しない」の延長線で、**総ダメージは動かさない**
+  //   （クリティカルに下限を入れて底上げする案は却下済み。底上げすると軽が下がり、
+  //     lightWoundRatio の再調整が連鎖する）。
+  // ★ 受け手の maxHp 比で持つ。「致命の一撃と呼べる重さか」は**受け手基準の不変量**なので、
+  //   ロウ（125）とエルネ（79）で意味が変わってはいけない（2026-07-29「不変量は比率で持つ」）。
+  //   敵の threat 比で持つ案は却下＝**致命かどうかを相手の都合で決めることになる**。
+  // ★ 0.05 の根拠：4人編成では素ダメージに谷がある（前衛シェア0.6と後衛の頭割り0.4÷3の構造。
+  //   threat38 なら後衛1〜4／前衛12〜26で、5〜11は0件）。0.05＝閾値3.95〜6.25 はその谷の中。
+  //   0.08 まで上げると畑（threat16）の深手が0.7%になり、**低危険帯から危険が消える**ので採らない。
+  // ★★ これで深手が 53% → 19% になるが、**下がったのではなく本来の値**。
+  //   旧53%のうち 64.9% は「6ダメージの致命の一撃」＝後衛のかすり傷を深手に数えていた分。
+  critMinHpRatio: 0.05
 };
 
 function getEnemyForQuest(quest) {
@@ -6627,7 +6640,9 @@ function simulateBattle(quest, party, itemIds, rng) {
         const base = Math.max(0, Math.round(share - f.weaponGuard));
         // ★ クリティカル＝深手。guard で削り切られた0ダメージの被弾では判定しない
         //   （傷を負っていないのに深手になるのを避ける）。
-        const crit = base > 0 && random() < BATTLE_TUNING.critRate;
+        // ★ 2026-07-31：その延長で、**その人にとって軽すぎる一撃でも判定しない**。
+        //   かすり傷で「致命の一撃を受けた」と書かれ、重症で帰されるのを止めるため。
+        const crit = base > 0 && base >= f.maxHp * BATTLE_TUNING.critMinHpRatio && random() < BATTLE_TUNING.critRate;
         const damage = crit ? base * BATTLE_TUNING.critMultiplier : base;
         if (crit) f.gotCrit = true;
         f.hp -= damage;
