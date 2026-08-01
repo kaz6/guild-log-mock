@@ -2919,211 +2919,64 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
   return pickOne(lines, rng);
 }
 
-function outcomeText(quest, party, itemIds, outcome, rng) {
-  const scout = findByTrait(party, "job", "斥候");
-  const herbalist = findByTrait(party, "job", "薬草師");
-  const post = findByTrait(party, "background", "郵便配達人");
-  const subject = partySubject(party);
-  const has = (id) => itemIds.includes(id);
+// ---- 結末文（2026-08-01・段階2）----
+// 文面は data-outcomes.js が持つ。ここでやるのは名札の差し替えと、決まった条件の選び分けだけ。
+// ★ 条件は「式」ではなく名前の列挙にする。増やすときはこの表に1行足す（データ側に式を書かせない）。
+const OUTCOME_CONDITIONS = {
+  エルシーがいる: (party) => partyHasElsie(party),
+  古地図を持っている: (party, itemIds) => (itemIds ?? []).includes("item_map")
+};
 
-  if (quest.id === "quest_letter") {
-    const variants = {
-      成功: {
-        result: "成功",
-        summary: "手紙は無事に届けられた。宛先確認の記録も残った。",
-        line: `${getDisplayName(post)}の確認により、手紙は本人へ渡された。受取人は驚いたあと、何度も礼を言った。`,
-        after: `帰り道、${getDisplayName(post)}は少しだけ誇らしそうだった。報告書の文字も、いつもより丁寧に見える。`,
-        history: "届けられなかった手紙で、宛先確認と受け渡しを完了。"
-      },
-      持ち帰り: {
-        result: "持ち帰り",
-        summary: "受取人不在のため、手紙は濡れない状態で持ち帰られた。",
-        line: `宛先の家は空き家だった。近所に預ける案も出たが、${getDisplayName(scout)}は本人に渡すべき依頼だと判断し、今日は持ち帰ることにした。`,
-        after: `受付嬢は手紙を受け取ると、乾いた布で封筒の端をそっと押さえた。こういう判断も、ちゃんと記録に残る。`,
-        history: "届けられなかった手紙を持ち帰り。封筒の保全を優先。"
-      },
-      再配達: {
-        result: "再配達",
-        summary: "宛先の所在は判明。次回の再配達が必要。",
-        line: `宛先の人物は夕方まで戻らないと分かった。${subject}は無理に待たず、現在の所在だけを記録して帰還した。`,
-        after: `報告書の最後には「次回は午後発が望ましい」とある。失敗ではない。次に繋がる記録だ。`,
-        history: "手紙依頼で受取人の所在を確認。次回再配達。"
-      },
-      部分成功: {
-        result: "部分成功",
-        summary: "手紙は届けられなかったが、宛先情報は更新された。",
-        line: `${has("item_map") ? "古地図の表記" : "聞き込み"}により、宛先の旧住所と現在の家屋の対応が分かった。手紙はギルドで保管する。`,
-        after: `派手な成果はない。けれど、次に誰かがこの依頼を受ける時、迷う時間は短くなる。`,
-        history: "手紙依頼で宛先情報を更新。次回の成功率を上げた。"
-      }
-    };
-    return variants[outcome] ?? variants.成功;
-  }
-
-  if (quest.id === "quest_herb") {
-    const variants = {
-      成功: {
-        result: "成功",
-        summary: "薬草と泥被り茸を持ち帰った。観察記録も更新された。",
-        line: `${getDisplayName(herbalist)}は必要な分だけを採集し、残りの群生地を荒らさずに残した。`,
-        after: `薬草袋の底には、小さな歯形のついた革紐が残っていた。受付で保管し、観察記録へ追記する。`,
-        history: "森の薬草採集で、採集と小型獣の観察を両立。"
-      },
-      小成功: {
-        result: "小成功",
-        summary: "採集量は少なめだが、状態の良い薬草を持ち帰った。",
-        line: `森の湿り気が強く、採れる量は多くなかった。${getDisplayName(herbalist)}は質の良い個体だけを選んだ。`,
-        after: `少ない成果でも、香りはよい。調合係からは「この量で十分」と返事があった。`,
-        history: "森の薬草採集で、量より品質を優先。"
-      },
-      採集優先: {
-        result: "成功",
-        summary: "採集を優先し、予定量の薬草を確保した。",
-        line: `${getDisplayName(scout)}が周囲を警戒し、${getDisplayName(herbalist)}が手早く採集した。観察は浅いが、依頼分の量は満たしている。`,
-        after: `帰還後、袋を開くと森の湿った匂いが受付に広がった。`,
-        history: "森の薬草採集で、予定量の確保を優先。"
-      },
-      観察優先: {
-        result: "観察優先",
-        summary: "採集量は控えめだが、森喰い兎の反応を詳しく記録した。",
-        line: `${getDisplayName(scout)}はあえて荷袋を少し離して置き、森喰い兎の反応を観察した。危険は小さいが、記録としては有用。`,
-        after: `報告書には、歯形の向きと噛み跡の深さまで書かれていた。こういう細かさが後で効く。`,
-        history: "森の薬草採集で、森喰い兎の反応を重点観察。"
-      }
-    };
-    return variants[outcome] ?? variants.成功;
-  }
-
-  if (quest.id === "quest_church_patrol") {
-    const variants = {
-      異常なし: {
-        result: "異常なし",
-        summary: "定期巡回を終え、外縁に異常は見つからなかった。",
-        line: `${subject}は柵から鐘楼、花壇、礼拝堂外縁まで順に回り、新しい痕跡はなかった。`,
-        after: `礼拝堂の灯りは、いつも通り静かに見えた。誰も鐘を鳴らす者はいなかった。`,
-        history: "辺境教会周辺の定期巡回で、異常なし。"
-      },
-      軽微な対処: {
-        result: "軽微な対処",
-        summary: "巡礼路の柵が一本緩んでいたが、応急で固定した。",
-        line: `巡礼路の柵が一本ゆるんでいた。${subject}は落ちないよう縄で結び、次の巡回まで持つようにした。`,
-        after: `大きな問題ではない。けれど、見逃さなかった記録としてはちゃんと残る。`,
-        history: "辺境教会周辺の定期巡回で、柵を軽微に処置。"
-      },
-      要再確認: {
-        result: "要再確認",
-        summary: "鐘楼の足元に擦れ跡があった。今回は記録のみで、次回の巡回に回した。",
-        line: `鐘楼の足元に、最近ついたとは思えない擦れ跡があった。${subject}は無理に追わず、位置だけを報告書に残した。`,
-        after: `報告書の余白には「次回、雨天以外で再確認」とある。`,
-        history: "辺境教会周辺の定期巡回で、擦れ跡を記録し要再確認。"
-      },
-      小さな違和感: {
-        result: "小さな違和感",
-        summary: "礼拝堂の外縁で消えかけた灯りを確認したが、接近せず記録にとどめた。",
-        line: `${getDisplayName(scout) ?? subject}は外縁の道で、夜明け前に見えたという小さな灯りの痕跡だけを確かめた。接近はしなかった。`,
-        after: `風に花の匂いが一度だけ混じり、また静けさだけが戻った。`,
-        history: "辺境教会周辺の定期巡回で、小さな違和感を記録。"
-      }
-    };
-    return variants[outcome] ?? variants.異常なし;
-  }
-
-  const variants = {
-    成功: {
-      result: "成功",
-      summary: "道標の位置を確認し、街道記録と照合した。",
-      line: `${getDisplayName(scout)}は道標の向きと周囲の目印を照合し、現在の記録と大きな差がないことを確認した。`,
-      after: `報告書の端には、道標の簡単なスケッチが添えられていた。地味だが、とても助かる記録だ。`,
-      history: "古い道標の確認で、街道記録との照合を完了。"
-    },
-    応急処置: {
-      result: "応急処置",
-      summary: "道標の傾きを確認し、倒れないよう補強した。",
-      line: `道標の根元はゆるんでいた。${subject}は石を積み、次の巡回までは倒れないよう応急処置をした。`,
-      after: `帰還した${formatNames(party)}の靴には、道標の根元と同じ赤土がついていた。`,
-      history: "古い道標の確認で、根元を応急補強。"
-    },
-    照合保留: {
-      result: "照合保留",
-      summary: "現地確認は完了。旧道との照合は次回に持ち越し。",
-      line: `${has("item_map") ? "古地図は役に立ったが、旧道の記述が古すぎた。" : "古地図がなかったため、旧道の照合は保留となった。"}現地の状態だけを記録して帰還した。`,
-      after: `報告書には「次回は晴天時に再確認」とある。焦らない記録は、次の事故を減らす。`,
-      history: "古い道標の確認で、旧道照合を次回へ持ち越し。"
-    },
-    再確認: {
-      result: "再確認",
-      summary: "道標の文字が一部読めず、再確認が必要。",
-      line: `苔に隠れた文字は一部しか読めなかった。無理に削ると木が崩れそうだったため、${subject}は保存を優先した。`,
-      after: `読めない文字を、読めないまま残す判断。記録係としては、少しだけ嬉しい報告だった。`,
-      history: "古い道標の確認で、文字保存を優先し再確認扱い。"
-    }
+function outcomeSlotValues(quest, party) {
+  const named = (key, value) => getDisplayName(findByTrait(party, key, value));
+  return {
+    "{一行}": partySubject(party),
+    "{全員}": formatNames(party),
+    "{斥候}": named("job", "斥候"),
+    "{薬草師}": named("job", "薬草師"),
+    "{戦士}": named("job", "戦士"),
+    "{郵便配達人}": named("background", "郵便配達人"),
+    "{世話焼き}": named("personality", "世話焼き"),
+    "{慎重}": named("personality", "慎重"),
+    "{依頼名}": quest?.title ?? ""
   };
-  return variants[outcome] ?? variants.成功;
+}
+
+function outcomeTextPart(value, party, itemIds) {
+  if (typeof value !== "object" || value === null) return value;
+  const test = OUTCOME_CONDITIONS[value.when];
+  return test && test(party, itemIds) ? value.yes : value.no;
+}
+
+// 依頼の結末文を引く。鍵が無ければ fallbackKey（既定は最初の鍵）に落ちる。
+function questOutcomeText(questId, key, party, itemIds, fallbackKey) {
+  const table = window.masterOutcomeTexts?.[questId];
+  if (!table) return null;
+  const entry = table[key] ?? table[fallbackKey ?? Object.keys(table)[0]];
+  if (!entry) return null;
+  const quest = window.masterQuests.find((q) => q.id === questId);
+  const slots = outcomeSlotValues(quest, party);
+  const fill = (text) => (typeof text === "string" ? text.replace(/\{[^}]+\}/g, (m) => slots[m] ?? m) : text);
+  return {
+    result: entry.result,
+    summary: fill(outcomeTextPart(entry.summary, party, itemIds)),
+    line: fill(outcomeTextPart(entry.line, party, itemIds)),
+    after: fill(outcomeTextPart(entry.after, party, itemIds)),
+    history: fill(outcomeTextPart(entry.history, party, itemIds))
+  };
+}
+
+function outcomeText(quest, party, itemIds, outcome, rng) {
+  return questOutcomeText(quest.id, outcome, party, itemIds);
 }
 
 function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
-  const subject = partySubject(party);
-  const caregiver = findByTrait(party, "personality", "世話焼き");
-  const careful = findByTrait(party, "personality", "慎重");
-
-  if (quest.id === "quest_wedding_support") {
-    const variants = {
-      成功: {
-        result: "成功",
-        summary: "式の手伝いを最後まで務めた。大きな問題はなく、当日は無事に終わった。",
-        line: `担当した作業をすべて終えた。式は滞りなく進み、見送りの時、依頼人から「来てくれてよかった」と言われた。`,
-        after: `片付けが終わった会場の床に、花びらと小さな足跡が残っていた。${getDisplayName(caregiver)}は「いい式でしたね」と言って、最後の掃除をした。`,
-        history: "結婚式の手伝い。設営から片付けまでを担当。式は無事終了。"
-      },
-      小さな失敗: {
-        result: "小さな失敗",
-        summary: "軽微なミスはあったが、式の進行に支障はなかった。",
-        line: `飾り紐の受け渡しが少し遅れた。${getDisplayName(careful)}はすぐに気づいて補ったが、あの一瞬は報告書に残した。`,
-        after: `依頼人は「気にしないで」と言った。そう言ってもらえるうちは、次の機会に活かせる失敗だ。`,
-        history: "結婚式の手伝い。軽微なミスあり、式は無事終了。"
-      },
-      感謝: {
-        result: "感謝",
-        summary: "依頼の範囲を超えた対応が、依頼人から感謝された。",
-        line: `${getDisplayName(caregiver)}が迷子の子どもを保護したことで、式の雰囲気が崩れずに済んだ。依頼人から改めて礼を言われた。`,
-        after: `式が終わった後、依頼人は${subject}に小さな菓子折りを持たせた。報告書の末尾には「菓子折り受領、ギルドへ持参」とだけ書いてある。`,
-        history: "結婚式の手伝い。迷子対応など依頼範囲外にも対応し、感謝を受けた。"
-      }
-    };
-    return variants[outcome] ?? variants["成功"];
-  }
-
-  if (quest.id === "quest_old_house_cleanup") {
-    const variants = {
-      成功: {
-        result: "成功",
-        summary: "廃屋の片付けを完了した。整理品と要確認品を分けて引き渡した。",
-        line: `${subject}は部屋を順番に片付け、処分品・保管品・要確認品を分けて依頼人へ報告した。住人の名前は最後まで分からなかった。`,
-        after: `報告書には「住人名は不明。生活用品のみ整理」と記されている。${getDisplayName(careful)}の文字は丁寧だった。`,
-        history: "廃屋の片付けを完了。住人名は不明のまま、生活用品を整理して引き渡した。"
-      },
-      整理完了: {
-        result: "整理完了",
-        summary: "廃屋の整理は完了。残置物の確認は依頼人とともに行った。",
-        line: `${getDisplayName(careful)}は依頼人を呼んで、残置物の判断を一緒に行った。誰の持ち物かは分からなくとも、捨てるかどうかは依頼人が決めることだ。`,
-        after: `依頼人は「ひとつひとつ見せてくれてよかった」と言った。ただ、割れた茶器や古い帳面だけが、誰かの暮らしを静かに残していた。`,
-        history: "廃屋の整理完了。残置物の判断を依頼人と確認しながら進めた。"
-      },
-      一部保留: {
-        result: "一部保留",
-        summary: "大半の片付けは完了。宛名の読めない古い手紙は依頼人の再確認待ち。",
-        line: `古い手紙は宛名の部分が雨染みで読めなかった。依頼人に見せたところ「自分でもう少し調べます」と言ったため、保留とした。`,
-        after: `封を開けなかったのは正しい判断だと思う。読めなかった文字の先に何があるかは、依頼人が知ることだ。`,
-        history: "廃屋の片付けで一部保留。宛名の読めない手紙を依頼人確認待ちで残した。"
-      }
-    };
-    return variants[outcome] ?? variants["成功"];
-  }
-
+  const fromData = questOutcomeText(quest.id, outcome, party, itemIds);
+  if (fromData) return fromData;
   return {
     result: "成功",
     summary: "生活依頼を完了した。",
-    line: `${subject}は依頼を無事に終えた。`,
+    line: `${partySubject(party)}は依頼を無事に終えた。`,
     after: `報告書は受付へ提出された。`,
     history: `${quest.title}：完了。`
   };
@@ -3933,58 +3786,15 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
 // 戦闘依頼（畑の追い払い／納屋の討伐）の結末（2026-07-31）。
 // ★ simulateBattle の outcome をそのまま結末に写す。データ（enemyId）とロジックが食い違っていた
 //   状態を解消するためで、勝てば従来どおり、押し切れなければ中止・失敗になる。
+// 戦闘依頼（畑の追い払い／納屋の討伐）の結末（2026-07-31）。
+// ★ simulateBattle の outcome をそのまま結末に写す。データ（enemyId）とロジックが食い違っていた
+//   状態を解消するためで、勝てば従来どおり、押し切れなければ中止・失敗になる。
+//   文面は data-outcomes.js にある（2026-08-01・段階2）。
 function questBattleOutcomeText(quest, battleOutcome, party) {
-  const hunt = quest.id === "quest_barn_bite";
-  const subject = partySubject(party);
-  if (battleOutcome === "victory") {
-    return hunt
-      ? {
-        result: "討伐",
-        summary: "納屋に巣食っていた未同定の相手を仕留めた。正体はまだ不明。",
-        history: "納屋の「なにか」を討伐。未同定のまま、特徴のみ記録。",
-        line: null,
-        after: null
-      }
-      : {
-        result: "追い払い",
-        summary: "畑を荒らしていた未同定の相手を、畑の外へ追い払った。正体はまだ不明。",
-        history: "畑を荒らす「なにか」を追い払い。未同定のまま、特徴のみ記録。",
-        line: null,
-        after: null
-      };
-  }
-  if (battleOutcome === "withdraw_first" || battleOutcome === "withdraw_emergency") {
-    return hunt
-      ? {
-        result: "討伐中止",
-        summary: "納屋の相手には手が届かず、討伐を切り上げて引き上げた。",
-        history: "納屋の「なにか」の討伐は中止。相手は納屋に残ったまま。",
-        line: `${subject}は納屋の戸を閉め直し、依頼人に「今日は仕留められない」と伝えた。`,
-        after: `報告書には「討伐中止。相手は納屋に残っている」と記されている。`
-      }
-      : {
-        result: "追い払い中止",
-        summary: "畑の相手には近づき切れず、追い払いを切り上げて引き上げた。",
-        history: "畑の「なにか」の追い払いは中止。畑には手つかずの荒れが残った。",
-        line: `${subject}は畑の縁で足を止め、依頼人に「今日は押し返せない」と伝えた。`,
-        after: `報告書には「追い払い中止。畑の荒れはそのまま」と記されている。`
-      };
-  }
-  return hunt
-    ? {
-      result: "討伐失敗",
-      summary: "納屋の相手に押し切られ、討伐を果たせないまま退いた。",
-      history: "納屋の「なにか」の討伐に失敗。負傷を抱えての帰還。",
-      line: `納屋の外まで押し戻され、それ以上は踏み込めなかった。`,
-      after: `報告書には「討伐失敗。相手は納屋の奥に残っている」と記されている。`
-    }
-    : {
-      result: "追い払い失敗",
-      summary: "畑の相手に押し切られ、追い払えないまま退いた。",
-      history: "畑の「なにか」の追い払いに失敗。畑は荒らされたまま。",
-      line: `畑の外まで押し戻され、それ以上は近づけなかった。`,
-      after: `報告書には「追い払い失敗。畑の荒れは広がっている」と記されている。`
-    };
+  const key = battleOutcome === "victory" ? "victory"
+    : (battleOutcome === "withdraw_first" || battleOutcome === "withdraw_emergency") ? "withdraw"
+      : "defeat";
+  return questOutcomeText(quest.id, key, party, []);
 }
 
 function lightInvestigationResponseText(party, isNight, hasLantern, rng) {
@@ -4049,35 +3859,11 @@ function lightObservationRecordText(party, adventurerItemIds, rng) {
 }
 
 function bridgeRepairOutcomeText(outcome, party, rng) {
-  const subject = partySubject(party);
-  const variants = {
-    応急修理: {
-      result: "応急修理",
-      summary: "板の緩みを直し、徒歩での通行は可能になった。本修理は後日必要。",
-      line: `応急修理の後、荷車はまだ難しいが、人が歩いて渡るには十分だと判断された。`,
-      after: `報告書には「本修理は後日必要。徒歩通行は可」と記されている。`,
-      history: "古い小橋の応急修理。徒歩通行可、本修理は後日。"
-    },
-    通行可: {
-      result: "通行可",
-      summary: "手すりと足場を補強し、村人が安全に渡れる状態になった。",
-      line: `手すりと足場の補強が終わり、${subject}は通行人に一時立ち止まるよう声をかけてから、試し渡りを確認した。`,
-      after: `修理済みの板には、まだ新しい足跡が一つだけ残っていた。`,
-      history: "古い小橋の応急修理。手すりと足場を補強し通行可。"
-    },
-    一部保留: {
-      result: "一部保留",
-      summary: "応急処置は完了したが、荷車の通行は危険と判断された。",
-      line: `板の緩みは直したが、中央の沈みは完全には消えなかった。荷車の通行は危険と判断し、迂回路の案内を残した。`,
-      after: `報告書には「徒歩は可、荷運びは不可」とだけ書いてある。`,
-      history: "古い小橋の応急修理。徒歩は可、荷車通行は保留。"
-    }
-  };
-  return variants[outcome] ?? variants["応急修理"];
+  return questOutcomeText("quest_old_bridge_repair", outcome, party, []);
 }
 
 function churchPatrolOutcomeText(outcome, party, rng) {
-  return outcomeText({ id: "quest_church_patrol", category: "保全" }, party, [], outcome, rng);
+  return questOutcomeText("quest_church_patrol", outcome, party, []);
 }
 
 function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -4272,30 +4058,7 @@ function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context 
 }
 
 function herbDeliveryOutcomeText(outcome, party, rng) {
-  const variants = {
-    納品完了: {
-      result: "納品完了",
-      summary: "薬草包みは破損なく診療所へ届けられた。納品書も無事だった。",
-      line: `診療所の受付は包みを受け取ると、中身を確かめてから受領印を押した。`,
-      after: `報告書には「薬草包み、破損なし。納品時刻内」と記されている。`,
-      history: "薬草包みの納品。破損なし、納品書も無事。"
-    },
-    時刻内納品: {
-      result: "時刻内納品",
-      summary: "遠回りにはなったが、指定時刻内に納品できた。",
-      line: `迂回路を取ったが、診療所の受付は指定時刻前に包みを受け取った。受領印が押された。`,
-      after: `帰り道、${partySubject(party)}は荷の結び目をもう一度だけ確かめてから門へ戻った。`,
-      history: "薬草包みの納品。遠回りしたが時刻内に納品。"
-    },
-    一部注意: {
-      result: "一部注意",
-      summary: "包みの外布は少し湿ったが、中身と納品書は守られた。",
-      line: `診療所へ届けたが、外布は雨で少し湿っていた。中身と納品書は無事で、受領印も押された。`,
-      after: `報告書には「外布に湿気あり。中身・書類は問題なし」と書き添えられている。`,
-      history: "薬草包みの納品。外布は湿ったが中身と納品書は無事。"
-    }
-  };
-  return variants[outcome] ?? variants["納品完了"];
+  return questOutcomeText("quest_herb_delivery", outcome, party, []);
 }
 
 function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -4406,30 +4169,7 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
 }
 
 function missingHerbalistOutcomeText(outcome, party, rng) {
-  const variants = {
-    保護: {
-      result: "保護",
-      summary: "薬草採りを森の浅瀬で保護し、無事に村まで連れ帰った。",
-      line: `薬草採りは倒木のそばで座り込んでいた。足をくじいていたが、意識ははっきりしていた。`,
-      after: `報告書には「保護。歩行は可能。本日は休養を要する」と記されている。`,
-      history: "帰ってこない薬草採りの確認。保護し村へ連れ帰った。"
-    },
-    発見: {
-      result: "発見",
-      summary: "薬草採りを発見した。軽い負傷はあったが、自力歩行は可能だった。",
-      line: `草むらの先で薬草採りを見つけた。膝を擦っていたが、自分の足で立ち上がれた。`,
-      after: `帰り道、本人は自分の袋だけは離さず持っていた。`,
-      history: "帰ってこない薬草採りの確認。発見、自力歩行可能。"
-    },
-    痕跡確認: {
-      result: "痕跡確認",
-      summary: "本人は見つからなかったが、落とし物と足跡を確認した。翌朝の再捜索が必要。",
-      line: `森の奥まで近づいたが、本人は見つからなかった。落とした薬草袋と足跡だけが残っていた。`,
-      after: `報告書には「再捜索推奨。痕跡は浅瀬方向」と書き添えられている。`,
-      history: "帰ってこない薬草採りの確認。本人未発見、痕跡のみ。"
-    }
-  };
-  return variants[outcome] ?? variants["保護"];
+  return questOutcomeText("quest_missing_herbalist", outcome, party, []);
 }
 
 function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -4529,33 +4269,7 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
 }
 
 function eveningEscortOutcomeText(outcome, party, rng) {
-  const homeLine = partyHasElsie(party)
-    ? `町外れの家に着くと、子どもは眠そうにしながらも、エルシーに小さく手を振った。`
-    : `町外れの家に着くと、子どもは眠そうにしながら買い物袋を抱えていた。`;
-  const variants = {
-    無事帰宅: {
-      result: "無事帰宅",
-      summary: "親子を家まで送り届けた。荷物の破損もなく、道中の問題はなかった。",
-      line: homeLine,
-      after: `報告書には「親子、無事帰宅。荷物破損なし」と記されている。`,
-      history: "夕市帰りの親子の付き添い。無事帰宅、荷物破損なし。"
-    },
-    安全確認: {
-      result: "安全確認",
-      summary: "暗くなる前に危ない道を避け、無事に送り届けた。",
-      line: `暗くなる前に家へ着いた。親は荷物を受け取り、子どもの手を握って礼を言った。`,
-      after: `何も起きなかった。それが今回の一番良い報告だった。`,
-      history: "夕市帰りの親子の付き添い。危ない道を避け安全に送り届けた。"
-    },
-    遠回り帰宅: {
-      result: "遠回り帰宅",
-      summary: "近道は避け、明るい道を選んだため少し遅れたが、無事に帰宅できた。",
-      line: `明るい道を選んだため到着は遅れたが、親子は無事に家の戸口へ着いた。`,
-      after: `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`,
-      history: "夕市帰りの親子の付き添い。遠回りしたが無事帰宅。"
-    }
-  };
-  return variants[outcome] ?? variants["無事帰宅"];
+  return questOutcomeText("quest_evening_market_escort", outcome, party, []);
 }
 
 function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -4672,66 +4386,7 @@ function caravanBattleGrowthSummary(battle, party) {
 }
 
 function caravanEscortOutcomeText(branch, party, rng) {
-  const variants = {
-    great_light: {
-      result: "護衛成功",
-      summary: "隊商を狙う野盗を正面から退け、荷を欠かさず外縁の先まで送り届けた。傷は浅く、手当てのみで済んだ。",
-      line: `野盗は間合いを詰めきれず、荷馬車は止まることなく街道を抜けた。`,
-      after: `報告書には「隊商、無事通過。負傷は浅く、手当て済み」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。浅手のみで押し切り、隊商を送り届けた。"
-    },
-    great_wound: {
-      result: "護衛成功（負傷）",
-      summary: "野盗の襲撃を受け止め、負傷しながらも押し返して隊商を通した。荷は守り切った。",
-      line: `幾人かは傷を負ったが、隊商は止まらずに外縁の先へ抜けた。`,
-      after: `報告書には「隊商通過。護衛に負傷あり、荷の損失なし」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。負傷しつつ強行突破、隊商を送り届けた。"
-    },
-    partial_detour: {
-      result: "隊商通過（遅延あり）",
-      summary: "会敵の前に煙幕で視界を塞ぎ、戦わずに隊商を裏道へ回した。荷は無事だが、約束の刻限には遅れた。",
-      line: `煙の向こうで野盗の影が揺れるうち、荷馬車は裏道へ抜けていった。`,
-      after: `報告書には「隊商は通過。交戦なし。遠回りによる遅延あり」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。煙幕で会敵を避け、遠回りで送り届けた。"
-    },
-    // ★段階1＝接敵で引き返した（2026-07-30）。挑んでいないので負傷も損失もなく、依頼も達していない。
-    avoid: {
-      result: "交戦回避（依頼未達）",
-      summary: "相手の構えを見て、この編成では倒し切る前に保たないと判断した。隊商ごと引き返し、誰も傷を負わなかった。",
-      line: `荷馬車は向きを変え、来た道を戻っていった。剣を抜くことはなかった。`,
-      after: `報告書には「交戦なし。負傷なし。街道は通れず、隊商は引き返した」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。勝ち目がないと見て交戦を避け、隊商ごと引き返した。"
-    },
-    partial_loss: {
-      result: "隊商通過（荷の一部損失）",
-      summary: "交戦の途中で煙幕を焚き、追撃を断って隊商と共に退いた。人は守ったが、荷の一部は置いてきた。",
-      line: `煙が野盗の足を止めている間に、一行は隊商を先へ急がせた。`,
-      after: `報告書には「隊商は通過。荷の一部を失う。負傷者あり、死者なし」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。煙幕で退き、荷の一部を失いつつ隊商を通した。"
-    },
-    partial_elsie: {
-      result: "隊商通過（荷の一部損失）",
-      summary: "エルシーが吠えたのは、まだ退けるうちだった。退き際が早かった分、荷の一部を確保したまま隊商と退いた。",
-      line: `エルシーの声に押されるように、一行は隊商を先へ急がせた。`,
-      after: `報告書には「隊商は通過。荷の一部を失う。負傷者あり、死者なし」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。早めの退き際で、荷の一部を失いつつ隊商を通した。"
-    },
-    bail: {
-      result: "荷を置いて撤退",
-      summary: "野盗の狙いが荷にあると見て、荷を残して人を退かせた。商人と一行は外縁まで戻った。",
-      line: `荷は失われたが、商人も一行も外縁まで退いた。`,
-      after: `報告書には「荷の損失あり、負傷者あり、死者なし」と記されている。`,
-      history: "街道の外れを行く隊商の護衛。荷を置いて退いた。負傷はあれど、死者はない。"
-    },
-    fail: {
-      result: "護衛失敗",
-      summary: "野盗の数に押し込まれ、隊商を護り切れないまま街道から退いた。",
-      line: `隊商とははぐれ、荷馬車は野盗の側へ取り残された。`,
-      after: `報告書には「隊商を護り切れず。後日の捜索が要る」と短く記されている。`,
-      history: "街道の外れを行く隊商の護衛。護り切れず撤退、後日の捜索へ。"
-    }
-  };
-  return variants[branch] ?? variants.fail;
+  return questOutcomeText("quest_caravan_escort", branch, party, [], "fail");
 }
 
 function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -4986,38 +4641,11 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
 
 // 隊商捜索チェーン（護衛失敗の後日談）：斥候かエルシーがいれば手がかりを追える。
 function caravanSearchOutcomeText(stage, found, party, rng) {
-  const variants = {
-    stage1_found: {
-      result: "隊商奪還",
-      summary: "足跡と気配を頼りに野盗を追い、隊商を無事に取り戻した。",
-      line: `側道の茂みに隠された荷馬車を見つけた。商人は無事で、荷にも大きな欠けはなかった。`,
-      after: `報告書には「隊商奪還。商人・荷とも無事」と記されている。`,
-      history: "護衛失敗後の緊急捜索。隊商を無事奪還。"
-    },
-    stage1_lost: {
-      result: "手がかりのみ",
-      summary: "野盗の足跡は追えたが、隊商そのものには辿り着けなかった。",
-      line: `踏み荒らされた跡は途中で他の道に紛れ、それ以上は追い切れなかった。`,
-      after: `報告書には「手がかりのみ。最後の望みを賭けた再捜索が要る」と記されている。`,
-      history: "護衛失敗後の緊急捜索。手がかりのみで隊商は見つからず。"
-    },
-    stage2_found: {
-      result: "辛くも奪還",
-      summary: "最後の手がかりを頼りに追い詰め、辛くも隊商を取り戻した。",
-      line: `古い轍の先に、置き去りにされた荷馬車と商人の姿があった。`,
-      after: `報告書には「隊商、辛くも奪還。これ以上の捜索は要さず」と記されている。`,
-      history: "最後の捜索。辛くも隊商を取り戻した。"
-    },
-    stage2_lost: {
-      result: "隊商喪失",
-      summary: "手がかりは尽き、商人と荷は最後まで見つからなかった。",
-      line: `古い轍もそこで途絶え、それより先の痕跡は残っていなかった。`,
-      after: `報告書には「隊商、ついに見つからず。捜索を打ち切る」と短く記されている。`,
-      history: "最後の捜索。手がかりが尽き、隊商はついに見つからなかった。"
-    }
-  };
-  const key = `stage${stage}_${found ? "found" : "lost"}`;
-  return variants[key] ?? variants.stage1_lost;
+  const questId = stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search";
+  const key = stage === 2
+    ? (found ? "辛くも奪還" : "隊商喪失")
+    : (found ? "隊商奪還" : "手がかりのみ");
+  return questOutcomeText(questId, key, party, []);
 }
 
 function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -5066,30 +4694,7 @@ function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context
 }
 
 function steleRubbingOutcomeText(outcome, party, rng) {
-  const variants = {
-    拓本完了: {
-      result: "拓本完了",
-      summary: "石碑の拓本を取り、読める範囲の文字を記録した。",
-      line: `拓本には、今は使われていない古い地名が一つだけ残っていた。`,
-      after: `報告書には「判読不能箇所は無理に補わず」と記されている。`,
-      history: "古い石碑の拓本。読める範囲を記録。"
-    },
-    一部判読: {
-      result: "一部判読",
-      summary: "文字の一部は欠けていたが、旧街道に関する地名を確認できた。",
-      line: `欠けた文字はそのまま残し、読めた地名だけを報告書に書き留めた。`,
-      after: `読めなかった文字を、読めないまま残した。それも記録だ。`,
-      history: "古い石碑の拓本。一部判読、旧街道の地名を確認。"
-    },
-    保存優先: {
-      result: "保存優先",
-      summary: "石碑を傷めないため、無理な清掃は避けた。読める範囲のみ記録した。",
-      line: `苔は削らず、石碑の表面も無理に触らない範囲で拓本を取った。`,
-      after: `石碑はまだそこにある。報告書には、そう書かれていた。`,
-      history: "古い石碑の拓本。保存優先、読める範囲のみ記録。"
-    }
-  };
-  return variants[outcome] ?? variants["拓本完了"];
+  return questOutcomeText("quest_old_stele_rubbing", outcome, party, []);
 }
 
 function generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, context = {}) {
