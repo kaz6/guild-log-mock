@@ -90,7 +90,7 @@
 
 - Notion … 思考・議論・構想の置き場（生きた作業場）。仕様を練る段階のもの。
   チャットのClaudeと対話しながら育てる。まだ確定していない検討中の内容もここ。
-- リポジトリ内の .md（CURRENT_SPEC.md / NEXT_TASKS.md / AI_GUIDELINES.md 等）… 確定した正式仕様。
+- リポジトリ内の .md（docs/CURRENT_SPEC.md / NEXT_TASKS.md / AI_GUIDELINES.md 等）… 確定した正式仕様。
   コードの隣に置く、実装の拠り所。Notionで固まった内容をここへ落とす。
 
 基本の流れ：Notionで練る → 固まったら .md に反映する。
