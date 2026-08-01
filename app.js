@@ -75,6 +75,13 @@ const viewTitle = document.getElementById("viewTitle");
 const navButtons = [...document.querySelectorAll(".nav-button")];
 const resetButton = document.getElementById("resetButton");
 
+// 成長するのは育成stats（6種）のみ。性格値（memory/caution/courage/kindness/curiosity）は
+// 能力ではなく性格なので成長させない（2026-07-23決定。全員が同じ性格へ収束するのを防ぐ）。
+// ★ ここに置く理由（2026-08-01）：loadState() が pickGrowthStats 経由でこの定数を読む。
+//   下（成長の節）に置くと、セーブがあるときだけ必ず例外になり、保存データが毎回捨てられた。
+//   const は宣言より前に読めないので、state の初期化より前に置くこと。
+const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
+
 let state = loadState();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
@@ -274,9 +281,6 @@ const GROWTH_STAT_LABELS = {
 };
 
 const GROWTH_STAT_MAX = 255;
-// 成長するのは育成stats（6種）のみ。性格値（memory/caution/courage/kindness/curiosity）は
-// 能力ではなく性格なので成長させない（2026-07-23決定。全員が同じ性格へ収束するのを防ぐ）。
-const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
 
 function growthStatsForCategory(category) {
   return GROWTH_STAT_BY_CATEGORY[category] ?? ["exploration"];
