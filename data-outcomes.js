@@ -439,5 +439,28 @@ window.masterOutcomeTexts = {
       after: "石碑はまだそこにある。報告書には、そう書かれていた。",
       history: "古い石碑の拓本。保存優先、読める範囲のみ記録。"
     }
+  },
+  quest_lingering_light: {
+    "異常なし": {
+      result: "異常なし",
+      summary: "昼間の道に異常はなく、問題の灯りも確認されなかった。",
+      line: null,
+      after: null,
+      history: "{依頼名}：昼間確認では異常なし。"
+    },
+    "確認のみ": {
+      result: "確認のみ",
+      summary: "夜道の灯りは確認したが、暗さのため接近調査は避けた。",
+      line: null,
+      after: null,
+      history: "{依頼名}：夜間に灯りを確認、接近は保留。"
+    },
+    "調査成功": {
+      result: "調査成功",
+      summary: "夜道の灯りを安全な距離から確認し、消えた方角を記録した。",
+      line: null,
+      after: null,
+      history: "{依頼名}：ランタンありで夜間確認。"
+    }
   }
 };

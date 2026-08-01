@@ -230,6 +230,11 @@ window.masterQuests = [
     tensionRange: 25,
     hidden: true,
     summary: "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。",
+    // 結末は工程ではなく編成で決まる例外。上から順に見て、当たった最初のものを採る。
+    outcomeOverride: {
+      rules: [{ when: ["斥候かエルシーがいる"], outcome: "隊商奪還" }],
+      default: "手がかりのみ"
+    },
     outcomes: { full: ["隊商奪還"], partial: ["手がかりのみ"], fail: [] }
   },
   {
@@ -246,6 +251,11 @@ window.masterQuests = [
     tensionRange: 25,
     hidden: true,
     summary: "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。",
+    // 結末は工程ではなく編成で決まる例外（捜索チェーンの2段目）。
+    outcomeOverride: {
+      rules: [{ when: ["斥候かエルシーがいる"], outcome: "辛くも奪還" }],
+      default: "隊商喪失"
+    },
     outcomes: { full: [], partial: ["辛くも奪還"], fail: ["隊商喪失"] }
   },
   {
@@ -277,6 +287,15 @@ window.masterQuests = [
     tensionBase: 62,
     tensionRange: 28,
     summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。",
+    // ★ この依頼だけ、結末が時間帯と支給品で決まる（工程も戦闘も通らない）。
+    //   例外であることが、このデータを見て分かるようにしてある。
+    outcomeOverride: {
+      rules: [
+        { when: ["夜である", "ランタンを持っている"], outcome: "調査成功" },
+        { when: ["夜である"], outcome: "確認のみ" }
+      ],
+      default: "異常なし"
+    },
     // ★ 確認のみ／調査成功は現状 full 扱い（登録漏れの再現）。段階④で正しい段階へ移す。
     outcomes: { full: ["異常なし", "確認のみ", "調査成功"], partial: [], fail: [] }
   }

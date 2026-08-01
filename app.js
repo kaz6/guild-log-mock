@@ -2922,10 +2922,27 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
 // ---- 結末文（2026-08-01・段階2）----
 // 文面は data-outcomes.js が持つ。ここでやるのは名札の差し替えと、決まった条件の選び分けだけ。
 // ★ 条件は「式」ではなく名前の列挙にする。増やすときはこの表に1行足す（データ側に式を書かせない）。
+// ★ ここにある名前だけがデータから呼べる。データ側に式を書かせないための入り口。
 const OUTCOME_CONDITIONS = {
-  エルシーがいる: (party) => partyHasElsie(party),
-  古地図を持っている: (party, itemIds) => (itemIds ?? []).includes("item_map")
+  エルシーがいる: (ctx) => partyHasElsie(ctx.party),
+  古地図を持っている: (ctx) => (ctx.itemIds ?? []).includes("item_map"),
+  ランタンを持っている: (ctx) => (ctx.itemIds ?? []).includes("item_lantern"),
+  夜である: (ctx) => ctx.timeOfDay === "夜",
+  斥候かエルシーがいる: (ctx) => ctx.party.some((adv) => adv.job === "斥候") || partyHasElsie(ctx.party)
 };
+
+// 夜道の灯りの名簿行に出る短い札。結末から引く（時間帯とランタンをここで見直さない）。
+const LIGHT_HISTORY_LABEL = { 調査成功: "夜間調査", 確認のみ: "灯り確認", 異常なし: "昼間確認" };
+
+// 結末を条件で直接決める依頼（工程や戦闘の結果を見ない例外）を、依頼データの outcomeOverride で表す。
+// 上から順に見て、条件がすべて当てはまった最初のものを採る。どれにも当たらなければ default。
+function overriddenOutcome(quest, ctx) {
+  const override = quest?.outcomeOverride;
+  if (!override) return null;
+  const hit = (override.rules ?? []).find((rule) =>
+    (rule.when ?? []).every((name) => OUTCOME_CONDITIONS[name] && OUTCOME_CONDITIONS[name](ctx)));
+  return hit ? hit.outcome : override.default;
+}
 
 function outcomeSlotValues(quest, party) {
   const named = (key, value) => getDisplayName(findByTrait(party, key, value));
@@ -2945,7 +2962,7 @@ function outcomeSlotValues(quest, party) {
 function outcomeTextPart(value, party, itemIds) {
   if (typeof value !== "object" || value === null) return value;
   const test = OUTCOME_CONDITIONS[value.when];
-  return test && test(party, itemIds) ? value.yes : value.no;
+  return test && test({ party, itemIds }) ? value.yes : value.no;
 }
 
 // 依頼の結末文を引く。鍵が無ければ fallbackKey（既定は最初の鍵）に落ちる。
@@ -4640,13 +4657,6 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
 }
 
 // 隊商捜索チェーン（護衛失敗の後日談）：斥候かエルシーがいれば手がかりを追える。
-function caravanSearchOutcomeText(stage, found, party, rng) {
-  const questId = stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search";
-  const key = stage === 2
-    ? (found ? "辛くも奪還" : "隊商喪失")
-    : (found ? "隊商奪還" : "手がかりのみ");
-  return questOutcomeText(questId, key, party, []);
-}
 
 function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context = {}) {
   const tensionValue = context.tensionValue ?? 50;
@@ -5174,17 +5184,18 @@ function generateReport(expedition) {
     const hasLantern = itemIds.includes("item_lantern");
     // ★ この依頼だけは共通経路に乗せない（2026-07-31 裁定）。結末が時間帯とランタンで決まる
     //   特殊な作りで、時間帯の扱いは後回しと確定しているため。移行前の挙動のまま据え置く。
-    const lightResult = isNight ? (hasLantern ? "調査成功" : "確認のみ") : "異常なし";
-    const lightSummary = isNight
-      ? (hasLantern ? "夜道の灯りを安全な距離から確認し、消えた方角を記録した。" : "夜道の灯りは確認したが、暗さのため接近調査は避けた。")
-      : "昼間の道に異常はなく、問題の灯りも確認されなかった。";
-    const lightHistory = `${quest.title}：${isNight ? (hasLantern ? "ランタンありで夜間確認。" : "夜間に灯りを確認、接近は保留。") : "昼間確認では異常なし。"}`;
+    //   ただし「どう決まるか」は依頼データの outcomeOverride が持つ（2026-08-01・段階3）。
+    //   例外であることが data-quests.js を見て分かる状態にするのが目的。
+    const lightResult = overriddenOutcome(quest, { party, itemIds, timeOfDay: departTimeOfDay });
+    const lightInfo = questOutcomeText(quest.id, lightResult, party, itemIds);
+    const lightSummary = lightInfo.summary;
+    const lightHistory = lightInfo.history;
 
     const lightLogs = generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng);
     lightLogs.forEach((text, index) => add(index === lightLogs.length - 1 ? "afterglow" : "action", text));
     const observationNotes = isNight ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null;
     const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
-      result: isNight ? (hasLantern ? "夜間調査" : "灯り確認") : "昼間確認",
+      result: LIGHT_HISTORY_LABEL[lightResult] ?? "昼間確認",
       elsieRoleNote: "鼻と警戒で",
       roleNoteFor: (adv) =>
         adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.memory >= 4 ? "記録役として" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "調査に"
@@ -5583,7 +5594,10 @@ function generateReport(expedition) {
     // ★ 結末（見つかるか）は編成で決まるまま据え置く（2026-07-31）。ロストは
     //   「最後のチャンスで不適切な編成を選んだときだけ」と確定済みで、天候や疲労で
     //   隊商を失わせるのはその確定事項を壊す。共通経路は消耗と工程ログにだけ効かせる。
-    const found = party.some((a) => a.job === "斥候") || party.some((a) => a.id === "adv_elsie");
+    // ★ 結末は工程ではなく編成で決まる（2026-07-30 裁定）。その「どう決まるか」は
+    //   依頼データの outcomeOverride が持つ（2026-08-01・段階3）。
+    const searchOutcome = overriddenOutcome(quest, { party, itemIds });
+    const found = searchOutcome !== quest.outcomeOverride.default;
     const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ" });
 
     const soloAdv = isSoloHumanParty(party);
@@ -5600,7 +5614,7 @@ function generateReport(expedition) {
     searchLogs.forEach((text) => add("action", text));
     fieldworkLogLines(fw, rng).forEach((line) => add(line.kind, line.text));
 
-    const outcomeInfo = caravanSearchOutcomeText(stage, found, party, rng);
+    const outcomeInfo = questOutcomeText(quest.id, searchOutcome, party, itemIds);
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after);
 
