@@ -3,15 +3,26 @@
 このファイルは、Claude Code がこのリポジトリで作業する際に必ず守るべきルールです。
 
 ## ドキュメントの正本
-- **Notionが正本。`docs/` は実装参照用の写し。**
-- 競合したらNotionを優先する。`docs/` の記述を根拠に
+
+★ **向きは「誰が書くか」で決まる**（2026-08-01 に運用規約が訂正された）。
+「Notionが正本」とだけ覚えないこと。**そう読んだせいで、正本が写しより古くなる事故が実際に起きた。**
+
+| 誰が書くか | 正本 | このリポジトリでの例 |
+|---|---|---|
+| 人・チャットが決めて書く | **Notion** | DECISION_LOG／コアコンセプト／タスクページ／運用文書 |
+| Claude Code が生成する | **repo** | `docs/SESSION_STATE.md`／`docs/CURRENT_SPEC.md` |
+| 実装から導出できる事実 | **コード** | 依頼一覧／解放ツリー／各種の表（必要なときに生成する） |
+
+- **Notion が正本のものは、競合したらNotionを優先する。** `docs/` の写しの記述を根拠に
   仕様を判断しない。
 - `docs/DECISION_LOG.md` への追記は作業中の暫定記録。
   **セッション終了時に必ずNotionへ反映する**（反映前は未確定扱い）。
-- **例外：`docs/SESSION_STATE.md` だけは repo が正本**。
-  Claude Code が生成して Claude Code が読む文書なので、
-  Notion 側（SESSION_STATE（写し・閲覧用））は閲覧用の写しで、
-  session-end スキルが毎回同じ内容で上書きする。
+- **repo が正本のものは、Notion 側が生成物**。`docs/` が唯一の書き場所で、
+  Notion 側は session-end スキルが毎回まるごと置き換える。**手で編集しても次の更新で消える。**
+  - `docs/SESSION_STATE.md` → Notion `SESSION_STATE（写し・閲覧用）`
+  - `docs/CURRENT_SPEC.md` → Notion `CURRENT_SPEC`（2026-08-01 に向きを戻した。
+    生成は `node scripts/gen-notion-spec.js`）
+- ★ **どちら側かは、各文書の冒頭の宣言を見て判断する。** すべての文書は1行目で名のっている。
 - 詳細：Notion `02_operations/ドキュメント運用規約`
 
 ## Notion ページID（このリポジトリの書き戻し先）
@@ -21,8 +32,8 @@
 | ページ | ID | 用途 |
 |---|---|---|
 | DECISION_LOG（設計判断の記録・遠征） | `3a9a8a5dfd4581e3a8cfc3872a300766` | **遠征固有**の設計判断の正本。`docs/DECISION_LOG.md` はその写し。新しい決定を上に追記する |
-| CURRENT_SPEC（**生成物**・閲覧用） | `3aaa8a5dfd45819294a9c359178bcc9a` | ★ **2026-08-01 に向きが逆になった。`docs/CURRENT_SPEC.md` が仕様の正本**で、こちらは生成物。session-end の 5-c が `node scripts/gen-notion-spec.js` の出力で毎回まるごと置き換える（手で編集しない） |
-| SESSION_STATE（**写し**・閲覧用） | `3aaa8a5dfd45814bb89bec0658128132` | **この文書だけ向きが逆。repo の `docs/SESSION_STATE.md` が正本**で、こちらは閲覧用の写し。session-end スキルが毎回同じ内容で上書きする（手で編集しない） |
+| CURRENT_SPEC（**生成物**・閲覧用） | `3aaa8a5dfd45819294a9c359178bcc9a` | ★ **2026-08-01 に向きを戻した。`docs/CURRENT_SPEC.md` が仕様の正本**で、こちらは生成物。session-end の 5-c が `node scripts/gen-notion-spec.js` の出力で毎回まるごと置き換える（手で編集しない） |
+| SESSION_STATE（**写し**・閲覧用） | `3aaa8a5dfd45814bb89bec0658128132` | **repo の `docs/SESSION_STATE.md` が正本**で、こちらは閲覧用の写し。session-end スキルが毎回同じ内容で上書きする（手で編集しない） |
 | `_tasks/進行中` | `39da8a5dfd4581a091f0ce2d0d6dcdfd` | タスクページの確認事項・実装結果を記入する（個別タスクページのIDは都度チャットで指定される） |
 | `_tasks/完了済み` | `39da8a5dfd4581f3904edda4ad2b0c79` | 完了したタスクページの移動先 |
 | コアコンセプト（正本・最重要） | `3a5a8a5dfd4581a7b73ce0eb6541635e` | 設計思想の正本。改訂注記の書き込み先 |
