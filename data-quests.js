@@ -1,3 +1,8 @@
+// outcomes：その依頼で起こりうる結末の候補（2026-08-01・段階①でコードからここへ移した）。
+// 完遂（full）／部分（partial）／未達（fail）の3段階で持つ。工程エンジンの結果の段階と同じ形なので、
+// 結末と段階の対応表を別に持たなくてよい（app.js の GROWTH_TIER_BY_RESULT はここから作られる）。
+// fail が空の依頼は、未達のとき共通の「引き返し」に落ちる。
+// 並び順は移行前のコードのままにしてある（同じ乱数で同じ結末になるため）。
 window.masterQuests = [
   {
     id: "quest_herb",
@@ -12,7 +17,8 @@ window.masterQuests = [
     observationTarget: "森喰い兎",
     tensionBase: 25,
     tensionRange: 20,
-    summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。"
+    summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。",
+    outcomes: { full: ["成功", "採集優先", "観察優先"], partial: ["小成功"], fail: [] }
   },
   {
     id: "quest_signpost",
@@ -27,7 +33,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 18,
     tensionRange: 16,
-    summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。"
+    summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。",
+    outcomes: { full: ["成功"], partial: ["応急処置", "照合保留", "再確認"], fail: [] }
   },
   {
     id: "quest_letter",
@@ -42,7 +49,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 16,
     tensionRange: 14,
-    summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。"
+    summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。",
+    outcomes: { full: ["成功", "持ち帰り"], partial: ["再配達", "部分成功"], fail: [] }
   },
   {
     id: "quest_wedding_support",
@@ -56,7 +64,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 15,
     tensionRange: 15,
-    summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。"
+    summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。",
+    outcomes: { full: ["成功", "感謝"], partial: [], fail: ["小さな失敗"] }
   },
   {
     id: "quest_old_house_cleanup",
@@ -70,7 +79,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 28,
     tensionRange: 20,
-    summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。"
+    summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。",
+    outcomes: { full: ["成功", "整理完了"], partial: ["一部保留"], fail: [] }
   },
   {
     id: "quest_field_mystery",
@@ -87,7 +97,8 @@ window.masterQuests = [
     tensionRange: 15,
     enemyId: "enemy_field_pest",
     battleEffectiveItemIds: ["item_bandage"],
-    summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
+    summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。",
+    outcomes: { full: ["追い払い"], partial: ["追い払い中止"], fail: ["追い払い失敗"] }
   },
   {
     id: "quest_barn_bite",
@@ -104,7 +115,8 @@ window.masterQuests = [
     tensionRange: 18,
     enemyId: "enemy_barn_biter",
     battleEffectiveItemIds: ["item_bandage"],
-    summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
+    summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。",
+    outcomes: { full: ["討伐"], partial: ["討伐中止"], fail: ["討伐失敗"] }
   },
   {
     id: "quest_old_bridge_repair",
@@ -119,7 +131,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 30,
     tensionRange: 20,
-    summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。"
+    summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。",
+    outcomes: { full: ["応急修理", "通行可"], partial: ["一部保留"], fail: [] }
   },
   {
     id: "quest_church_patrol",
@@ -134,7 +147,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 20,
     tensionRange: 15,
-    summary: "辺境教会の周辺を巡回し、道、柵、鐘楼、花壇、礼拝堂外縁に異常がないか確認する。最近、夜明け前に小さな灯りを見たという話がある。"
+    summary: "辺境教会の周辺を巡回し、道、柵、鐘楼、花壇、礼拝堂外縁に異常がないか確認する。最近、夜明け前に小さな灯りを見たという話がある。",
+    outcomes: { full: ["異常なし", "軽微な対処"], partial: ["要再確認", "小さな違和感"], fail: [] }
   },
   {
     id: "quest_herb_delivery",
@@ -149,7 +163,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 28,
     tensionRange: 22,
-    summary: "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。"
+    summary: "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。",
+    outcomes: { full: ["納品完了", "時刻内納品"], partial: ["一部注意"], fail: [] }
   },
   {
     id: "quest_missing_herbalist",
@@ -164,7 +179,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 58,
     tensionRange: 28,
-    summary: "朝に薬草を採りに出た村人が、夕方になっても戻らない。森の浅い場所を確認し、必要なら保護して連れ帰る。"
+    summary: "朝に薬草を採りに出た村人が、夕方になっても戻らない。森の浅い場所を確認し、必要なら保護して連れ帰る。",
+    outcomes: { full: ["保護", "発見"], partial: ["痕跡確認"], fail: [] }
   },
   {
     id: "quest_evening_market_escort",
@@ -178,7 +194,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 42,
     tensionRange: 25,
-    summary: "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。"
+    summary: "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。",
+    outcomes: { full: ["無事帰宅", "安全確認"], partial: ["遠回り帰宅"], fail: [] }
   },
   {
     id: "quest_caravan_escort",
@@ -195,7 +212,9 @@ window.masterQuests = [
     tensionRange: 25,
     enemyId: "enemy_road_raiders",
     battleEffectiveItemIds: ["item_bandage"],
-    summary: "生活圏の外縁を抜ける隊商を護る。道中で野盗に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。"
+    summary: "生活圏の外縁を抜ける隊商を護る。道中で野盗に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。",
+    // ★ 交戦回避（依頼未達）は現状 full 扱い（登録漏れの再現）。段階④で fail へ移す。
+    outcomes: { full: ["護衛成功", "護衛成功（負傷）", "交戦回避（依頼未達）"], partial: ["隊商通過（遅延あり）", "隊商通過（荷の一部損失）"], fail: ["荷を置いて撤退", "護衛失敗"] }
   },
   {
     id: "quest_caravan_search",
@@ -210,7 +229,8 @@ window.masterQuests = [
     tensionBase: 50,
     tensionRange: 25,
     hidden: true,
-    summary: "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。"
+    summary: "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。",
+    outcomes: { full: ["隊商奪還"], partial: ["手がかりのみ"], fail: [] }
   },
   {
     id: "quest_caravan_lastchance",
@@ -225,7 +245,8 @@ window.masterQuests = [
     tensionBase: 60,
     tensionRange: 25,
     hidden: true,
-    summary: "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。"
+    summary: "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。",
+    outcomes: { full: [], partial: ["辛くも奪還"], fail: ["隊商喪失"] }
   },
   {
     id: "quest_old_stele_rubbing",
@@ -240,7 +261,8 @@ window.masterQuests = [
     observationTarget: "なし",
     tensionBase: 34,
     tensionRange: 24,
-    summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。"
+    summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。",
+    outcomes: { full: ["拓本完了", "保存優先"], partial: ["一部判読"], fail: [] }
   },
   {
     id: "quest_lingering_light",
@@ -254,6 +276,8 @@ window.masterQuests = [
     observationTarget: "残る灯り",
     tensionBase: 62,
     tensionRange: 28,
-    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。"
+    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。",
+    // ★ 確認のみ／調査成功は現状 full 扱い（登録漏れの再現）。段階④で正しい段階へ移す。
+    outcomes: { full: ["異常なし", "確認のみ", "調査成功"], partial: [], fail: [] }
   }
 ];

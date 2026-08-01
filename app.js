@@ -234,26 +234,28 @@ const GROWTH_STAT_BY_CATEGORY = {
   記録: ["investigation"]
 };
 
-// 成否補正（スライス10）：result文字列→3段階。**新しい依頼で result を増やしたら必ずここに登録すること**（未登録は完全成功扱い＝プレイヤー不利にしない安全側）。
+// 成否補正（スライス10）：result文字列→3段階。
+// ★ 2026-08-01（段階①）：この表は依頼データ（data-quests.js の outcomes）から作る。
+//   結末の候補と段階の対応を2か所で持たないので、新しい依頼を足しても登録漏れが起きない。
 const GROWTH_OUTCOME_TIER = { full: 1.0, partial: 0.85, fail: 0.7 };
-const GROWTH_TIER_BY_RESULT = {
-  成功: "full", 討伐: "full", 追い払い: "full", 発見: "full", 保護: "full",
-  無事帰宅: "full", 納品完了: "full", 時刻内納品: "full", 整理完了: "full", 拓本完了: "full",
-  通行可: "full", 応急修理: "full", 安全確認: "full", 異常なし: "full", 感謝: "full",
-  帰還報告: "full", 軽微な対処: "full", 持ち帰り: "full",
-  採集優先: "full", 観察優先: "full", 保存優先: "full", // 方針選択＝完遂
-  護衛成功: "full", "護衛成功（負傷）": "full", // 負傷は生還補正の軸。任務は完遂
-  隊商奪還: "full",
-  部分成功: "partial", 小成功: "partial", 一部保留: "partial", 一部注意: "partial", 一部判読: "partial",
-  応急処置: "partial", 照合保留: "partial", 再確認: "partial", 要再確認: "partial", 再配達: "partial",
-  遠回り帰宅: "partial", 小さな違和感: "partial", 手がかりのみ: "partial", 痕跡確認: "partial",
-  辛くも奪還: "partial", "隊商通過（遅延あり）": "partial", "隊商通過（荷の一部損失）": "partial",
-  小さな失敗: "fail", 護衛失敗: "fail", 荷を置いて撤退: "fail", 隊商喪失: "fail",
-  // 非戦闘の共通経路（2026-07-31）。未達の結末を持たない依頼はここに落ちる。
-  引き返し: "fail",
-  // 戦闘依頼の3分岐（2026-07-31・畑と納屋を simulateBattle に乗せた）
-  追い払い中止: "partial", 追い払い失敗: "fail", 討伐中止: "partial", 討伐失敗: "fail"
-};
+// どの依頼にも属さない共通の結末だけをここに置く（工程エンジンの未達＝引き返し）。
+const GROWTH_TIER_COMMON = { 引き返し: "fail" };
+const GROWTH_TIER_BY_RESULT = buildGrowthTierByResult();
+
+function buildGrowthTierByResult() {
+  const table = { ...GROWTH_TIER_COMMON };
+  (window.masterQuests ?? []).forEach((quest) => {
+    ["full", "partial", "fail"].forEach((tier) => {
+      (quest.outcomes?.[tier] ?? []).forEach((name) => { table[name] = tier; });
+    });
+  });
+  return table;
+}
+
+// 結末の候補。依頼データに無ければ空（＝呼び出し側で引き返しに落ちる）。
+function questOutcomes(quest) {
+  return quest?.outcomes ?? { full: [], partial: [], fail: [] };
+}
 
 // 生還補正（スライス10）：遠征単位でパーティ全員に適用。深手までは×1.0（被弾はsurvivalの学びそのもの。
 // ここで減衰させると成長テンポの主変数が運になり「依頼選択で間接操作」の設計が壊れる）。
@@ -2365,34 +2367,28 @@ function generateWeatherLog(quest, party, weather, rng) {
 const questEventPools = {
   quest_letter: {
     weather: ["晴れ", "小雨", "霧", "強風", "雨上がり"],
-    roadEvents: ["ぬかるみ", "古い道標", "商人とのすれ違い", "封蝋の確認", "宛先の聞き込み", "犬の遠吠え"],
-    outcomes: ["成功", "持ち帰り", "再配達", "部分成功"]
+    roadEvents: ["ぬかるみ", "古い道標", "商人とのすれ違い", "封蝋の確認", "宛先の聞き込み", "犬の遠吠え"]
   },
   quest_herb: {
     weather: ["晴れ", "小雨", "霧", "雨上がり"],
-    roadEvents: ["湿った足跡", "倒木", "森喰い兎", "薬草袋の破れ", "泥被り茸の群生", "休憩地点"],
-    outcomes: ["成功", "小成功", "採集優先", "観察優先"]
+    roadEvents: ["湿った足跡", "倒木", "森喰い兎", "薬草袋の破れ", "泥被り茸の群生", "休憩地点"]
   },
   quest_signpost: {
     weather: ["晴れ", "小雨", "霧", "強風", "雨上がり"],
-    roadEvents: ["道標の傾き", "苔に隠れた文字", "旧道の分岐", "壊れた橋", "通行人の証言", "根元のゆるみ"],
-    outcomes: ["成功", "応急処置", "照合保留", "再確認"]
+    roadEvents: ["道標の傾き", "苔に隠れた文字", "旧道の分岐", "壊れた橋", "通行人の証言", "根元のゆるみ"]
   },
   quest_church_patrol: {
     weather: ["晴れ", "小雨", "霧", "雨上がり"],
-    roadEvents: ["柵の緩み", "鐘楼の確認", "墓地の灯り", "巡礼路の草", "礼拝堂の気配", "裏手の林"],
-    outcomes: ["異常なし", "軽微な対処", "要再確認", "小さな違和感"]
+    roadEvents: ["柵の緩み", "鐘楼の確認", "墓地の灯り", "巡礼路の草", "礼拝堂の気配", "裏手の林"]
   }
 };
 
 const lifeQuestEventPools = {
   quest_wedding_support: {
-    workEvents: ["長椅子の設営", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り", "飾り紐の受け渡し"],
-    outcomes: ["成功", "小さな失敗", "感謝"]
+    workEvents: ["長椅子の設営", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り", "飾り紐の受け渡し"]
   },
   quest_old_house_cleanup: {
-    workEvents: ["壊れた家具の撤去", "床板の確認", "古い手紙の整理", "生活用品の確認", "近所の聞き取り", "茶器の梱包", "部屋割りの確認"],
-    outcomes: ["成功", "整理完了", "一部保留"]
+    workEvents: ["壊れた家具の撤去", "床板の確認", "古い手紙の整理", "生活用品の確認", "近所の聞き取り", "茶器の梱包", "部屋割りの確認"]
   }
 };
 
@@ -5689,7 +5685,7 @@ function generateReport(expedition) {
 
   // 保全依頼：辺境教会周辺の定期巡回
   if (quest.id === "quest_church_patrol") {
-    const field = resolveFieldwork(quest, party, itemIds, ["異常なし", "軽微な対処", "要再確認", "小さな違和感"], expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -5731,7 +5727,7 @@ function generateReport(expedition) {
 
   // 保全依頼：古い小橋の応急修理
   if (quest.id === "quest_old_bridge_repair") {
-    const field = resolveFieldwork(quest, party, itemIds, ["応急修理", "通行可", "一部保留"], expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -5789,7 +5785,7 @@ function generateReport(expedition) {
   // 輸送依頼：薬草包みの納品
   if (quest.id === "quest_herb_delivery") {
     // 雨と油紙の効きは共通経路（天候の負荷と油紙の軽減）に移した（2026-07-31）
-    const field = resolveFieldwork(quest, party, itemIds, ["納品完了", "時刻内納品", "一部注意"], expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -5847,7 +5843,7 @@ function generateReport(expedition) {
   // 救助依頼：帰ってこない薬草採りの確認
   if (quest.id === "quest_missing_herbalist") {
     // 笛の効きは共通経路（はぐれかけた工程の立て直し）に移した（2026-07-31）
-    const field = resolveFieldwork(quest, party, itemIds, ["保護", "発見", "痕跡確認"], expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -6039,7 +6035,7 @@ function generateReport(expedition) {
 
   if (quest.id === "quest_evening_market_escort") {
     // 古地図の効きは共通経路（道の負荷の軽減）に移した（2026-07-31）
-    const field = resolveFieldwork(quest, party, itemIds, ["無事帰宅", "安全確認", "遠回り帰宅"], expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -6096,7 +6092,7 @@ function generateReport(expedition) {
 
   // 記録依頼：古い石碑の拓本
   if (quest.id === "quest_old_stele_rubbing") {
-    const field = resolveFieldwork(quest, party, itemIds, ["拓本完了", "一部判読", "保存優先"], expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -6155,7 +6151,7 @@ function generateReport(expedition) {
   if (lifeQuestEventPools[quest.id]) {
     const pool = lifeQuestEventPools[quest.id];
     const workEvents = pickMany(pool.workEvents, 3 + Math.floor(rng() * 2), rng);
-    const field = resolveFieldwork(quest, party, itemIds, pool.outcomes, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
     const outcome = field.outcome;
 
     const outcomeInfo = field.turnBack
@@ -6231,7 +6227,7 @@ function generateReport(expedition) {
   const roadEvents = pickMany(pool.roadEvents, 2 + Math.floor(rng() * 2), rng);
   // 支給品と編成の効きは共通経路へ移した（2026-07-31）。油紙＝天候、古地図＝道の負荷、
   // 薬草師や配達人の腕＝その依頼で使う育成値、として工程の判定に入る。
-  const field = resolveFieldwork(quest, party, itemIds, pool.outcomes, weather, rng);
+  const field = resolveFieldwork(quest, party, itemIds, weather, rng);
   const outcome = field.outcome;
 
   const outcomeInfo = field.turnBack
@@ -7025,33 +7021,28 @@ function fieldworkSetbackTexts(ev) {
   ];
 }
 
-// 結末の格下げ（論点1=A）。★ 依頼ごとの結末の良し悪しは GROWTH_TIER_BY_RESULT が既に持っている。
-//   ここで新しい対応表を作らない（成長用と判定用で2つ持たない、は論点2=A と同じ理由）。
-function pickOutcomeByTier(candidates, tier, rng) {
-  const byTier = { full: [], partial: [], fail: [] };
-  candidates.forEach((name) => {
-    const t = GROWTH_TIER_BY_RESULT[name] ?? "full";
-    (byTier[t] ?? byTier.full).push(name);
-  });
+// 結末の格下げ（論点1=A）。★ 段階ごとの候補は依頼データ（quest.outcomes）が持っている。
+//   欲しい段階に候補が無ければ、その次に近い段階へ寄せる。
+function pickOutcomeByTier(outcomes, tier, rng) {
   const order = tier === "full" ? ["full", "partial", "fail"]
     : tier === "partial" ? ["partial", "full", "fail"]
       : ["fail", "partial", "full"];
-  const found = order.map((t) => byTier[t]).find((list) => list.length > 0);
-  return found ? pickOne(found, rng) : candidates[0];
+  const found = order.map((t) => outcomes[t] ?? []).find((list) => list.length > 0);
+  return found ? pickOne(found, rng) : null;
 }
 
 // 未達の結末を持たない依頼のための共通の「引き返し」。個別に16通り書かず、1つで受ける。
-function fieldworkOutcome(quest, fw, candidates, rng) {
-  if (fw && fw.tier === "fail" && !candidates.some((name) => GROWTH_TIER_BY_RESULT[name] === "fail")) {
+function fieldworkOutcome(quest, fw, outcomes, rng) {
+  if (fw && fw.tier === "fail" && (outcomes.fail ?? []).length === 0) {
     return { outcome: "引き返し", turnBack: true };
   }
-  return { outcome: pickOutcomeByTier(candidates, fw ? fw.tier : "full", rng), turnBack: false };
+  return { outcome: pickOutcomeByTier(outcomes, fw ? fw.tier : "full", rng), turnBack: false };
 }
 
 // 各依頼の分岐から同じ形で呼ぶための入口。工程を回し、結末を格下げし、工程ログを作るまで。
-function resolveFieldwork(quest, party, itemIds, candidates, weather, rng) {
+function resolveFieldwork(quest, party, itemIds, weather, rng) {
   const fw = simulateFieldwork(quest, party, itemIds, rng, { weather });
-  const picked = fieldworkOutcome(quest, fw, candidates, rng);
+  const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines: fieldworkLogLines(fw, rng) };
 }
 
