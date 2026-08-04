@@ -4513,9 +4513,15 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   const dealLine = (ev) => {
     if (ev.attackerStatus === "深手") return weakenedDealLine(ev);
     const n = ev.damage, big = ev.strong === true, name = ev.attackerName, job = jobById[ev.attackerId];
+    // ★ 斥候の並打ちだけ候補が1文で、他の職（戦士2・盾役2・薬草師3）と不揃いだった。
+    //   2026-08-04・EX-052 で他と同じ3文に揃えた。揃えるのが目的で、増やすのが目的ではない。
     if (job === "斥候") return big
       ? `${name}の矢が${enemyN}の胴を捉えた！（${enemyN}に${n}ダメージ！）`
-      : `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に${n}ダメージ）`;
+      : pick([
+        `${name}は間合いを取って矢を放ち、${enemyN}のひとりの肩を射抜いた（${enemyN}に${n}ダメージ）`,
+        `${name}は素早く次の矢をつがえ、${enemyN}の脇腹を掠めた（${enemyN}に${n}ダメージ）`,
+        `${name}は荷馬車の陰から狙いをつけ、${enemyN}の足を射た（${enemyN}に${n}ダメージ）`
+      ]);
     if (job === "戦士") return big
       ? `${name}の一撃が${enemyN}をまとめて弾き飛ばした！（${enemyN}に${n}ダメージ！）`
       : pick([`${name}が踏み込み、${enemyN}を打ち据えた（${enemyN}に${n}ダメージ）`, `${name}が前へ出て、${enemyN}を弾き返した（${enemyN}に${n}ダメージ）`]);
