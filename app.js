@@ -4854,6 +4854,21 @@ function effectiveItemIds(fw) {
   return [...new Set(fw.events.map((ev) => ev.itemId).filter(Boolean))];
 }
 
+// ★ 戦闘経路の同じもの（2026-08-04・EX-052）。EX-050 と同じ形で、報告書に実際に
+//   出た支給品だけを返す。判定に効く quest.battleEffectiveItemIds とは別概念なので流用しない
+//   （あちらは「撤退の判断に効く」で、持っているだけで効く）。
+function effectiveBattleItemIds(battle) {
+  if (!battle || !Array.isArray(battle.events)) return [];
+  const ids = new Set();
+  // 手当て＝包帯1消費。events に heal があるときだけ報告書に包帯の行が出る。
+  if (battle.events.some((ev) => ev.type === "heal")) ids.add("item_bandage");
+  // 煙幕は退くときに焚いたときだけ本文に出る（generateCaravanBattleDramaLog と同じ条件）。
+  if (battle.smoke?.held && (battle.outcome === "withdraw_first" || battle.outcome === "withdraw_emergency")) {
+    ids.add("item_smoke");
+  }
+  return [...ids];
+}
+
 // usedItemIds：実際に効いた支給品。配列で渡されたときだけ、支給品のハイライトを
 // 「効いたときだけ」に絞る（2026-08-04・EX-050）。渡されない経路は従来どおり。
 function generateHighlight(quest, party, itemIds, departConditions, result, rng, usedItemIds = null) {
@@ -5597,6 +5612,8 @@ function generateReport(expedition) {
       departConditions,
       adventurerItemIds,
       itemIds,
+      // ★ 支給品のハイライトは、実際に効いたときだけ出す（2026-08-04・EX-052。EX-050 と同じ形）。
+      usedItemIds: effectiveBattleItemIds(battle),
       tensionValue,
       tensionLevel,
       // battleHpRatios: 帰還時の個人HP率。負傷の確定に使う（第3段階）。エルシーは戦闘のHP管理外なので含まれない。
