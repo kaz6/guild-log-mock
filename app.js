@@ -4847,7 +4847,18 @@ function generateLightInvestigationLogs(quest, party, adventurerItemIds, departT
   return logs;
 }
 
-function generateHighlight(quest, party, itemIds, departConditions, result, rng) {
+// ★ 支給品が実際に効いた id を工程の events から拾う（2026-08-04・EX-050）。
+//   ハイライトの判定に使う。持っているだけで「使う場面があった」と書くと本文と食い違う。
+function effectiveItemIds(fw) {
+  if (!fw || !Array.isArray(fw.events)) return [];
+  return [...new Set(fw.events.map((ev) => ev.itemId).filter(Boolean))];
+}
+
+// usedItemIds：実際に効いた支給品。配列で渡されたときだけ、支給品のハイライトを
+// 「効いたときだけ」に絞る（2026-08-04・EX-050）。渡されない経路は従来どおり。
+function generateHighlight(quest, party, itemIds, departConditions, result, rng, usedItemIds = null) {
+  const itemWorked = (itemId) =>
+    itemIds.includes(itemId) && (usedItemIds === null || usedItemIds.includes(itemId));
   const subject = partySubject(party);
   const isNight = departConditions?.timeOfDay === "夜";
   const isBattle = quest.category === "戦闘";
@@ -4973,16 +4984,16 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng)
   }
 
   // 支給品が役立った
-  if (itemIds.includes("item_lantern") && isNight) {
+  if (itemWorked("item_lantern") && isNight) {
     return `ランタンが暗がりで役立った。灯りがなければ、別の結果になっていたかもしれない。`;
   }
-  if (itemIds.includes("item_bandage")) {
+  if (itemWorked("item_bandage")) {
     return pickOne([
       `包帯を使う場面があった。大事には至らなかったが、持っていてよかった。`,
       `あの包帯がなかったら、帰りはもう少し遅くなっていただろう。`
     ], rng);
   }
-  if (itemIds.includes("item_oilcase")) {
+  if (itemWorked("item_oilcase")) {
     return `油紙の手紙入れのおかげで、依頼の書類は濡れずに済んだ。`;
   }
 
@@ -5130,7 +5141,8 @@ function finalizeQuestReport(options) {
     tensionValue = null,
     tensionLevel = null,
     rng = null,
-    wrapElsie = false
+    wrapElsie = false,
+    usedItemIds = null
   } = options;
 
   const report = {
@@ -5148,7 +5160,7 @@ function finalizeQuestReport(options) {
     logs,
     observationNotes,
     departConditions,
-    highlight: highlight ?? (rng ? generateHighlight(quest, party, itemIds, departConditions, result, rng) : null),
+    highlight: highlight ?? (rng ? generateHighlight(quest, party, itemIds, departConditions, result, rng, usedItemIds) : null),
     hiddenTags: {
       recordDensityGain: 1 + logs.length,
       ...hiddenTags
@@ -5341,6 +5353,7 @@ function generateReport(expedition) {
       tensionValue,
       tensionLevel,
       hiddenTags: { preservation: true, outcome, ...fieldworkHiddenTags(field.fw) },
+      usedItemIds: effectiveItemIds(field.fw),
       wrapElsie: true
     });
   }
@@ -5395,7 +5408,7 @@ function generateReport(expedition) {
       logs,
       observationNotes: null,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { preservation: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -5453,7 +5466,7 @@ function generateReport(expedition) {
       logs,
       observationNotes: null,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { transport: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -5516,7 +5529,7 @@ function generateReport(expedition) {
       logs,
       observationNotes: null,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { rescue: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -5652,6 +5665,7 @@ function generateReport(expedition) {
         ...fieldworkHiddenTags(fw),
         branch: found ? "recovered" : (stage === 2 ? "lost" : "fail")
       },
+      usedItemIds: effectiveItemIds(fw),
       wrapElsie: true
     });
   }
@@ -5706,7 +5720,7 @@ function generateReport(expedition) {
       logs,
       observationNotes: null,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { escort: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -5763,7 +5777,7 @@ function generateReport(expedition) {
       logs,
       observationNotes: null,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { record: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -5836,7 +5850,7 @@ function generateReport(expedition) {
       logs,
       observationNotes,
       departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { workEvents, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -5903,7 +5917,7 @@ function generateReport(expedition) {
     adventurerItemIds,
     observationNotes,
     departConditions,
-    highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+    highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
     hiddenTags: {
       weather,
       roadEvents,
@@ -6497,18 +6511,28 @@ const FIELDWORK_TUNING = {
 // エルシーも数えるのは、鼻と警戒が実際に工程の助けになるため（消耗は負わない＝下の workers から外す）。
 function fieldworkCapability(quest, party) {
   const statKeys = growthStatsForCategory(quest.category);
+  // ★ 誰がその育成値の最大値を持っているかも返す（2026-08-04・EX-050）。
+  //   「滞らなかったのは誰のおかげか」を書くために要る。新しい値は持たず、
+  //   既に取っている最大値の持ち主を控えるだけ。capability の計算は変えていない。
+  const holders = [];
   const total = statKeys.reduce((sum, key) => {
-    const best = party.reduce((max, adv) => Math.max(max, adv.stats?.[key] ?? 0), 0);
+    let best = 0;
+    let holder = null;
+    party.forEach((adv) => {
+      const value = adv.stats?.[key] ?? 0;
+      if (value > best) { best = value; holder = adv; }
+    });
+    if (holder) holders.push({ key, adv: holder, value: best });
     return sum + best;
   }, 0);
-  return { statKeys, capability: statKeys.length > 0 ? total / statKeys.length : 0 };
+  return { statKeys, capability: statKeys.length > 0 ? total / statKeys.length : 0, holders };
 }
 
 function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   const random = rng ?? Math.random;
   const workers = party.filter((a) => isHumanAdventurer(a)); // 消耗を負うのは人間だけ（犬は工程の負傷対象にしない）
   if (workers.length === 0) return null;
-  const { statKeys, capability } = fieldworkCapability(quest, party);
+  const { statKeys, capability, holders } = fieldworkCapability(quest, party);
   const held = Array.isArray(itemIds) ? itemIds : [];
   const events = [];
 
@@ -6581,10 +6605,18 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   const tier = setbacks >= FIELDWORK_TUNING.setbacksForFail ? "fail"
     : setbacks >= FIELDWORK_TUNING.setbacksForPartial ? "partial" : "full";
   const mainCause = ["weather", "fatigue", "skill"].reduce((a, b) => (causeCount[b] > causeCount[a] ? b : a), "skill");
+  // ★ 効いた瞬間（2026-08-04・EX-050）：一つも滞らなかったとき、誰の力量が支えたかを控える。
+  //   戦闘の「防げた瞬間」と同じ考えで、**既にある事実を拾うだけ**。滞りが出た回は
+  //   そちらが書くべき変化なので控えない（畑で「深手が出た戦闘では書かない」としたのと同じ）。
+  const topHolder = holders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);
+  const support = setbacks === 0 && topHolder
+    ? { statKey: topHolder.key, id: topHolder.adv.id, name: getDisplayName(topHolder.adv), value: topHolder.value }
+    : null;
   return {
     tier,
     setbacks,
     phases,
+    support,
     statKeys,
     capability: Math.round(capability * 10) / 10,
     weather,
@@ -6622,7 +6654,44 @@ function fieldworkLogLines(fw, rng) {
       lines.push({ kind: "drama", text: `${ev.name}の擦り傷に包帯が巻かれ、そのまま作業に戻った。` });
     }
   });
+  // ★ 効いた瞬間は最も効いた1個だけ（2026-08-04・EX-050／論点3=A）。
+  //   支給品が効いた行が既にあるならそれが「効いた瞬間」なので、重ねて書かない。
+  if (fw.support && lines.length === 0) {
+    lines.push({ kind: "action", text: pickOne(fieldworkSupportTexts(fw.support), rng) });
+  }
   return lines;
+}
+
+// 誰の力量が支えたか。育成値ごとに言い方を変えるだけで、新しい値は持たない。
+function fieldworkSupportTexts(support) {
+  const name = support.name;
+  const table = {
+    exploration: [
+      `${name}が道と目印を先に読み、どの工程も引き返さずに済んだ。`,
+      `迷いそうな場所では${name}が先に立ち、一行は足を止めずに進んだ。`
+    ],
+    investigation: [
+      `${name}が見落としを先に拾い、どの工程もやり直さずに済んだ。`,
+      `${name}は確認の順番を崩さず、書き損じのないまま終えた。`
+    ],
+    negotiation: [
+      `${name}が先に話を通しておいたので、どの工程も待たされずに済んだ。`,
+      `${name}の口添えで話が早く、一行は手を止めずに済んだ。`
+    ],
+    support: [
+      `${name}が道具と手当てを先回りで整え、どの工程も滞らなかった。`,
+      `${name}が段取りを整えていたので、一行は手戻りなく進んだ。`
+    ],
+    survival: [
+      `${name}が周囲を絶やさず見ていたので、どの工程も止まらずに済んだ。`,
+      `${name}が先に危ない場所を潰しておき、一行は歩みを緩めずに済んだ。`
+    ],
+    combat: [
+      `${name}が前を空けずにいたので、どの工程も邪魔されずに済んだ。`,
+      `${name}が構えを解かずにいたおかげで、一行は手を止めずに済んだ。`
+    ]
+  };
+  return table[support.statKey] ?? [`${name}が手際よく進め、どの工程も滞らなかった。`];
 }
 
 function fieldworkSetbackTexts(ev) {
