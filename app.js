@@ -4462,6 +4462,28 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   const hasElsie = party.some((a) => a.id === "adv_elsie");
   const smokeHeld = battle.smoke?.held ?? false;
 
+  // ★ 変化のない被弾はラウンド単位で1行に畳む（2026-08-04・EX-052／裁定B）。
+  //   EX-046 の「防げた瞬間」と同型＝変化のない事象を1行にまとめる形の、別の場所への適用。
+  //   個別に書くと同じ行が1つの報告書に3〜5回並ぶ（被弾の 71.1% が状態も変えない削りだった）。
+  //   畳んでも合計ダメージは書くので、消耗の蓄積は読める（撤退が唐突にならない）。
+  const changedAt = new Set();
+  battle.events.forEach((ev) => {
+    if (ev.type === "status" && !ev.recovered) changedAt.add(`${ev.round}|${ev.targetId}`);
+  });
+  const isPlainTake = (ev) =>
+    ev.type === "take" && !ev.crit && ev.strong !== true && !changedAt.has(`${ev.round}|${ev.targetId}`);
+  const plainByRound = {};
+  battle.events.forEach((ev, i) => {
+    if (!isPlainTake(ev)) return;
+    if (!plainByRound[ev.round]) plainByRound[ev.round] = { total: 0, firstIndex: i };
+    plainByRound[ev.round].total += ev.damage;
+  });
+  const attritionLine = (total) => pick([
+    `${enemyN}の攻めは止まず、一行はじりじりと削られていった（一行に合計${total}ダメージ）`,
+    `決定打はない。それでも手数が多く、浅い傷が積み上がっていく（一行に合計${total}ダメージ）`,
+    `${enemyN}は数で押してくる。細かい傷が重なった（一行に合計${total}ダメージ）`
+  ]);
+
   // 深手の者の攻撃行は専用文（損耗が動作に出る書き方・メタ用語なし）。連続で同じ文は使わない。
   let lastWeakenedIdx = -1;
   const weakenedDealLine = (ev) => {
@@ -4647,7 +4669,15 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
       else if (ev.crit) lines.push(critDealLine(ev));
       else lines.push({ kind: "action", text: dealLine(ev) });
     }
-    else if (ev.type === "take") lines.push(ev.crit ? critTakeLine(ev) : { kind: "action", text: takeLine(ev) });
+    else if (ev.type === "take") {
+      // 変化のない削りは、そのラウンドの最初の1件の位置に集約行を1本だけ置く。
+      if (isPlainTake(ev)) {
+        const r = plainByRound[ev.round];
+        if (r && r.firstIndex === i) lines.push({ kind: "action", text: attritionLine(r.total) });
+      } else {
+        lines.push(ev.crit ? critTakeLine(ev) : { kind: "action", text: takeLine(ev) });
+      }
+    }
     else if (ev.type === "heal") lines.push(healLine(ev));
     else if (ev.type === "status") { const s = statusLine(ev); if (s) lines.push(s); }
     else if (ev.type === "retreat") retreatLines(ev).forEach((l) => lines.push({ kind: "action", text: l }));
