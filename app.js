@@ -2393,6 +2393,10 @@ const lifeQuestEventPools = {
   },
   quest_old_house_cleanup: {
     workEvents: ["壊れた家具の撤去", "床板の確認", "古い手紙の整理", "生活用品の確認", "近所の聞き取り", "茶器の梱包", "部屋割りの確認"]
+  },
+  // ★ 最初のクエスト（2026-08-05・EX-053）。工程は2つだけで、樽を担ぐ工程は別に1行出す。
+  quest_tavern_errand: {
+    workEvents: ["注文の伝達", "樽の受け取り", "台車の借り受け", "裏口までの搬入"]
   }
 };
 
@@ -2509,6 +2513,26 @@ function workEventText(quest, eventName, party, itemIds, rng) {
   const herbalist = findByTrait(party, "job", "薬草師");
   const name = (adv) => getDisplayName(adv);
 
+  // ★ 最初のクエスト（2026-08-05・EX-053）。酒場は画面外の場所として、ログと会話の中にだけ出す。
+  const tavernEvents = {
+    注文の伝達: [
+      `酒場の主人に用件を伝えた。「ああ、聞いてるよ。新しい記録係さんの分だろう」と、すぐに奥へ引っ込んだ。`,
+      `${solo ? name(humanMembers(party)[0] ?? party[0]) : name(caregiver)}が用件を伝えると、主人は手を拭きながら「今日中でいいのかい」と聞き返した。`
+    ],
+    樽の受け取り: [
+      `奥から出てきた樽は、思ったより小ぶりだった。主人が栓の締まりを一度確かめてから渡してきた。`,
+      `主人は樽を土間まで転がしてきて、「これで足りるだろう」と言った。代金はギルドの財布から出た。`
+    ],
+    台車の借り受け: [
+      `酒場の台車を借りた。車輪が片方だけ鳴るので、道の段差でいちいち止まることになった。`,
+      `台車は貸してもらえたが、返しに来る約束をひとつ追加で背負うことになった。`
+    ],
+    裏口までの搬入: [
+      `ギルドの裏口は狭く、樽を横向きにしないと通らなかった。`,
+      `裏口の段差で一度持ち上げ直し、そのまま受付の脇へ置いた。`
+    ]
+  };
+
   const weddingEvents = {
     長椅子の設営: [
       `${name(brave)}が長椅子を二脚まとめて担いで会場へ運んだ。通路をふさがない位置に置いてから、「まだあるか」と聞いた。`,
@@ -2575,7 +2599,7 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     ]
   };
 
-  const allEvents = { ...weddingEvents, ...cleanupEvents };
+  const allEvents = { ...weddingEvents, ...cleanupEvents, ...tavernEvents };
   return pickOne(allEvents[eventName] ?? [`${eventName}について、作業を行った。`], rng);
 }
 
@@ -2820,6 +2844,7 @@ function partyInteractionLog(party, quest, rng, tensionValue = 50) {
 
 function canUseItemInQuest(quest, itemId, weather = null) {
   const allowedByQuest = {
+    quest_tavern_errand: ["item_bandage", "item_whistle"],
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
     quest_letter: ["item_map", "item_oilcase"],
@@ -5847,7 +5872,11 @@ function generateReport(expedition) {
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : lifeQuestOutcomeText(quest, party, itemIds, outcome, rng);
-    const personal = lifeQuestPersonalEventText(quest, party, rng, tensionValue ?? 50);
+    // ★ 個人イベントは既存2件の書き分けしか持っていないので、新クエストでは出さない
+    //   （出すと廃屋の文が流れ込む）。最初のクエストは短いままでよい。
+    const personal = quest.id === "quest_tavern_errand"
+      ? null
+      : lifeQuestPersonalEventText(quest, party, rng, tensionValue ?? 50);
     const supply = supplyEventText(quest, party, adventurerItemIds, rng);
     const statsLog = statsPersonalityLog(party, rng);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
@@ -5856,6 +5885,10 @@ function generateReport(expedition) {
       quest_wedding_support: [
         `会場に着くと、すでに準備の真っ最中だった。依頼人の顔に安堵が浮かんだ。花の飾り付けはまだ途中だった。`,
         `町の小さな祝宴会場に着いた。外には招待客らしい人が少しずつ集まり始めていた。`
+      ],
+      quest_tavern_errand: [
+        `酒場はギルドの隣で、扉を開けるとまだ昼の支度の途中だった。`,
+        `隣の酒場に入ると、床を拭いていた主人が顔を上げた。`
       ],
       quest_old_house_cleanup: [
         `町外れの家屋に着いた。戸は開いたまま、中は物が積み重なっていた。`,
@@ -5873,6 +5906,11 @@ function generateReport(expedition) {
     add("", `支給品：${lifeSupplyDesc.length > 0 ? lifeSupplyDesc.join(" / ") : "なし"}。`);
     add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
     workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
+    // ★ 樽を担ぐ工程は担ぎ手が変わると文が変わる（2026-08-05・EX-053）。
+    if (quest.id === "quest_tavern_errand") {
+      const barrel = tavernBarrelLine(field.fw, party, rng);
+      if (barrel) add("action", barrel);
+    }
     field.logLines.forEach((line) => add(line.kind, line.text));
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
@@ -6611,8 +6649,11 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   const stamina = {};
   workers.forEach((adv) => { stamina[adv.id] = 100; });
 
-  const phases = FIELDWORK_TUNING.phasesMin +
-    Math.floor(random() * (FIELDWORK_TUNING.phasesMax - FIELDWORK_TUNING.phasesMin + 1));
+  // ★ 依頼側で工程回数の上限を持てる（2026-08-05・EX-053）。既定は 2〜4 のまま。
+  //   最初のクエストだけ短くするための逃げ道で、値は依頼データが持つ（ロジックに直書きしない）。
+  const phasesMax = Math.max(FIELDWORK_TUNING.phasesMin, quest.fieldworkPhases ?? FIELDWORK_TUNING.phasesMax);
+  const phasesMin = Math.min(FIELDWORK_TUNING.phasesMin, phasesMax);
+  const phases = phasesMin + Math.floor(random() * (phasesMax - phasesMin + 1));
   let setbacks = 0;
   const causeCount = { weather: 0, fatigue: 0, skill: 0 };
 
@@ -6665,11 +6706,17 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   const support = setbacks === 0 && topHolder
     ? { statKey: topHolder.key, id: topHolder.adv.id, name: getDisplayName(topHolder.adv), value: topHolder.value }
     : null;
+  // ★ lead は support と同じ持ち主を、滞りの有無によらず控えたもの（2026-08-05・EX-053）。
+  //   「その工程を誰が担ったか」を書くために要る。新しい値は持たず、上で既に取っている最大値の持ち主を渡すだけ。
+  const lead = topHolder
+    ? { statKey: topHolder.key, id: topHolder.adv.id, name: getDisplayName(topHolder.adv), value: topHolder.value }
+    : null;
   return {
     tier,
     setbacks,
     phases,
     support,
+    lead,
     statKeys,
     capability: Math.round(capability * 10) / 10,
     weather,
@@ -6745,6 +6792,57 @@ function fieldworkSupportTexts(support) {
     ]
   };
   return table[support.statKey] ?? [`${name}が手際よく進め、どの工程も滞らなかった。`];
+}
+
+// ★ 樽を担ぐ工程（2026-08-05・EX-053）。担ぎ手は fieldworkCapability が返す持ち主（fw.lead）で決まり、
+//   言い回しはその人の tendencies で変わる。新しい値も新しい判定も持たない（既にある事実を拾うだけ）。
+function tavernBarrelLine(fw, party, rng) {
+  const lead = fw?.lead ?? null;
+  const adv = lead ? party.find((a) => a.id === lead.id) : null;
+  if (!adv) return null;
+  const name = getDisplayName(adv);
+  // エルシーは樽を担がない（人間の行動をさせない）。付き添う形にする。
+  if (!isHumanAdventurer(adv)) {
+    return pickOne([
+      `${name}は樽の横をぴったり歩き、荷から離れなかった。`,
+      `${name}は樽の匂いを一度だけ嗅ぎ、あとは黙って歩調を合わせた。`
+    ], rng);
+  }
+  const t = adv.tendencies ?? {};
+  if ((t.courage ?? 0) >= 5) {
+    return pickOne([
+      `${name}は樽を肩へ担ぎ上げ、そのまま歩き出した。重さの話は一度も出なかった。`,
+      `${name}が樽を抱えると、酒場の主人が「そんな軽々と」と笑った。`
+    ], rng);
+  }
+  if ((t.kindness ?? 0) >= 5) {
+    return pickOne([
+      `${name}は「割れたら台無しですから」と言って、樽の口を上に保ったまま運んだ。`,
+      `${name}は樽を抱え直し、重い側を自分に寄せた。`
+    ], rng);
+  }
+  if ((t.memory ?? 0) >= 5) {
+    return pickOne([
+      `${name}は樽の焼き印を写し取ってから担いだ。銘柄は報告書に残った。`,
+      `${name}は担ぐ前に、樽の位置と本数を数え直した。`
+    ], rng);
+  }
+  if ((t.courage ?? 0) >= 4) {
+    return pickOne([
+      `${name}は樽を背に回し、足場の悪いところだけ歩幅を狭めた。`,
+      `${name}は樽を担ぎ、段差の手前で一度だけ声をかけた。`
+    ], rng);
+  }
+  if ((t.caution ?? 0) >= 4) {
+    return pickOne([
+      `${name}は縄の結び目を確かめてから樽を持ち上げた。道中で緩むことはなかった。`,
+      `${name}は樽を担ぐ前に、通る道の段差を先に見に行った。`
+    ], rng);
+  }
+  return pickOne([
+    `${name}は文句を言いながら樽を担ぎ、それでもギルドまで運び切った。`,
+    `${name}は樽の重さに一度ふらついたが、持ち直して歩き出した。`
+  ], rng);
 }
 
 function fieldworkSetbackTexts(ev) {

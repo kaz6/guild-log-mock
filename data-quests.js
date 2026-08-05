@@ -5,6 +5,27 @@
 // 並び順は移行前のコードのままにしてある（同じ乱数で同じ結末になるため）。
 window.masterQuests = [
   {
+    // ★ 最初のクエスト（2026-08-05・EX-053）。記録係の就任祝いの酒樽を買いに行く。
+    //   初期公開はこの1件だけで、クリアすると結婚式・夕市・夜道が開く。
+    //   ★ 金額は出さない（所持金の実装は別タスク）。酒場はギルド内画面として持たず、
+    //   画面外の場所としてログと会話の中にだけ出す。
+    id: "quest_tavern_errand",
+    title: "隣の酒場に買い出し",
+    category: "生活",
+    danger: "低",
+    area: "ギルドの隣の酒場",
+    durationBand: "near_20s",
+    // ★ 工程は2回まで（このクエストだけの上限。既定は 2〜4）。
+    fieldworkPhases: 2,
+    recommended: ["豪胆", "世話焼き", "慎重"],
+    tags: ["生活", "買い出し", "運搬", "酒場", "祝い"],
+    observationTarget: "なし",
+    tensionBase: 10,
+    tensionRange: 10,
+    summary: "記録係の就任祝いに出す酒樽を、ギルドの隣の酒場まで買いに行く。代金はギルドの財布から出る。",
+    outcomes: { full: ["成功", "上機嫌"], partial: ["寄り道"], fail: ["出直し"] }
+  },
+  {
     id: "quest_herb",
     title: "森の薬草採集",
     category: "探索",
@@ -59,6 +80,7 @@ window.masterQuests = [
     danger: "低",
     area: "町の小さな祝宴会場",
     durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["世話焼き", "郵便配達人", "豪胆"],
     tags: ["生活", "祝宴", "運搬", "案内", "地域"],
     observationTarget: "なし",
@@ -74,6 +96,7 @@ window.masterQuests = [
     danger: "低",
     area: "町外れの古い家屋",
     durationBand: "near_1m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
@@ -189,6 +212,7 @@ window.masterQuests = [
     danger: "低",
     area: "夕暮れの街道",
     durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["見習い盾役", "斥候", "慎重"],
     tags: ["護衛", "付き添い", "夕方", "街道", "親子", "地域", "帰還"],
     observationTarget: "なし",
@@ -282,6 +306,7 @@ window.masterQuests = [
     danger: "低",
     area: "村はずれの道",
     durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["慎重", "記録", "観察"],
     tags: ["調査", "夜道", "怪異", "記録"],
     observationTarget: "残る灯り",

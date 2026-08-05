@@ -14,10 +14,19 @@ function gameDaysFromRealMinutes(realMinutes) {
   return realMinutes / window.REAL_MINUTES_PER_GAME_DAY;
 }
 
+// 秒で書きたい帯（最初のクエスト用・2026-08-05・EX-053）。分の帯と同じ流儀で、
+// ★ 実時間はここで日数へ変換してから持つ（実時間を依頼データへ直書きしない）。
+function gameDaysFromRealSeconds(realSeconds) {
+  return gameDaysFromRealMinutes(realSeconds / 60);
+}
+
 // 依頼の所要時間の帯（コアコンセプト17章）。依頼データの durationBand がこのキーを指す。
 // ※ 帯名「近」は旧称「最序盤」。実態は進行段階ではなく距離なので改称した（体験版②裁定）。
 // ※ long_5h / long_7h は定義のみで該当依頼は未実装。北・東の遠方依頼が入ったときに使う。
 window.masterDurationBands = {
+  // ★ 最初のクエスト用（2026-08-05・EX-053）。10〜30秒の指定に対し、帯は1つの値を持つ流儀なので中央の20秒を採る。
+  //   near_5m は未使用だが潰さずに残し、別の帯として新設した。
+  near_20s: { label: "近", days: gameDaysFromRealSeconds(20) },
   near_1m: { label: "近", days: gameDaysFromRealMinutes(1) },
   near_5m: { label: "近", days: gameDaysFromRealMinutes(5) },
   near_10m: { label: "近", days: gameDaysFromRealMinutes(10) },
