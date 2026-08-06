@@ -206,7 +206,10 @@ window.masterAdventurers = [
     status: "待機中",
     history: [],
     tendencies: { memory: 3, caution: 4, courage: 1, kindness: 4, curiosity: 3 },
-    stats: { combat: 10, exploration: 14, investigation: 10, negotiation: 10, support: 20, survival: 18 },
+    // ★ 犬を探索特化にする（2026-08-06・EX-057）。交渉・支援・戦闘は 0（犬がやらないこと）、
+    //   探索と生存で人間の一位（ミナ28・ロウ25）を抜く。調査は据え置き＝**犬にできない行為の
+    //   担い手になる圧を上げないため**。戦闘0は与ダメに波及しない（simulateBattle は人間だけ）。
+    stats: { combat: 0, exploration: 32, investigation: 10, negotiation: 0, support: 0, survival: 30 },
     accessory: {
       name: "専用ハーネス",
       effect: "carry_support_item",
