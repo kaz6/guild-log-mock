@@ -6613,16 +6613,23 @@ const FIELDWORK_TUNING = {
 // エルシーも数えるのは、鼻と警戒が実際に工程の助けになるため（消耗は負わない＝下の workers から外す）。
 // ★ statKeys を受け取る版（2026-08-06・EX-054）。工程ごとに参照する育成値を変えられるように
 //   分けただけで、計算は元のまま。ジャンル表からの導出は下の fieldworkCapability が持つ。
-function capabilityForStats(statKeys, party) {
+// ★ humanOnly（2026-08-06・EX-056）：**担い手を選ぶときだけ**犬を外す。力量の合計は従来どおり
+//   全員から採る（＝エルシーの鼻と警戒は工程を助けている、という既存の読みを崩さない）。
+//   犬に「読む」「手当てを整える」等をさせないためで、除外するのは**名前が文に出る側**だけ。
+function capabilityForStats(statKeys, party, options = {}) {
+  const humanOnly = options.humanOnly === true;
   const holders = [];
   const total = statKeys.reduce((sum, key) => {
     let best = 0;
     let holder = null;
+    let holderValue = 0;
     party.forEach((adv) => {
       const value = adv.stats?.[key] ?? 0;
-      if (value > best) { best = value; holder = adv; }
+      if (value > best) best = value; // 力量はこれまでどおり（犬も数える）
+      if (humanOnly && !isHumanAdventurer(adv)) return;
+      if (value > holderValue) { holderValue = value; holder = adv; }
     });
-    if (holder) holders.push({ key, adv: holder, value: best });
+    if (holder) holders.push({ key, adv: holder, value: holderValue });
     return sum + best;
   }, 0);
   return { capability: statKeys.length > 0 ? total / statKeys.length : 0, holders };
@@ -6640,12 +6647,25 @@ function fieldworkStepStats(quest, phase) {
   return step.stat ? [step.stat] : null;
 }
 
+// 「この工程の担い手は人間だけ」の宣言（2026-08-06・EX-056）。EX-054 の宣言の2つ目。
+// ★ 工程ごと（`fieldworkSteps[i].humanOnly`）が優先。工程の宣言を持たない依頼は
+//   依頼ごと（`quest.fieldworkHumanOnly`）で同じことを宣言する。**同じ鍵を2段で読むだけで、
+//   対応表は増やさない**（工程を宣言していない依頼は全工程が同じ担い手のため、依頼単位で足りる）。
+function fieldworkStepHumanOnly(quest, phase) {
+  const steps = Array.isArray(quest?.fieldworkSteps) ? quest.fieldworkSteps : null;
+  const step = steps ? steps[phase - 1] : null;
+  if (step && typeof step.humanOnly === "boolean") return step.humanOnly;
+  return quest?.fieldworkHumanOnly === true;
+}
+
 function fieldworkCapability(quest, party) {
   const statKeys = growthStatsForCategory(quest.category);
   // ★ 誰がその育成値の最大値を持っているかも返す（2026-08-04・EX-050）。
   //   「滞らなかったのは誰のおかげか」を書くために要る。新しい値は持たず、
   //   既に取っている最大値の持ち主を控えるだけ。capability の計算は変えていない。
-  return { statKeys, ...capabilityForStats(statKeys, party) };
+  // ★ 依頼が「担い手は人間だけ」を宣言していれば、ここの持ち主からも犬を外す（2026-08-06・EX-056）。
+  //   ここの持ち主は `fw.lead`／`fw.support`＝「効いた瞬間」の主語になる。
+  return { statKeys, ...capabilityForStats(statKeys, party, { humanOnly: quest?.fieldworkHumanOnly === true }) };
 }
 
 function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
@@ -6708,7 +6728,7 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     const stepStats = fieldworkStepStats(quest, phase);
     let stepCapability = capability;
     if (stepStats) {
-      const got = capabilityForStats(stepStats, party);
+      const got = capabilityForStats(stepStats, party, { humanOnly: fieldworkStepHumanOnly(quest, phase) });
       stepCapability = got.capability;
       stepStats.forEach((k) => usedStats.add(k));
       const top = got.holders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);

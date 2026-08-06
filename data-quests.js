@@ -19,9 +19,11 @@ window.masterQuests = [
     //   宣言があると要素数がそのまま工程数になるので、`fieldworkPhases` は要らない。
     //   「樽を担ぐ」は体力に対応する値として survival を流用する（新設はしない）。
     //   ★ survival は maxHp の元でもあり、体力に対応する育成値は現状これ1つ。
+    //   ★ どちらの工程も担い手は人間だけ（2026-08-06・EX-056）。犬は話を通せないし樽も担げない。
+    //   力量の計算はこれまでどおりエルシーも数える（外すのは名前が文に出る側だけ）。
     fieldworkSteps: [
-      { label: "店主と話を通す", stat: "negotiation" },
-      { label: "樽を担ぐ", stat: "survival" }
+      { label: "店主と話を通す", stat: "negotiation", humanOnly: true },
+      { label: "樽を担ぐ", stat: "survival", humanOnly: true }
     ],
     recommended: ["豪胆", "世話焼き", "慎重"],
     tags: ["生活", "買い出し", "運搬", "酒場", "祝い"],
@@ -33,6 +35,8 @@ window.masterQuests = [
   },
   {
     id: "quest_herb",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "森の薬草採集",
     category: "探索",
     danger: "低",
@@ -49,6 +53,8 @@ window.masterQuests = [
   },
   {
     id: "quest_signpost",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "古い道標の確認",
     category: "探索",
     danger: "低",
@@ -151,6 +157,8 @@ window.masterQuests = [
   },
   {
     id: "quest_old_bridge_repair",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "古い小橋の応急修理",
     category: "保全",
     danger: "低",
@@ -167,6 +175,8 @@ window.masterQuests = [
   },
   {
     id: "quest_church_patrol",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "辺境教会周辺の定期巡回",
     category: "保全",
     danger: "低",
@@ -183,6 +193,8 @@ window.masterQuests = [
   },
   {
     id: "quest_herb_delivery",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "薬草包みの納品",
     category: "輸送",
     danger: "低",
@@ -199,6 +211,8 @@ window.masterQuests = [
   },
   {
     id: "quest_missing_herbalist",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "帰ってこない薬草採りの確認",
     category: "救助",
     danger: "中",
@@ -215,6 +229,8 @@ window.masterQuests = [
   },
   {
     id: "quest_evening_market_escort",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "夕市帰りの親子の付き添い",
     category: "護衛",
     danger: "低",
@@ -251,6 +267,8 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_search",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "隊商の緊急捜索",
     category: "捜索",
     danger: "中",
@@ -272,6 +290,8 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_lastchance",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "最後の手がかり",
     category: "捜索",
     danger: "高",
