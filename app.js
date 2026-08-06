@@ -325,7 +325,14 @@ function appendGrowthLogToReport(report, expedition) {
   const humans = humanMembers(party);
   if (humans.length === 0) return;
 
-  const categoryStats = growthStatsForCategory(quest.category);
+  // ★ 成長は「その回で実際に使った育成値」に従う（2026-08-06・EX-054）。
+  //   工程が使った育成値は hiddenTags.fieldwork.stats に入っている（宣言がなければ
+  //   ジャンル表由来の値がそのまま入る）。**ここを経由することで対応表が1つのままになる。**
+  //   工程を通らない依頼（戦闘・夜道）は従来どおりジャンル表へフォールバックする。
+  const fieldworkStats = report.hiddenTags?.fieldwork?.stats;
+  const categoryStats = Array.isArray(fieldworkStats) && fieldworkStats.length > 0
+    ? fieldworkStats
+    : growthStatsForCategory(quest.category);
   const battleGrowth = report.hiddenTags?.battleGrowth ?? null;
   const survivalMult = battleGrowth?.downed ? GROWTH_SURVIVAL_MULT.downed : GROWTH_SURVIVAL_MULT.safe;
   const outcomeMult = GROWTH_OUTCOME_TIER[GROWTH_TIER_BY_RESULT[report.result] ?? "full"];
@@ -6600,11 +6607,9 @@ const FIELDWORK_TUNING = {
 
 // 依頼で使う stat の平均力量。★ その stat を一番持っている者が担当する、という読み方（最大値を採る）。
 // エルシーも数えるのは、鼻と警戒が実際に工程の助けになるため（消耗は負わない＝下の workers から外す）。
-function fieldworkCapability(quest, party) {
-  const statKeys = growthStatsForCategory(quest.category);
-  // ★ 誰がその育成値の最大値を持っているかも返す（2026-08-04・EX-050）。
-  //   「滞らなかったのは誰のおかげか」を書くために要る。新しい値は持たず、
-  //   既に取っている最大値の持ち主を控えるだけ。capability の計算は変えていない。
+// ★ statKeys を受け取る版（2026-08-06・EX-054）。工程ごとに参照する育成値を変えられるように
+//   分けただけで、計算は元のまま。ジャンル表からの導出は下の fieldworkCapability が持つ。
+function capabilityForStats(statKeys, party) {
   const holders = [];
   const total = statKeys.reduce((sum, key) => {
     let best = 0;
@@ -6616,7 +6621,27 @@ function fieldworkCapability(quest, party) {
     if (holder) holders.push({ key, adv: holder, value: best });
     return sum + best;
   }, 0);
-  return { statKeys, capability: statKeys.length > 0 ? total / statKeys.length : 0, holders };
+  return { capability: statKeys.length > 0 ? total / statKeys.length : 0, holders };
+}
+
+// 工程の宣言（quest.fieldworkSteps）を読む。宣言がなければ null を返し、
+// 呼び出し側はジャンル表（GROWTH_STAT_BY_CATEGORY）へフォールバックする。
+// ★ ジャンル表は廃止しない。宣言は「その工程だけ別の育成値を見る」ための上書き。
+function fieldworkStepStats(quest, phase) {
+  const steps = Array.isArray(quest?.fieldworkSteps) ? quest.fieldworkSteps : null;
+  if (!steps) return null;
+  const step = steps[phase - 1];
+  if (!step) return null;
+  if (Array.isArray(step.stats) && step.stats.length > 0) return step.stats;
+  return step.stat ? [step.stat] : null;
+}
+
+function fieldworkCapability(quest, party) {
+  const statKeys = growthStatsForCategory(quest.category);
+  // ★ 誰がその育成値の最大値を持っているかも返す（2026-08-04・EX-050）。
+  //   「滞らなかったのは誰のおかげか」を書くために要る。新しい値は持たず、
+  //   既に取っている最大値の持ち主を控えるだけ。capability の計算は変えていない。
+  return { statKeys, ...capabilityForStats(statKeys, party) };
 }
 
 function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
@@ -6653,7 +6678,15 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   //   最初のクエストだけ短くするための逃げ道で、値は依頼データが持つ（ロジックに直書きしない）。
   const phasesMax = Math.max(FIELDWORK_TUNING.phasesMin, quest.fieldworkPhases ?? FIELDWORK_TUNING.phasesMax);
   const phasesMin = Math.min(FIELDWORK_TUNING.phasesMin, phasesMax);
-  const phases = phasesMin + Math.floor(random() * (phasesMax - phasesMin + 1));
+  // ★ 工程ごとの宣言（fieldworkSteps）があるときは、その数が工程数になる（2026-08-06・EX-054）。
+  //   宣言がなければ従来どおり乱数で決める＝**宣言のない依頼は乱数の消費も判定式も変わらない**。
+  const declaredSteps = Array.isArray(quest.fieldworkSteps) ? quest.fieldworkSteps.length : 0;
+  const phases = declaredSteps > 0
+    ? declaredSteps
+    : phasesMin + Math.floor(random() * (phasesMax - phasesMin + 1));
+  // その回で実際に見た育成値。★ 成長側はここを読む（対応表を2つに割らないため）。
+  const usedStats = new Set(declaredSteps > 0 ? [] : statKeys);
+  const stepLeads = [];
   let setbacks = 0;
   const causeCount = { weather: 0, fatigue: 0, skill: 0 };
 
@@ -6666,8 +6699,23 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     }
     const fatigueNow = Math.round(fatigue);
     const load = baseLoad + weatherLoad + fatigueNow;
+    // ★ 工程ごとに参照する育成値を切り替える（2026-08-06・EX-054）。
+    //   宣言がなければ冒頭で1回だけ計算した capability をそのまま使う（従来どおり）。
+    const stepStats = fieldworkStepStats(quest, phase);
+    let stepCapability = capability;
+    if (stepStats) {
+      const got = capabilityForStats(stepStats, party);
+      stepCapability = got.capability;
+      stepStats.forEach((k) => usedStats.add(k));
+      const top = got.holders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);
+      if (top) stepLeads.push({ phase, statKey: top.key, id: top.adv.id, name: getDisplayName(top.adv), value: top.value });
+    } else {
+      // 宣言のない工程はジャンル表を見ている。★ 使ったものとして記録する
+      //   （「伸びる stat ＝ 使う stat」。宣言と無宣言が混ざった依頼で漏れないように）。
+      statKeys.forEach((k) => usedStats.add(k));
+    }
     const chance = Math.min(FIELDWORK_TUNING.setbackMax, Math.max(FIELDWORK_TUNING.setbackMin,
-      FIELDWORK_TUNING.setbackFloor + (load - capability) / FIELDWORK_TUNING.setbackScale));
+      FIELDWORK_TUNING.setbackFloor + (load - stepCapability) / FIELDWORK_TUNING.setbackScale));
     const stalled = random() < chance;
     fatigue += fatigueStep;
     if (!stalled) continue; // 動かなかった工程は書かない（論点4=A）
@@ -6717,7 +6765,11 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     phases,
     support,
     lead,
-    statKeys,
+    // ★ 工程ごとの担い手（宣言がある工程だけ入る）。書き分けに使う。
+    stepLeads,
+    // ★ その回で実際に使った育成値の和集合。宣言がなければジャンル表由来の値そのまま。
+    //   成長側はここだけを読む（「伸びる stat ＝ 使う stat」を1つの表で保つ）。
+    statKeys: [...usedStats],
     capability: Math.round(capability * 10) / 10,
     weather,
     weatherLoad,
