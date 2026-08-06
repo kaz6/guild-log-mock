@@ -1212,7 +1212,11 @@ function setMockWeather(w) {
 // ★ 解放状態は state.reports から都度導出している。将来「報告書を削除できる」ようにすると
 //   解放が巻き戻るので、そのときはここを見直すこと（DECISION_LOG 参照）。
 // ※ `hidden`（捜索チェーン専用＝掲示板には永久に並ばない）とは別概念。両方を並存させる。
+// ★ `unlockedAfterCount`（2026-08-06）：達成した依頼の件数で開く。どの依頼かは問わない。
+//   `unlockedBy` と別の条件として持ち、**両方あるときは両方満たしたときだけ開く**。
+//   数えるのは `clearedQuestIds`＝**行った依頼の種類数**（同じ依頼を2回行っても1件）。
 function isQuestUnlocked(quest, clearedQuestIds) {
+  if (typeof quest.unlockedAfterCount === "number" && clearedQuestIds.size < quest.unlockedAfterCount) return false;
   if (!quest.unlockedBy) return true;
   return clearedQuestIds.has(quest.unlockedBy);
 }
@@ -6849,7 +6853,9 @@ function fieldworkSupportTexts(support) {
 // ★ 樽を担ぐ工程（2026-08-05・EX-053）。担ぎ手は fieldworkCapability が返す持ち主（fw.lead）で決まり、
 //   言い回しはその人の tendencies で変わる。新しい値も新しい判定も持たない（既にある事実を拾うだけ）。
 function tavernBarrelLine(fw, party, rng) {
-  const lead = fw?.lead ?? null;
+  // ★ 担ぎ手は「樽を担ぐ」工程が見る育成値（survival）の持ち主（2026-08-06・EX-054）。
+  //   宣言が無かった頃は依頼ジャンルの持ち主（`fw.lead`）だったので、その経路は残す。
+  const lead = fw?.stepLeads?.find((s) => s.statKey === "survival") ?? fw?.lead ?? null;
   const adv = lead ? party.find((a) => a.id === lead.id) : null;
   if (!adv) return null;
   const name = getDisplayName(adv);

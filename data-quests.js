@@ -15,8 +15,14 @@ window.masterQuests = [
     danger: "低",
     area: "ギルドの隣の酒場",
     durationBand: "near_20s",
-    // ★ 工程は2回まで（このクエストだけの上限。既定は 2〜4）。
-    fieldworkPhases: 2,
+    // ★ 工程ごとに参照する育成値を宣言する（2026-08-06・EX-054）。
+    //   宣言があると要素数がそのまま工程数になるので、`fieldworkPhases` は要らない。
+    //   「樽を担ぐ」は体力に対応する値として survival を流用する（新設はしない）。
+    //   ★ survival は maxHp の元でもあり、体力に対応する育成値は現状これ1つ。
+    fieldworkSteps: [
+      { label: "店主と話を通す", stat: "negotiation" },
+      { label: "樽を担ぐ", stat: "survival" }
+    ],
     recommended: ["豪胆", "世話焼き", "慎重"],
     tags: ["生活", "買い出し", "運搬", "酒場", "祝い"],
     observationTarget: "なし",
@@ -96,7 +102,9 @@ window.masterQuests = [
     danger: "低",
     area: "町外れの古い家屋",
     durationBand: "near_1m",
-    unlockedBy: "quest_tavern_errand",
+    // ★ 解禁は達成数で持つ（2026-08-06）。どのクエストを終えたかは問わず、2件終えたら出る＝3回目に選べる。
+    //   `unlockedBy`（特定の依頼を終えたら開く）とは別の条件で、両方あるときは両方満たしたときだけ開く。
+    unlockedAfterCount: 2,
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
