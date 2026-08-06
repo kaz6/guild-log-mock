@@ -1139,10 +1139,32 @@ function renderHome() {
   `;
 }
 
+// 読了ハンコ（2026-08-06）。★ プレイヤーが手で押すもので、開封（`opened`）とは別。
+//   `readStampAt` に押した時刻を持つだけ（`schemaVersion` 据え置き）。
+//   ★ 未読件数のバッジは出さない。急かす表示にしないため、押した側だけが見える形にする。
+function readStampDateText(report) {
+  if (!report.readStampAt) return "";
+  try {
+    return new Date(report.readStampAt).toLocaleString("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit"
+    });
+  } catch (_) { return ""; }
+}
+
+function stampReport(id) {
+  const report = state.reports.find((item) => item.id === id);
+  if (!report || report.readStampAt) return; // 一度押したら押し直さない（消す操作は用意しない）
+  report.readStampAt = Date.now();
+  saveState();
+  render();
+}
+
 function reportCardHtml(report) {
   const quest = getQuest(report.questId);
   return `
-    <article class="report-card ${report.opened ? "" : "unopened"}">
+    <article class="report-card ${report.opened ? "" : "unopened"} ${report.readStampAt ? "stamped" : ""}">
       <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
       <p>${escapeHtml(report.summary)}</p>
       <div class="button-row" style="margin-top: 14px;">
@@ -1970,6 +1992,14 @@ function renderReportDetail(reportId) {
           ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}
         </div>
         ${report.observationNotes ? observationNotesHtml(report.observationNotes) : ""}
+        ${report.readStampAt ? `
+        <div class="read-stamp-row">
+          <span class="read-stamp" aria-label="読了">読<br />了</span>
+          <span class="muted">${escapeHtml(readStampDateText(report))}</span>
+        </div>` : `
+        <div class="read-stamp-row">
+          <button class="secondary-button" onclick="stampReport('${report.id}')">読了のハンコを押す</button>
+        </div>`}
         <div class="button-row" style="margin-top: 18px;">
           <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
           <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>

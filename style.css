@@ -335,6 +335,49 @@ button {
   color: rgba(57, 39, 25, 0.74);
 }
 
+/* 読了ハンコ（2026-08-06）。押した報告書だけに朱印が残る。
+   ★ 未読の数は出さない（急かす表示にしない）ので、印は「押した側」にしか現れない。 */
+.report-card.stamped::after {
+  content: "読了";
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 5px 7px;
+  border: 2px solid #a8412c;
+  border-radius: 6px;
+  color: #a8412c;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0.78;
+  transform: rotate(-8deg);
+}
+
+.read-stamp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.read-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  /* ★ 一覧の印は紙のカードの上、こちらは暗い背景の上に乗るので朱を明るめに取る */
+  border: 3px solid #d05a41;
+  border-radius: 8px;
+  color: #d05a41;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  opacity: 0.92;
+  transform: rotate(-8deg);
+}
+
 .quest-card,
 .adventurer-card,
 .item-card {
