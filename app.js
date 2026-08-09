@@ -74,6 +74,10 @@ const app = document.getElementById("app");
 const viewTitle = document.getElementById("viewTitle");
 const navButtons = [...document.querySelectorAll(".nav-button")];
 const resetButton = document.getElementById("resetButton");
+// 記録員バッジ（2026-08-09・EX-065）。画面の隅に常時出る世界観内UI。
+const recorderBadgeRoot = document.getElementById("recorderBadgeRoot");
+const recorderBadge = document.getElementById("recorderBadge");
+const recorderBadgeCard = document.getElementById("recorderBadgeCard");
 
 // 成長するのは育成stats（6種）のみ。性格値（memory/caution/courage/kindness/curiosity）は
 // 能力ではなく性格なので成長させない（2026-07-23決定。全員が同じ性格へ収束するのを防ぐ）。
@@ -101,6 +105,10 @@ const PLAYER_PERSONALITIES = [
 ];
 let interviewStep = 0;
 let interviewDraft = { name: "", personality: null };
+// バッジを開いているか／光らせるか。どちらも画面だけの一時状態で保存しない。
+// ★ 光る状態はオープニング再演出のために形だけ用意したもので、今はどこからも on にしていない。
+let recorderBadgeOpen = false;
+let recorderBadgeGlow = false;
 let mockWeather = null;  // Mock検証用: null の場合は totalExpeditions ベースで自動生成
 
 function createInitialState() {
@@ -555,6 +563,7 @@ function saveState() {
 function setRoute(nextRoute) {
   route = nextRoute;
   editingAdventurerId = null;
+  recorderBadgeOpen = false; // 画面を移ったらバッジの紙片は閉じる（開いたまま居座らせない）
   render();
 }
 
@@ -931,9 +940,64 @@ function checkExpeditionCompletion() {
   saveState();
 }
 
+// ── 記録員バッジ（2026-08-09・EX-065）──────────────────────────────────────
+// ★ 常に画面の隅にあること自体が意味を持つ（裏設定側の終了条件）。数字も未読件数も付けない。
+// ★ 出すのは「記録係の名前」と「就任の日付」だけ。気質など他の情報は出さない。
+
+function getAppointedAt() {
+  const value = state.player?.appointedAt;
+  return typeof value === "number" ? value : null;
+}
+
+// 就任日は日付だけ出す（時刻は出さない）。読了ハンコと同じく Asia/Tokyo で固定する。
+function appointedDateText() {
+  const at = getAppointedAt();
+  if (!at) return "";
+  try {
+    return new Date(at).toLocaleDateString("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric", month: "long", day: "numeric"
+    });
+  } catch (_) { return ""; }
+}
+
+function renderRecorderBadge() {
+  if (!recorderBadgeRoot || !recorderBadge || !recorderBadgeCard) return;
+  // 就任前（面接がまだ）はバッジそのものが存在しない。就任と同時に現れる。
+  const appointed = state.player?.interviewDone === true;
+  recorderBadgeRoot.hidden = !appointed;
+  if (!appointed) {
+    recorderBadgeOpen = false;
+    recorderBadgeCard.hidden = true;
+    return;
+  }
+  recorderBadge.classList.toggle("glowing", recorderBadgeGlow);
+  recorderBadge.setAttribute("aria-expanded", recorderBadgeOpen ? "true" : "false");
+  recorderBadgeCard.hidden = !recorderBadgeOpen;
+  if (!recorderBadgeOpen) return;
+  const dateText = appointedDateText();
+  recorderBadgeCard.innerHTML = `
+    <p class="recorder-badge-role">記録員</p>
+    <p class="recorder-badge-name">${escapeHtml(state.player?.name ?? "記録係")}</p>
+    <p class="recorder-badge-date">${dateText ? `就任　${escapeHtml(dateText)}` : ""}</p>
+  `;
+}
+
+function toggleRecorderBadge() {
+  recorderBadgeOpen = !recorderBadgeOpen;
+  renderRecorderBadge();
+}
+
+// オープニング再演出用。★ 今は使わない（形だけ持たせておく）。
+window.setRecorderBadgeGlow = function (on = true) {
+  recorderBadgeGlow = on === true;
+  renderRecorderBadge();
+};
+
 function render() {
   checkExpeditionCompletion();
   clearRecoveredInjuries(); // 回復はオフライン中も進む（絶対時刻で判定するため）
+  renderRecorderBadge(); // ★ 面接のゲートより前に置く（就任前は非表示、就任と同時に出現）
 
   // オープニング面接が未完なら、他の画面より先に面接シーンを出す（ゲート）。
   if (!state.player || !state.player.interviewDone) {
@@ -1060,7 +1124,10 @@ function interviewComplete() {
     personality: interviewDraft.personality,
     personalityLabel: chosen?.label ?? null,
     personalityTags: chosen?.tags ?? [], // ★死蔵（保存されるだけで一度も読まれていない。2026-07-31 の棚卸し）
-    interviewDone: true
+    interviewDone: true,
+    // 就任日（2026-08-09・EX-065）。バッジの表示にしか使わない。
+    // ★ 名簿に書き留めた瞬間＝就任なので、ここ以外では発行しない。
+    appointedAt: Date.now()
   };
   saveState();
   interviewStep = 0;
@@ -6064,6 +6131,21 @@ function generateReport(expedition) {
 navButtons.forEach((button) => {
   button.addEventListener("click", () => setRoute(button.dataset.route));
 });
+
+if (recorderBadge) recorderBadge.addEventListener("click", toggleRecorderBadge);
+
+// 就任日を持たない旧セーブの補完（2026-08-09・EX-065）。
+// ★ 就任の時刻はこれまで記録していないので、既存の項目からは正確には導けない。
+//   最古の報告書の作成日時が唯一の手がかり（就任後に書かれたものなので下限になる）で、
+//   報告書もなければ、この読み込み時刻を就任日として置く。`schemaVersion` は上げない
+//   （項目を1つ足しただけで、上げると報告書も名前も全部消えるため）。
+if (state.player?.interviewDone && typeof state.player.appointedAt !== "number") {
+  const times = state.reports
+    .map((report) => Date.parse(report.createdAt ?? ""))
+    .filter((t) => Number.isFinite(t));
+  state.player.appointedAt = times.length > 0 ? Math.min(...times) : Date.now();
+  saveState();
+}
 
 resetButton.addEventListener("click", () => {
   const ok = confirm("Mockの保存データを初期化しますか？");

@@ -1107,3 +1107,87 @@ hr.soft {
   color: var(--text);
   font-style: italic;
 }
+
+/* 記録員バッジ（2026-08-09・EX-065）
+   ★ 静かな見た目にする。数字も未読件数も光る通知も付けない（急かす表示にしない方針）。
+   ★ 「光る」のはオープニング再演出のときだけで、今はどこからも .glowing を付けていない。 */
+.recorder-badge-root {
+  position: fixed;
+  left: 22px;
+  bottom: 20px;
+  z-index: 30;
+}
+
+.recorder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(21, 16, 13, 0.9);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.recorder-badge:hover {
+  color: var(--text);
+  border-color: rgba(255, 238, 205, 0.32);
+}
+
+.recorder-badge-mark {
+  color: var(--accent);
+}
+
+/* 再演出用。押せることを意識させるだけで、内容は変えない */
+.recorder-badge.glowing {
+  color: var(--text);
+  border-color: var(--accent);
+  animation: recorder-badge-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes recorder-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(224, 186, 117, 0); }
+  50% { box-shadow: 0 0 14px rgba(224, 186, 117, 0.45); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder-badge.glowing {
+    animation: none;
+    box-shadow: 0 0 12px rgba(224, 186, 117, 0.4);
+  }
+}
+
+/* 押したときに出る小さな紙片。名前と就任日だけを載せる */
+.recorder-badge-card {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  min-width: 210px;
+  padding: 14px 18px 16px;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 14px 28px var(--shadow);
+}
+
+.recorder-badge-role {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: rgba(57, 39, 25, 0.62);
+}
+
+.recorder-badge-name {
+  margin: 6px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.recorder-badge-date {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: rgba(57, 39, 25, 0.72);
+}
