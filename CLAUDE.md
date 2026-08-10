@@ -38,6 +38,7 @@
 | `_tasks/完了済み` | `39da8a5dfd4581f3904edda4ad2b0c79` | 完了したタスクページの移動先 |
 | コアコンセプト（正本・最重要） | `3a5a8a5dfd4581a7b73ce0eb6541635e` | 設計思想の正本。改訂注記の書き込み先 |
 | 掴み体験仕様_隊商護衛と戦闘 | `399a8a5dfd4581838726dc8b2de703d3` | 戦闘仕様の検討記録。注記の書き込み先 |
+| 却下案索引（生成物・閲覧用） | `3b8a8a5dfd4581fbabb3ebcf6676c0aa` | **生成物**。`docs/DECISION_LOG.md` から `scripts/gen-rejected-index.js` で作り、session-end ⑤-d で毎回貼り直す |
 
 参照する先（読み取りのみ）：
 
