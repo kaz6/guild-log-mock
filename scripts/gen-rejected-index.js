@@ -147,9 +147,10 @@ entries.forEach((entry) => {
     return;
   }
   const items = splitItems(section);
+  // ★ 「なし（対立案が出なかった）」は却下案ではないので行にしない（一覧には別枠で出す）。
   if (items.length === 0 || (items.length === 1 && /^なし/.test(stripEmphasis(items[0])))) {
     noneStated.push(entry);
-    if (items.length === 0) return;
+    return;
   }
   items.forEach((item) => {
     const { plan, reason, malformed: bad } = splitPlanAndReason(item);
