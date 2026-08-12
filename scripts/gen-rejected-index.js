@@ -178,12 +178,36 @@ doc.push(`- 抽出できた却下案：**${rows.length}件** ／ 「却下した
 doc.push("- ★ **理由は要約していません。** 原文の先頭をそのまま切り出しています（続きがあるものは末尾が `…`）。全文は元エントリを読んでください。");
 doc.push("- 「元エントリの見出し」は `docs/DECISION_LOG.md` 内をそのまま検索できる文字列です（`## 日付: 見出し` の形で載っています）。");
 doc.push("");
-doc.push("| 日付 | 却下した案 | 理由（原文の先頭） | 元エントリの見出し |");
-doc.push("| --- | --- | --- | --- |");
+// ★ 表は年月で割る（2026-08-12・EX-069。それまでは50行固定だった）。
+//   50行固定だと追記のたびに見出し（「1〜50件目」）が変わるうえ、索引を「いつ却下したか」で
+//   引けない。年月なら見出しが動かず、探し方に合う。件数の少ない月は無理に分割しない（1件でも1節）。
+//   ★ 見出しに件数は出さない。出すと追記のたびにその月の見出しが変わり、割り方を変えた意味が薄れる。
+// ※ 月の順は昇順。DECISION_LOG は収載順なので、「## 2026-06-16 裁定・2026-08-04 収載」のような
+//   後から収載されたエントリは裁定の年月の節に入る（月内は収載順のまま）。
+function monthOf(date) {
+  return /^\d{4}-\d{2}/.test(date) ? date.slice(0, 7) : "日付なし";
+}
+const months = [];
+const rowsByMonth = new Map();
 rows.forEach((r) => {
-  doc.push(`| ${r.date} | ${escapeCell(r.plan)} | ${escapeCell(r.reason)} | ${escapeCell(r.title)} |`);
+  const key = monthOf(r.date);
+  if (!rowsByMonth.has(key)) {
+    rowsByMonth.set(key, []);
+    months.push(key);
+  }
+  rowsByMonth.get(key).push(r);
 });
-doc.push("");
+months.sort();
+months.forEach((month) => {
+  doc.push(`## ${month}`);
+  doc.push("");
+  doc.push("| 日付 | 却下した案 | 理由（原文の先頭） | 元エントリの見出し |");
+  doc.push("| --- | --- | --- | --- |");
+  rowsByMonth.get(month).forEach((r) => {
+    doc.push(`| ${r.date} | ${escapeCell(r.plan)} | ${escapeCell(r.reason)} | ${escapeCell(r.title)} |`);
+  });
+  doc.push("");
+});
 doc.push(`## 「却下した案」の項が無いエントリ（${missing.length}件）`);
 doc.push("");
 doc.push("★ **遡って書き足していません。** 無いものは無いままにしてあります（後から書くと、そのとき対立案があったことにされてしまうため）。");
@@ -212,9 +236,10 @@ doc.push("");
 const markdown = doc.join("\n");
 
 // ── Notion 用の変換（gen-notion-spec.js と同じ規約）────────────────────
-// ★ 表は 50行ずつに割る。1つの表にすると1回の書き込みが 4万字を超え、
-//   途中で失敗したときに当たり確認ができないため（割り方を変えたら Notion 側も貼り直す）。
-const NOTION_ROWS_PER_TABLE = 50;
+// ★ 表の割り方は本文側（年月ごとの節）に従う。ここでは割らない
+//   （2026-08-12・EX-069。それまでは Notion 側だけ 50行ずつに割っていた）。
+//   1つの表にまとめない理由は変わらず、1回の書き込みが 4万字を超えると当たり確認ができないため。
+//   ⚠️ 1か月の却下案が増えすぎて1節が 4万字に近づいたら、その月だけ割ることを検討する。
 function isAscii(text) { return !/[^\x00-\x7F]/.test(text); }
 function convertInline(line) {
   return line.replace(/`([^`]+)`/g, (m, inner) => (isAscii(inner) ? m : `「${inner}」`));
@@ -237,22 +262,16 @@ function toNotion(md) {
       i += 2;
       const body = [];
       while (i < lines.length && /^\|/.test(lines[i])) { body.push(cells(lines[i])); i++; }
-      for (let from = 0; from < body.length; from += NOTION_ROWS_PER_TABLE) {
-        const chunk = body.slice(from, from + NOTION_ROWS_PER_TABLE);
-        if (body.length > NOTION_ROWS_PER_TABLE) {
-          out.push(`### ${from + 1}〜${from + chunk.length}件目`);
-        }
-        out.push('<table header-row="true">');
+      out.push('<table header-row="true">');
+      out.push("<tr>");
+      header.forEach((c) => out.push(`<td>${c}</td>`));
+      out.push("</tr>");
+      body.forEach((row) => {
         out.push("<tr>");
-        header.forEach((c) => out.push(`<td>${c}</td>`));
+        row.forEach((c) => out.push(`<td>${c}</td>`));
         out.push("</tr>");
-        chunk.forEach((row) => {
-          out.push("<tr>");
-          row.forEach((c) => out.push(`<td>${c}</td>`));
-          out.push("</tr>");
-        });
-        out.push("</table>");
-      }
+      });
+      out.push("</table>");
       continue;
     }
     if (/^#{2,6} /.test(line)) { out.push(convertInline(line.replace(/^#/, ""))); i++; continue; }
