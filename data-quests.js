@@ -195,8 +195,9 @@ window.masterQuests = [
   },
   {
     id: "quest_herb_delivery",
-    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
-    fieldworkHumanOnly: true,
+    // ★ 担い手に犬を許す（2026-08-18・EX-057 裁定）。においで薬草を見分けるのは犬の領分で、
+    //   むしろエルシーの見せ場。犬が担い手のときは犬固有の文（fieldworkSupportTexts）が出る。
+    //   （2026-08-06 の EX-056 で一度 fieldworkHumanOnly: true を付けたが、犬用の文面が入ったので外した）
     title: "薬草包みの納品",
     category: "輸送",
     danger: "低",

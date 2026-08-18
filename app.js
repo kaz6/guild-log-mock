@@ -6854,8 +6854,16 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     // ★ 担い手は全工程で控える（2026-08-13・EX-057）。宣言のある工程だけ控える形だと
     //   「効いた瞬間」が依頼単位の担い手（fw.support）しか読めず、per-step の humanOnly が
     //   どこにも効かなかった（EX-057 の停止理由の2つ目）。
+    // ★ label と species も運ぶ（2026-08-18・EX-057）。文面の階層（工程固有＞種族固有＞基層）を
+    //   選ぶための材料で、判定には使わない。
     const top = phaseHolders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);
-    if (top) stepLeads.push({ phase, statKey: top.key, id: top.adv.id, name: getDisplayName(top.adv), value: top.value });
+    if (top) {
+      stepLeads.push({
+        phase, statKey: top.key, id: top.adv.id, name: getDisplayName(top.adv), value: top.value,
+        species: top.adv.species ?? null,
+        label: (Array.isArray(quest.fieldworkSteps) ? quest.fieldworkSteps[phase - 1]?.label : null) ?? null
+      });
+    }
     const chance = Math.min(FIELDWORK_TUNING.setbackMax, Math.max(FIELDWORK_TUNING.setbackMin,
       FIELDWORK_TUNING.setbackFloor + (load - stepCapability) / FIELDWORK_TUNING.setbackScale));
     const stalled = random() < chance;
@@ -6896,12 +6904,12 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   //   工程の担い手が主語になる。宣言のない依頼は全工程が同じ担い手なので、従来と同じ人が選ばれる。
   const topLead = stepLeads.reduce((best, s) => (best && best.value >= s.value ? best : s), null);
   const support = setbacks === 0 && topLead
-    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value }
+    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value, species: topLead.species, label: topLead.label }
     : null;
   // ★ lead は support と同じ持ち主を、滞りの有無によらず控えたもの（2026-08-05・EX-053）。
   //   「その工程を誰が担ったか」を書くために要る。新しい値は持たず、上で既に取っている最大値の持ち主を渡すだけ。
   const lead = topLead
-    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value }
+    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value, species: topLead.species, label: topLead.label }
     : null;
   return {
     tier,
@@ -6959,8 +6967,34 @@ function fieldworkLogLines(fw, rng) {
 }
 
 // 誰の力量が支えたか。育成値ごとに言い方を変えるだけで、新しい値は持たない。
+// ★ 階層方式の初適用（2026-08-18・EX-057）。優先順位は 工程固有 > 種族固有 > 基層。
+//   - 工程固有：宣言の label で引く（樽担ぎに警戒の文が続く文脈ずれを直すため）
+//   - 種族固有＋基層：犬が担い手のときは基層＋犬固有のプールから選ぶ
+//   ★ 人間の抽選は従来のまま。基層を人間のプールにも足すと、同じシードで選ばれる文が
+//     変わってしまう（プールの数が変わると pickOne の割り付けがずれる）ため、
+//     基層が実際に抽選へ乗るのは現状犬だけ。「誰でも成立する文」という位置づけは変えない。
 function fieldworkSupportTexts(support) {
   const name = support.name;
+  // ① 工程固有（宣言に label がある工程で、固有文があればそちらを優先）
+  const stepTable = {
+    "樽を担ぐ": [`${name}が樽を担ぎ、休まず酒場から運びきった。`]
+  };
+  if (support.label && stepTable[support.label]) return stepTable[support.label];
+  // ② 種族固有（犬）＋基層。固有文の無い育成値は下の表（基層扱い）へ落ちる
+  if (support.species === "dog") {
+    const dogBase = {
+      exploration: [`${name}が先んじて道を確かめ、一行は迷わずに済んだ。`]
+    };
+    const dogTable = {
+      exploration: [
+        `${name}が鼻先で道を確かめ、一行は迷わずに進んだ。`,
+        `分かれ道では${name}が迷わず片方へ進み、それが正しかった。`,
+        `${name}は時折立ち止まって風の匂いを嗅ぎ、進む先を変えた。遠回りに見えたが、帰りにその理由が分かった。`
+      ]
+    };
+    const pool = [...(dogBase[support.statKey] ?? []), ...(dogTable[support.statKey] ?? [])];
+    if (pool.length > 0) return pool;
+  }
   const table = {
     exploration: [
       `${name}が道と目印を先に読み、どの工程も引き返さずに済んだ。`,
