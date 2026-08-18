@@ -6015,11 +6015,20 @@ function generateReport(expedition) {
     add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
     workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
     // ★ 樽を担ぐ工程は担ぎ手が変わると文が変わる（2026-08-05・EX-053）。
+    let suppressSupportLine = false;
     if (quest.id === "quest_tavern_errand") {
       const barrel = tavernBarrelLine(field.fw, party, rng);
       if (barrel) add("action", barrel);
+      // ★ 樽の行が出た回は工程固有文（「樽を担ぎ、休まず…」）を出さない（2026-08-18・EX-071）。
+      //   同じ事実を二度書く二重行になるため。tendencies 分岐＝担ぎ手の性格が出る側を残す。
+      //   ★ 汎用の衝突検知にはしない（樽の行と工程固有文の個別の衝突。2例目が出てから考える）。
+      //   抽選（pickOne）は既に済んでいるので、ここで落としても乱数の消費は変わらない。
+      suppressSupportLine = Boolean(barrel) && field.fw?.support?.label === "樽を担ぐ";
     }
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => {
+      if (suppressSupportLine && line.support) return;
+      add(line.kind, line.text);
+    });
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
     if (statsLog) add("drama", statsLog);
@@ -6960,8 +6969,10 @@ function fieldworkLogLines(fw, rng) {
   });
   // ★ 効いた瞬間は最も効いた1個だけ（2026-08-04・EX-050／論点3=A）。
   //   支給品が効いた行が既にあるならそれが「効いた瞬間」なので、重ねて書かない。
+  //   `support: true` は「この行が効いた瞬間である」の印（2026-08-18・EX-071）。
+  //   樽の行との二重行を呼び出し側で抑制するために見る。描画は kind/text しか読まない。
   if (fw.support && lines.length === 0) {
-    lines.push({ kind: "action", text: pickOne(fieldworkSupportTexts(fw.support), rng) });
+    lines.push({ kind: "action", text: pickOne(fieldworkSupportTexts(fw.support), rng), support: true });
   }
   return lines;
 }
