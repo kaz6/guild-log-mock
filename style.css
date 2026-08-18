@@ -1191,3 +1191,10 @@ hr.soft {
   font-size: 12px;
   color: rgba(57, 39, 25, 0.72);
 }
+
+/* 行方不明の段階バッジ（2026-08-18・EX-070）。★ 数字は出さず段階の文言だけ。急かす色にしない */
+.status-pill.missing-stage {
+  color: #b6a087;
+  border: 1px solid rgba(182, 160, 135, 0.45);
+  background: rgba(182, 160, 135, 0.12);
+}

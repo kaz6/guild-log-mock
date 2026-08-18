@@ -198,7 +198,7 @@ function mergeMasterList(masterList) {
 
 function mergeAdventurerList(masterList, savedList = []) {
   const savedById = new Map((Array.isArray(savedList) ? savedList : []).map((item) => [item.id, item]));
-  const savedKeys = ["favorite", "memo", "history", "status", "nickname", "injury"]; // injury: 負傷の持続（第3段階）
+  const savedKeys = ["favorite", "memo", "history", "status", "nickname", "injury", "missing"]; // injury: 負傷の持続（第3段階）／missing: 行方不明（EX-070）
   return masterList.map((masterItem) => {
     const saved = savedById.get(masterItem.id) ?? {};
     const savedFields = {};
@@ -711,6 +711,100 @@ function battleCritIdsOf(battle) {
   return battle.members.filter((m) => m.gotCrit).map((m) => m.id);
 }
 
+// ── 行方不明（2026-08-18・EX-070）─────────────────────────────────────────────
+// 発生：戦闘が敗北（defeat／stalemate）で終わったとき、戦闘不能（downed）のままの者だけ（個人単位）。
+// ★ エルシー同行時は発生しない（全員連れ帰る。撤退保証と同じ層＝「深い失敗を浅くする犬」の延長）。
+// ★ 致命（人間全員 downed）は当面対象外＝現行の重症帰還のまま（報告者不在の文面設計が要るため、
+//   対象に含めるかは実例が出てから再裁定）。
+function battleMissingIds(battle, party) {
+  if (!battle) return [];
+  if (battle.outcome !== "defeat" && battle.outcome !== "stalemate") return [];
+  if (partyHasElsie(party)) return [];
+  const downed = battle.members.filter((m) => m.downed);
+  if (downed.length === 0 || downed.length === battle.members.length) return [];
+  return downed.map((m) => m.id);
+}
+
+// 行方不明の行。★ 文面は仮置きの1文・抽選なし（乱数を消費しないので、出ない報告書に影響しない）。
+function missingLineText(missingIds, party) {
+  const names = missingIds
+    .map((id) => { const adv = party.find((a) => a.id === id); return adv ? getDisplayName(adv) : null; })
+    .filter(Boolean).join("と");
+  return `退く途中で${names}の姿を見失った。立っている者だけでは戻って捜せず、${names}を連れ帰れなかった。`;
+}
+
+function applyMissingFromReport(report) {
+  const ids = report?.hiddenTags?.missingIds;
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  const now = Date.now();
+  ids.forEach((advId) => {
+    const adv = getAdventurer(advId);
+    if (!adv || adv.missing) return;
+    // ★ 発生時点では時計を動かさない。起点はプレイヤーが判明した時（revealMissing）。
+    adv.missing = { reportId: report.id, occurredAt: now, revealedAt: null, baseMs: 0, anchorStart: null };
+    adv.status = "行方不明";
+    delete adv.injury; // 手当てを受ける本人がいないので、負傷は持たない
+  });
+}
+
+// 時計：★ 進むのは「進行中の遠征が存在する間」だけ。遠征がなければ止まる。
+// baseMs＝確定済みの行動時間、anchorStart＝いま進行中の区間の開始（絶対時刻）。
+// ★ demo 倍率は掛けない。遠征の完了そのものは加速で早まるので、進む量は自然に短くなる。
+function expeditionRealEndMs(expedition) {
+  return expedition.startTime + expedition.durationMs / getDemoSpeed();
+}
+
+function missingElapsedMs(adv, now = Date.now()) {
+  const m = adv?.missing;
+  if (!m) return 0;
+  let ms = m.baseMs ?? 0;
+  if (m.anchorStart != null && state.expedition) {
+    ms += Math.max(0, Math.min(now, expeditionRealEndMs(state.expedition)) - m.anchorStart);
+  }
+  return ms;
+}
+
+function missingStage(adv, now = Date.now()) {
+  if (!adv?.missing) return null;
+  const ratio = Math.min(1, missingElapsedMs(adv, now) / window.masterMissingClock.limitMs);
+  const stages = window.masterMissingClock.stages;
+  return stages.find((s) => ratio < s.upTo) ?? stages[stages.length - 1];
+}
+
+// 判明＝プレイヤーが報告書か名簿で見た時（2026-08-18 裁定）。★ 保存は呼び出し側が行う。
+function revealMissing(adv, now = Date.now()) {
+  const m = adv?.missing;
+  if (!m || m.revealedAt != null || m.deadAt != null) return false;
+  m.revealedAt = now;
+  // 判明時に別の遠征が進行中ならそこから数え始める。無ければ次の遠征の開始時から（startExpedition）。
+  if (state.expedition && now < expeditionRealEndMs(state.expedition)) m.anchorStart = now;
+  return true;
+}
+
+// 期限が尽きたら死亡へ遷移する（★ 今回は遷移まで。追悼画面は作らない）。
+function settleMissingDeaths(now = Date.now()) {
+  let changed = false;
+  state.adventurers.forEach((adv) => {
+    const m = adv.missing;
+    if (!m || m.deadAt != null) return;
+    if (missingElapsedMs(adv, now) >= window.masterMissingClock.limitMs) {
+      m.deadAt = now;
+      m.anchorStart = null;
+      adv.status = "死亡";
+      changed = true;
+    }
+  });
+  if (changed) saveState();
+}
+
+// ★ 数字の残り時間は出さない。段階（3つ）だけ出す。死亡後は状態ピルが「死亡」を出すので段階は消す。
+function missingBadgeHtml(adventurer) {
+  const m = adventurer.missing;
+  if (!m || m.deadAt != null) return "";
+  const stage = missingStage(adventurer);
+  return stage ? `<span class="status-pill missing-stage">${escapeHtml(stage.label)}</span>` : "";
+}
+
 function injuryBadgeHtml(adventurer) {
   const injury = getActiveInjury(adventurer);
   if (!injury) return "";
@@ -932,11 +1026,22 @@ function checkExpeditionCompletion() {
 
   state.activeResultReportId = report.id;
   applyInjuriesFromReport(report); // 負傷は依頼をまたいで残る（第3段階）
+  // ★ 行方不明の時計は遠征がある間だけ進む。この遠征の完了時点までの分をここで確定する
+  //   （2026-08-18・EX-070。実際の完了時刻＝realEnd を使う。閉じている間に完了していても正しく積む）。
+  const missingRealEnd = expeditionRealEndMs(state.expedition);
+  state.adventurers.forEach((adv) => {
+    const m = adv.missing;
+    if (!m || m.anchorStart == null) return;
+    m.baseMs = (m.baseMs ?? 0) + Math.max(0, missingRealEnd - m.anchorStart);
+    m.anchorStart = null;
+  });
+  applyMissingFromReport(report); // 行方不明は依頼をまたいで残る（EX-070）
   state.expedition.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
-    if (adv) adv.status = "待機中";
+    if (adv && !adv.missing) adv.status = "待機中"; // ★ 行方不明者は「待機中」に戻さない
   });
   state.expedition = null;
+  settleMissingDeaths();
   saveState();
 }
 
@@ -997,6 +1102,7 @@ window.setRecorderBadgeGlow = function (on = true) {
 function render() {
   checkExpeditionCompletion();
   clearRecoveredInjuries(); // 回復はオフライン中も進む（絶対時刻で判定するため）
+  settleMissingDeaths(); // 行方不明の期限切れ→死亡（EX-070。時計は遠征がある間だけ進んでいる）
   renderRecorderBadge(); // ★ 面接のゲートより前に置く（就任前は非表示、就任と同時に出現）
 
   // オープニング面接が未完なら、他の画面より先に面接シーンを出す（ゲート）。
@@ -1457,7 +1563,7 @@ function selectableAdventurerHtml(adventurer) {
         </div>
         <div class="status-pills">
           <span class="status-pill ${disabled ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
-          ${injuryBadgeHtml(adventurer)}
+          ${missingBadgeHtml(adventurer)}${injuryBadgeHtml(adventurer)}
         </div>
       </div>
       <p class="muted">${escapeHtml(adventurer.memo)}</p>
@@ -1527,6 +1633,8 @@ function dispatchSummaryHtml(quest, expeditionBlock = null) {
 }
 
 function renderAdventurers() {
+  // ★ 名簿を見た＝行方不明が判明した（2026-08-18・EX-070。バッジが見えるのがこの画面のため）。
+  if (state.adventurers.some((adv) => revealMissing(adv))) saveState();
   const selected = editingAdventurerId ? getAdventurer(editingAdventurerId) : state.adventurers[0];
   if (!editingAdventurerId) editingAdventurerId = selected?.id;
 
@@ -1565,7 +1673,7 @@ function adventurerListCardHtml(adventurer) {
         </div>
         <div class="status-pills">
           <span class="status-pill ${adventurer.status !== "待機中" ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
-          ${injuryBadgeHtml(adventurer)}
+          ${missingBadgeHtml(adventurer)}${injuryBadgeHtml(adventurer)}
         </div>
       </div>
       <div class="tags">
@@ -2207,6 +2315,11 @@ function startExpedition() {
     departTimeOfDay: departCond.timeOfDay,
     departWeather: departCond.weather
   };
+  // ★ 判明済みの行方不明の時計は、遠征が始まった時から進む（2026-08-18・EX-070）。
+  state.adventurers.forEach((adv) => {
+    const m = adv.missing;
+    if (m && m.deadAt == null && m.revealedAt != null && m.anchorStart == null) m.anchorStart = state.expedition.startTime;
+  });
   selectedQuestId = null;
   selectedAdventurerIds = [];
   selectedAdventurerItems = {};
@@ -2230,6 +2343,8 @@ function openReport(id) {
   const report = state.reports.find((item) => item.id === id);
   if (!report) return;
   report.opened = true;
+  // ★ 報告書を開いた＝行方不明が判明した（2026-08-18・EX-070。名簿で見たときと同じ扱い）。
+  (report.hiddenTags?.missingIds ?? []).forEach((advId) => revealMissing(getAdventurer(advId)));
   if (!report.applied) {
     applyReport(report);
     report.applied = true;
@@ -5430,6 +5545,7 @@ function generateReport(expedition) {
     const battle = simulateBattle(quest, party, itemIds, rng);
     const battleOutcome = battle ? battle.outcome : "victory";
     const won = battleOutcome === "victory";
+    const missingIds = battleMissingIds(battle, party); // 敗北時のみ非空（EX-070）
     const outcomeInfo = questBattleOutcomeText(quest, battleOutcome, party);
 
     const questLogs = hunt
@@ -5455,6 +5571,7 @@ function generateReport(expedition) {
     } else {
       questLogs.forEach((text) => add("action", text));
       dramaLines.forEach((line) => add(line.kind, line.text));
+      if (missingIds.length > 0) add("drama", missingLineText(missingIds, party)); // 連れ帰れなかった（EX-070）
       add("action", outcomeInfo.line);
       add("afterglow", outcomeInfo.after);
     }
@@ -5492,6 +5609,7 @@ function generateReport(expedition) {
         battleOutcome,
         battleHpRatios: battleHpRatiosOf(battle),
         battleCritIds: battleCritIdsOf(battle),
+        ...(missingIds.length > 0 ? { missingIds } : {}),
         recordDensityGain: 1 + logs.length
       },
       ...tensionMeta,
@@ -5734,6 +5852,7 @@ function generateReport(expedition) {
     else if (battle.outcome === "withdraw_emergency" && partyHasElsie(party)) branch = "partial_elsie"; // E2：エルシーの早い警告が退き際を整える
     else if (battle.outcome === "withdraw_emergency") branch = "bail"; // 荷を置いて退く（臨時判断による撤退）
     else branch = "fail";
+    const missingIds = battleMissingIds(battle, party); // 敗北（fail）時のみ非空（EX-070）
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -5752,6 +5871,7 @@ function generateReport(expedition) {
     generateCaravanBattleDramaLog(battle, party, rng).forEach((line) => add(line.kind, line.text));
 
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
+    if (missingIds.length > 0) add("drama", missingLineText(missingIds, party)); // 連れ帰れなかった（EX-070）
     add("action", outcomeInfo.line);
     if (branch === "bail") add("action", `商人は荷の行方を目で追ったまま、しばらく口を開かなかった。`);
     if (branch === "partial_loss" || branch === "partial_elsie") add("action", `商人は減った荷を数え直し、それでも歩みを止めなかった。`);
@@ -5786,7 +5906,7 @@ function generateReport(expedition) {
       tensionValue,
       tensionLevel,
       // battleHpRatios: 帰還時の個人HP率。負傷の確定に使う（第3段階）。エルシーは戦闘のHP管理外なので含まれない。
-      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party), battleHpRatios: battleHpRatiosOf(battle), battleCritIds: battleCritIdsOf(battle) },
+      hiddenTags: { escort: true, caravan: true, battleOutcome: battle ? battle.outcome : "no_enemy", branch, battleGrowth: caravanBattleGrowthSummary(battle, party), battleHpRatios: battleHpRatiosOf(battle), battleCritIds: battleCritIdsOf(battle), ...(missingIds.length > 0 ? { missingIds } : {}) },
       wrapElsie: true
     });
   }
