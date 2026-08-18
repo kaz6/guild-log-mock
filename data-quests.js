@@ -16,11 +16,13 @@ window.masterQuests = [
     area: "ギルドの隣の酒場",
     durationBand: "near_20s",
     // ★ 工程ごとに参照する育成値を宣言する（2026-08-06・EX-054）。
-    //   宣言があると要素数がそのまま工程数になるので、`fieldworkPhases` は要らない。
+    //   ★ 工程数は `fieldworkPhases` が持つ（2026-08-13・EX-057 で宣言と切り離した。
+    //     宣言の要素数では決めない）。この依頼は2工程固定。
     //   「樽を担ぐ」は体力に対応する値として survival を流用する（新設はしない）。
     //   ★ survival は maxHp の元でもあり、体力に対応する育成値は現状これ1つ。
     //   ★ どちらの工程も担い手は人間だけ（2026-08-06・EX-056）。犬は話を通せないし樽も担げない。
     //   力量の計算はこれまでどおりエルシーも数える（外すのは名前が文に出る側だけ）。
+    fieldworkPhases: 2,
     fieldworkSteps: [
       { label: "店主と話を通す", stat: "negotiation", humanOnly: true },
       { label: "樽を担ぐ", stat: "survival", humanOnly: true }

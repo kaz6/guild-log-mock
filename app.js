@@ -6810,18 +6810,19 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   const stamina = {};
   workers.forEach((adv) => { stamina[adv.id] = 100; });
 
-  // ★ 依頼側で工程回数の上限を持てる（2026-08-05・EX-053）。既定は 2〜4 のまま。
-  //   最初のクエストだけ短くするための逃げ道で、値は依頼データが持つ（ロジックに直書きしない）。
-  const phasesMax = Math.max(FIELDWORK_TUNING.phasesMin, quest.fieldworkPhases ?? FIELDWORK_TUNING.phasesMax);
-  const phasesMin = Math.min(FIELDWORK_TUNING.phasesMin, phasesMax);
-  // ★ 工程ごとの宣言（fieldworkSteps）があるときは、その数が工程数になる（2026-08-06・EX-054）。
-  //   宣言がなければ従来どおり乱数で決める＝**宣言のない依頼は乱数の消費も判定式も変わらない**。
-  const declaredSteps = Array.isArray(quest.fieldworkSteps) ? quest.fieldworkSteps.length : 0;
-  const phases = declaredSteps > 0
-    ? declaredSteps
+  // ★ 工程数の決め方と宣言を切り離した（2026-08-13・EX-057）。
+  //   `fieldworkPhases` があればその固定数（乱数を引かない）、無ければ従来どおり乱数 2〜4。
+  //   `fieldworkSteps` は工程ごとの宣言（参照 stat・humanOnly）だけを持ち、**数は決めない**。
+  //   ★ 宣言の要素数で数を決める形（EX-054）だと、乱数で数を決めている依頼に宣言を足した瞬間に
+  //     工程数が固定され、不一致0を保てなかった（EX-057 の停止理由）。
+  //   工程数より宣言が少ない依頼は、余った工程がジャンル表を見る（従来のフォールバックのまま）。
+  const phasesMin = FIELDWORK_TUNING.phasesMin;
+  const phasesMax = FIELDWORK_TUNING.phasesMax;
+  const phases = typeof quest.fieldworkPhases === "number"
+    ? Math.max(1, quest.fieldworkPhases)
     : phasesMin + Math.floor(random() * (phasesMax - phasesMin + 1));
   // その回で実際に見た育成値。★ 成長側はここを読む（対応表を2つに割らないため）。
-  const usedStats = new Set(declaredSteps > 0 ? [] : statKeys);
+  const usedStats = new Set();
   const stepLeads = [];
   let setbacks = 0;
   const causeCount = { weather: 0, fatigue: 0, skill: 0 };
