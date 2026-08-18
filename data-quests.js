@@ -104,6 +104,30 @@ window.masterQuests = [
     outcomes: { full: ["成功", "感謝"], partial: [], fail: ["小さな失敗"] }
   },
   {
+    id: "quest_guild_cleanup",
+    title: "ギルドの掃除",
+    category: "生活",
+    danger: "低",
+    area: "ギルドの中",
+    durationBand: "near_1m",
+    // 解禁位置（案）：「隣の酒場に買い出し」の次の層（結婚式・夕市・夜道と同層）。
+    // 廃屋（達成数2件）より前に出うる。掃除の達成も廃屋の達成数に数えられる。
+    unlockedBy: "quest_tavern_errand",
+    // ★ 本作で唯一、報告書の書き手が受付嬢（アルメナ）になる例外（2026-08-18・EX-064）。
+    //   文は定型で、可変部は参加者の名前だけ（記録係＋出した冒険者＋エルシー。記録係も現場にいる）。
+    //   ★ 語彙の判定・工程エンジン・担い手の選出を使わない。app.js はこの2つの旗で分岐する
+    //   （例外であることがこのデータから読めるようにするための旗。id のハードコードでは分岐しない）。
+    reportAuthor: "receptionist",
+    fixedReport: true,
+    recommended: ["世話焼き", "記録", "慎重"],
+    tags: ["生活", "掃除", "ギルド", "地域"],
+    observationTarget: "なし",
+    // tensionBase を持たせない＝緊張度の抽選も使わない（定型文のため）
+    summary: "ギルドの中をみんなで掃除する。受付嬢が段取りを仕切り、記録係も現場に立つ。",
+    // ★ 結末は1種（定型文なので分岐しない）。ラベルは仮置きで、報告書の文面と一緒に差し替え予定
+    outcomes: { full: ["終了"], partial: [], fail: [] }
+  },
+  {
     id: "quest_old_house_cleanup",
     title: "廃屋の片付け",
     category: "生活",

@@ -327,6 +327,7 @@ function applyGrowthGain(adv, statKey, base, mult) {
 // スライス10：2段成長式（主2.5＋微0.3重複／微0.3）×生還補正×成否補正をパーティ全員に適用する。
 // 主成長セット＝依頼種別のstat ∪ 戦闘での行動stat（hiddenTags.battleGrowth）。エルシーは種別＋微成長のみ。
 function appendGrowthLogToReport(report, expedition) {
+  if (report?.hiddenTags?.fixedReport) return; // ★ 定型報告書（EX-064）には何も足さない（文は定型・可変は名前だけ）
   const quest = getQuest(expedition.questId);
   if (!quest || !report?.logs) return;
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -452,6 +453,7 @@ function insertDramaBeforeOutcome(logs, line) {
 }
 
 function appendPartyBanterToReport(report, expedition) {
+  if (report?.hiddenTags?.fixedReport) return; // ★ 定型報告書（EX-064）には何も足さない（文は定型・可変は名前だけ）
   const quest = getQuest(expedition.questId);
   if (!quest || !report?.logs) return;
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -540,6 +542,7 @@ function generatePresenceLog(adv, quest, rng) {
 }
 
 function appendPresenceLogToReport(report, expedition) {
+  if (report?.hiddenTags?.fixedReport) return; // ★ 定型報告書（EX-064）には何も足さない（文は定型・可変は名前だけ）
   const quest = getQuest(expedition.questId);
   if (!quest || !report?.logs) return;
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -3068,6 +3071,8 @@ function partyInteractionLog(party, quest, rng, tensionValue = 50) {
 function canUseItemInQuest(quest, itemId, weather = null) {
   const allowedByQuest = {
     quest_tavern_errand: ["item_bandage", "item_whistle"],
+    quest_guild_cleanup: [], // ★ ギルド内なので支給品は選べない（持たせる判断が発生しない。EX-064）
+
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
     quest_letter: ["item_map", "item_oilcase"],
@@ -5474,6 +5479,28 @@ function finalizeQuestReport(options) {
   return report;
 }
 
+// 定型報告書の文面（2026-08-18・EX-064）。★ ここに載っている行は「差し替え待ちの印」で、
+//   実際の文面はチャット側が書いて差し替える（停止中）。行の数・並び・可変部の位置は
+//   チャット側の裁定で自由に変えてよい（構造は logs の配列を書き換えるだけ）。
+// 可変トークン：{参加者}＝記録係＋出した冒険者＋エルシーの名前列／{記録係}／{エルシー}／
+//   historyPerAdventurer の {名前}＝その冒険者の表示名。
+const RECEPTIONIST_REPORT_TEMPLATE = {
+  logs: [
+    { kind: "", text: "【文面待ち①：受付嬢の書き出しの行（固定）】" },
+    { kind: "", text: "【文面待ち②：参加者の行（可変：{参加者}）】" },
+    { kind: "action", text: "【文面待ち③：作業の行A（固定）】" },
+    { kind: "action", text: "【文面待ち④：作業の行B（固定）】" },
+    { kind: "drama", text: "【文面待ち⑤：エルシーの行（可変：{エルシー}）】" },
+    { kind: "drama", text: "【文面待ち⑥：記録係への一言の行（可変：{記録係}）】" },
+    { kind: "afterglow", text: "【文面待ち⑦：結びの行（固定）】" }
+  ],
+  result: "終了", // 仮ラベル（成長・履歴の段階判定は outcomes.full に載せた同じ語で「完全」扱い）
+  summary: "【文面待ち⑧：帰還カードと報告書一覧に出る要約（1文）】",
+  historyLine: "【文面待ち⑨：ギルドの記録に残る1文】",
+  historyPerAdventurer: "【文面待ち⑩：名簿の履歴行（可変：{名前}）】",
+  highlight: "【文面待ち⑪：今回のハイライト（1文）】"
+};
+
 function generateReport(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
@@ -5492,6 +5519,53 @@ function generateReport(expedition) {
   const tensionMeta = tensionLevel != null ? { tensionValue, tensionLevel } : {};
   const logs = [];
   const add = (kind, text) => logs.push({ kind, text });
+
+  // ── 定型報告書（2026-08-18・EX-064）─────────────────────────────────────
+  // ★ 本作で唯一、書き手が受付嬢になる例外。データの旗（fixedReport / reportAuthor）で分岐し、
+  //   id のハードコードでは分岐しない。語彙の判定・工程エンジン・担い手の選出・緊張度・
+  //   presence／掛け合い／成長ログのどれも使わない。文は定型で、可変部は参加者の名前だけ。
+  if (quest.fixedReport) {
+    // 参加者＝記録係＋出した冒険者＋エルシー。★ エルシーはギルド犬＝ギルドに常駐しているので、
+    //   編成に入れていなくても名を連ねる（入れていれば重複させない）。
+    const keeperName = state.player?.name ?? "記録係";
+    const elsieName = getDisplayName(getAdventurer("adv_elsie") ?? { name: "エルシー" });
+    const humanNames = party.filter((a) => isHumanAdventurer(a)).map((a) => getDisplayName(a));
+    const participantNames = [keeperName, ...humanNames, elsieName].join("、");
+
+    // ★★ 文面はチャット側が書く（EX-064・停止中）。下の各行は「差し替え待ちの印」であって仮文ではない。
+    //   構造：{ kind, text } の配列。text の中の {参加者}｛記録係}{エルシー} を実名に置き換える。
+    const template = RECEPTIONIST_REPORT_TEMPLATE;
+    const fill = (text) => text
+      .replaceAll("{参加者}", participantNames)
+      .replaceAll("{記録係}", keeperName)
+      .replaceAll("{エルシー}", elsieName);
+    template.logs.forEach((line) => add(line.kind, fill(line.text)));
+
+    const adventurerHistoryLines = {};
+    party.forEach((adv) => {
+      adventurerHistoryLines[adv.id] = fill(template.historyPerAdventurer).replaceAll("{名前}", getDisplayName(adv));
+    });
+
+    return {
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: template.result,
+      summary: fill(template.summary),
+      historyLine: fill(template.historyLine),
+      adventurerHistoryLines,
+      logs,
+      observationNotes: null,
+      departConditions,
+      highlight: fill(template.highlight),
+      hiddenTags: { fixedReport: true, reportAuthor: quest.reportAuthor ?? null, recordDensityGain: 1 + logs.length },
+      createdAt: new Date().toISOString()
+    };
+  }
 
   if (quest.id === "quest_lingering_light") {
     const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
