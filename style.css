@@ -335,6 +335,49 @@ button {
   color: rgba(57, 39, 25, 0.74);
 }
 
+/* 読了ハンコ（2026-08-06）。押した報告書だけに朱印が残る。
+   ★ 未読の数は出さない（急かす表示にしない）ので、印は「押した側」にしか現れない。 */
+.report-card.stamped::after {
+  content: "読了";
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 5px 7px;
+  border: 2px solid #a8412c;
+  border-radius: 6px;
+  color: #a8412c;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0.78;
+  transform: rotate(-8deg);
+}
+
+.read-stamp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.read-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  /* ★ 一覧の印は紙のカードの上、こちらは暗い背景の上に乗るので朱を明るめに取る */
+  border: 3px solid #d05a41;
+  border-radius: 8px;
+  color: #d05a41;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  opacity: 0.92;
+  transform: rotate(-8deg);
+}
+
 .quest-card,
 .adventurer-card,
 .item-card {
@@ -483,6 +526,31 @@ button {
 
 .status-pill.good {
   background: var(--success);
+}
+
+/* 負傷バッジ（第3段階）。編成では無効化せず、状態だけ見せる。 */
+.status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.status-pill.injury-light {
+  background: #ffa94d;
+}
+
+.status-pill.injury-severe {
+  background: #ff6b5b;
+}
+
+.depart-refusal {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-left: 3px solid #ff6b5b;
+  background: var(--paper-2);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .form-row {
@@ -1038,4 +1106,95 @@ hr.soft {
   line-height: 1.8;
   color: var(--text);
   font-style: italic;
+}
+
+/* 記録員バッジ（2026-08-09・EX-065）
+   ★ 静かな見た目にする。数字も未読件数も光る通知も付けない（急かす表示にしない方針）。
+   ★ 「光る」のはオープニング再演出のときだけで、今はどこからも .glowing を付けていない。 */
+.recorder-badge-root {
+  position: fixed;
+  left: 22px;
+  bottom: 20px;
+  z-index: 30;
+}
+
+.recorder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(21, 16, 13, 0.9);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.recorder-badge:hover {
+  color: var(--text);
+  border-color: rgba(255, 238, 205, 0.32);
+}
+
+.recorder-badge-mark {
+  color: var(--accent);
+}
+
+/* 再演出用。押せることを意識させるだけで、内容は変えない */
+.recorder-badge.glowing {
+  color: var(--text);
+  border-color: var(--accent);
+  animation: recorder-badge-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes recorder-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(224, 186, 117, 0); }
+  50% { box-shadow: 0 0 14px rgba(224, 186, 117, 0.45); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder-badge.glowing {
+    animation: none;
+    box-shadow: 0 0 12px rgba(224, 186, 117, 0.4);
+  }
+}
+
+/* 押したときに出る小さな紙片。名前と就任日だけを載せる */
+.recorder-badge-card {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  min-width: 210px;
+  padding: 14px 18px 16px;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 14px 28px var(--shadow);
+}
+
+.recorder-badge-role {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: rgba(57, 39, 25, 0.62);
+}
+
+.recorder-badge-name {
+  margin: 6px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.recorder-badge-date {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: rgba(57, 39, 25, 0.72);
+}
+
+/* 行方不明の段階バッジ（2026-08-18・EX-070）。★ 数字は出さず段階の文言だけ。急かす色にしない */
+.status-pill.missing-stage {
+  color: #b6a087;
+  border: 1px solid rgba(182, 160, 135, 0.45);
+  background: rgba(182, 160, 135, 0.12);
 }

@@ -48,10 +48,24 @@
     </main>
   </div>
 
+  <!-- 記録員バッジ（2026-08-09・EX-065）。★ 就任前は出さない（本当のオープニングには無い）。
+       押すと記録係の名前と就任の日付だけを出す。数字も通知も付けない。 -->
+  <div id="recorderBadgeRoot" class="recorder-badge-root" hidden>
+    <div id="recorderBadgeCard" class="recorder-badge-card" role="dialog" aria-label="記録員バッジ" hidden></div>
+    <button id="recorderBadge" class="recorder-badge" type="button" aria-expanded="false">
+      <span class="recorder-badge-mark" aria-hidden="true">✦</span>
+      <span>記録員</span>
+    </button>
+  </div>
+
+  <script src="data-time.js"></script>
   <script src="data-adventurers.js"></script>
   <script src="data-items.js"></script>
   <script src="data-enemies.js"></script>
   <script src="data-quests.js"></script>
+  <script src="data-outcomes.js"></script>
+  <!-- 判定用語彙（2026-08-06・EX-061）。★ 定義と付与だけで、まだどこからも読んでいない -->
+  <script src="data-vocab.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,31 +1,75 @@
+// outcomes：その依頼で起こりうる結末の候補（2026-08-01・段階①でコードからここへ移した）。
+// 完遂（full）／部分（partial）／未達（fail）の3段階で持つ。工程エンジンの結果の段階と同じ形なので、
+// 結末と段階の対応表を別に持たなくてよい（app.js の GROWTH_TIER_BY_RESULT はここから作られる）。
+// fail が空の依頼は、未達のとき共通の「引き返し」に落ちる。
+// 並び順は移行前のコードのままにしてある（同じ乱数で同じ結末になるため）。
 window.masterQuests = [
   {
+    // ★ 最初のクエスト（2026-08-05・EX-053）。記録係の就任祝いの酒樽を買いに行く。
+    //   初期公開はこの1件だけで、クリアすると結婚式・夕市・夜道が開く。
+    //   ★ 金額は出さない（所持金の実装は別タスク）。酒場はギルド内画面として持たず、
+    //   画面外の場所としてログと会話の中にだけ出す。
+    id: "quest_tavern_errand",
+    title: "隣の酒場に買い出し",
+    category: "生活",
+    danger: "低",
+    area: "ギルドの隣の酒場",
+    durationBand: "near_20s",
+    // ★ 工程ごとに参照する育成値を宣言する（2026-08-06・EX-054）。
+    //   ★ 工程数は `fieldworkPhases` が持つ（2026-08-13・EX-057 で宣言と切り離した。
+    //     宣言の要素数では決めない）。この依頼は2工程固定。
+    //   「樽を担ぐ」は体力に対応する値として survival を流用する（新設はしない）。
+    //   ★ survival は maxHp の元でもあり、体力に対応する育成値は現状これ1つ。
+    //   ★ どちらの工程も担い手は人間だけ（2026-08-06・EX-056）。犬は話を通せないし樽も担げない。
+    //   力量の計算はこれまでどおりエルシーも数える（外すのは名前が文に出る側だけ）。
+    fieldworkPhases: 2,
+    fieldworkSteps: [
+      { label: "店主と話を通す", stat: "negotiation", humanOnly: true },
+      { label: "樽を担ぐ", stat: "survival", humanOnly: true }
+    ],
+    recommended: ["豪胆", "世話焼き", "慎重"],
+    tags: ["生活", "買い出し", "運搬", "酒場", "祝い"],
+    observationTarget: "なし",
+    tensionBase: 10,
+    tensionRange: 10,
+    summary: "記録係の就任祝いに出す酒樽を、ギルドの隣の酒場まで買いに行く。代金はギルドの財布から出る。",
+    outcomes: { full: ["成功", "上機嫌"], partial: ["寄り道"], fail: ["出直し"] }
+  },
+  {
     id: "quest_herb",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "森の薬草採集",
     category: "探索",
     danger: "低",
     area: "薄明の森",
     durationBand: "short_1h",
+    unlockedBy: "quest_signpost",
     recommended: ["斥候", "薬草師"],
     tags: ["探索", "採集", "観察"],
     observationTarget: "森喰い兎",
     tensionBase: 25,
     tensionRange: 20,
-    summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。"
+    summary: "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。",
+    outcomes: { full: ["成功", "採集優先", "観察優先"], partial: ["小成功"], fail: [] }
   },
   {
     id: "quest_signpost",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "古い道標の確認",
     category: "探索",
     danger: "低",
     area: "古い街道",
     durationBand: "short_30m",
+    unlockedBy: "quest_old_house_cleanup",
     recommended: ["斥候"],
     tags: ["探索", "街道", "記録"],
     observationTarget: "なし",
     tensionBase: 18,
     tensionRange: 16,
-    summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。"
+    summary: "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。",
+    outcomes: { full: ["成功"], partial: ["応急処置", "照合保留", "再確認"], fail: [] }
   },
   {
     id: "quest_letter",
@@ -34,12 +78,14 @@ window.masterQuests = [
     danger: "低",
     area: "雨待ちの街道",
     durationBand: "short_1h",
+    unlockedBy: "quest_herb_delivery",
     recommended: ["慎重", "郵便配達人"],
     tags: ["生活", "配達", "記録"],
     observationTarget: "なし",
     tensionBase: 16,
     tensionRange: 14,
-    summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。"
+    summary: "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。",
+    outcomes: { full: ["成功", "持ち帰り"], partial: ["再配達", "部分成功"], fail: [] }
   },
   {
     id: "quest_wedding_support",
@@ -48,12 +94,38 @@ window.masterQuests = [
     danger: "低",
     area: "町の小さな祝宴会場",
     durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["世話焼き", "郵便配達人", "豪胆"],
     tags: ["生活", "祝宴", "運搬", "案内", "地域"],
     observationTarget: "なし",
     tensionBase: 15,
     tensionRange: 15,
-    summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。"
+    summary: "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。",
+    outcomes: { full: ["成功", "感謝"], partial: [], fail: ["小さな失敗"] }
+  },
+  {
+    id: "quest_guild_cleanup",
+    title: "ギルドの掃除",
+    category: "生活",
+    danger: "低",
+    area: "ギルドの中",
+    durationBand: "near_1m",
+    // 解禁位置（案）：「隣の酒場に買い出し」の次の層（結婚式・夕市・夜道と同層）。
+    // 廃屋（達成数2件）より前に出うる。掃除の達成も廃屋の達成数に数えられる。
+    unlockedBy: "quest_tavern_errand",
+    // ★ 本作で唯一、報告書の書き手が受付嬢（アルメナ）になる例外（2026-08-18・EX-064）。
+    //   文は定型で、可変部は参加者の名前だけ（記録係＋出した冒険者＋エルシー。記録係も現場にいる）。
+    //   ★ 語彙の判定・工程エンジン・担い手の選出を使わない。app.js はこの2つの旗で分岐する
+    //   （例外であることがこのデータから読めるようにするための旗。id のハードコードでは分岐しない）。
+    reportAuthor: "receptionist",
+    fixedReport: true,
+    recommended: ["世話焼き", "記録", "慎重"],
+    tags: ["生活", "掃除", "ギルド", "地域"],
+    observationTarget: "なし",
+    // tensionBase を持たせない＝緊張度の抽選も使わない（定型文のため）
+    summary: "ギルドの中をみんなで掃除する。受付嬢が段取りを仕切り、記録係も現場に立つ。",
+    // ★ 結末は1種（定型文なので分岐しない）。ラベルは仮置きで、報告書の文面と一緒に差し替え予定
+    outcomes: { full: ["終了"], partial: [], fail: [] }
   },
   {
     id: "quest_old_house_cleanup",
@@ -62,12 +134,16 @@ window.masterQuests = [
     danger: "低",
     area: "町外れの古い家屋",
     durationBand: "near_1m",
+    // ★ 解禁は達成数で持つ（2026-08-06）。どのクエストを終えたかは問わず、2件終えたら出る＝3回目に選べる。
+    //   `unlockedBy`（特定の依頼を終えたら開く）とは別の条件で、両方あるときは両方満たしたときだけ開く。
+    unlockedAfterCount: 2,
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
     tensionBase: 28,
     tensionRange: 20,
-    summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。"
+    summary: "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。",
+    outcomes: { full: ["成功", "整理完了"], partial: ["一部保留"], fail: [] }
   },
   {
     id: "quest_field_mystery",
@@ -76,12 +152,16 @@ window.masterQuests = [
     danger: "低",
     area: "村はずれの畑",
     durationBand: "short_30m",
+    unlockedBy: "quest_signpost",
     recommended: ["戦士", "慎重", "観察"],
     tags: ["戦闘", "追い払い", "未同定", "畑"],
     observationTarget: "「なにか」",
     tensionBase: 45,
     tensionRange: 15,
-    summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。"
+    enemyId: "enemy_field_pest",
+    battleEffectiveItemIds: ["item_bandage"],
+    summary: "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。",
+    outcomes: { full: ["追い払い"], partial: ["追い払い中止"], fail: ["追い払い失敗"] }
   },
   {
     id: "quest_barn_bite",
@@ -90,83 +170,107 @@ window.masterQuests = [
     danger: "中",
     area: "古い納屋",
     durationBand: "short_1h",
+    unlockedBy: "quest_field_mystery",
     recommended: ["戦士", "豪胆", "観察"],
     tags: ["戦闘", "討伐", "未同定", "納屋"],
     observationTarget: "嚙みつく「なにか」",
     tensionBase: 72,
     tensionRange: 18,
     enemyId: "enemy_barn_biter",
-    summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。"
+    battleEffectiveItemIds: ["item_bandage"],
+    summary: "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。",
+    outcomes: { full: ["討伐"], partial: ["討伐中止"], fail: ["討伐失敗"] }
   },
   {
     id: "quest_old_bridge_repair",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "古い小橋の応急修理",
     category: "保全",
     danger: "低",
     area: "村はずれの小川",
     durationBand: "short_30m",
+    unlockedBy: "quest_evening_market_escort",
     recommended: ["戦士", "慎重", "見習い盾役"],
     tags: ["保全", "修繕", "水辺", "足場", "応急処置", "地域"],
     observationTarget: "なし",
     tensionBase: 30,
     tensionRange: 20,
-    summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。"
+    summary: "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。",
+    outcomes: { full: ["応急修理", "通行可"], partial: ["一部保留"], fail: [] }
   },
   {
     id: "quest_church_patrol",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "辺境教会周辺の定期巡回",
     category: "保全",
     danger: "低",
     area: "辺境教会の外縁",
     durationBand: "mid_2h",
+    unlockedBy: "quest_old_bridge_repair",
     recommended: ["斥候", "慎重", "見習い盾役"],
     tags: ["保全", "巡回", "安全確認", "定期", "地域", "辺境教会", "祈り場"],
     observationTarget: "なし",
     tensionBase: 20,
     tensionRange: 15,
-    summary: "辺境教会の周辺を巡回し、道、柵、鐘楼、花壇、礼拝堂外縁に異常がないか確認する。最近、夜明け前に小さな灯りを見たという話がある。"
+    summary: "辺境教会の周辺を巡回し、道、柵、鐘楼、花壇、礼拝堂外縁に異常がないか確認する。最近、夜明け前に小さな灯りを見たという話がある。",
+    outcomes: { full: ["異常なし", "軽微な対処"], partial: ["要再確認", "小さな違和感"], fail: [] }
   },
   {
     id: "quest_herb_delivery",
+    // ★ 担い手に犬を許す（2026-08-18・EX-057 裁定）。においで薬草を見分けるのは犬の領分で、
+    //   むしろエルシーの見せ場。犬が担い手のときは犬固有の文（fieldworkSupportTexts）が出る。
+    //   （2026-08-06 の EX-056 で一度 fieldworkHumanOnly: true を付けたが、犬用の文面が入ったので外した）
     title: "薬草包みの納品",
     category: "輸送",
     danger: "低",
     area: "雨待ちの街道",
     durationBand: "short_30m",
+    unlockedBy: "quest_wedding_support",
     recommended: ["薬草師", "斥候", "慎重"],
     tags: ["輸送", "配達", "薬草", "街道", "壊れ物", "地域"],
     observationTarget: "なし",
     tensionBase: 28,
     tensionRange: 22,
-    summary: "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。"
+    summary: "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。",
+    outcomes: { full: ["納品完了", "時刻内納品"], partial: ["一部注意"], fail: [] }
   },
   {
     id: "quest_missing_herbalist",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "帰ってこない薬草採りの確認",
     category: "救助",
     danger: "中",
     area: "薄明の森の浅瀬",
     durationBand: "mid_2h",
+    unlockedBy: "quest_barn_bite",
     recommended: ["斥候", "薬草師", "慎重"],
     tags: ["救助", "捜索", "薬草", "森", "足跡", "帰還", "地域"],
     observationTarget: "なし",
     tensionBase: 58,
     tensionRange: 28,
-    summary: "朝に薬草を採りに出た村人が、夕方になっても戻らない。森の浅い場所を確認し、必要なら保護して連れ帰る。"
+    summary: "朝に薬草を採りに出た村人が、夕方になっても戻らない。森の浅い場所を確認し、必要なら保護して連れ帰る。",
+    outcomes: { full: ["保護", "発見"], partial: ["痕跡確認"], fail: [] }
   },
   {
     id: "quest_evening_market_escort",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "夕市帰りの親子の付き添い",
     category: "護衛",
     danger: "低",
     area: "夕暮れの街道",
     durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["見習い盾役", "斥候", "慎重"],
     tags: ["護衛", "付き添い", "夕方", "街道", "親子", "地域", "帰還"],
     observationTarget: "なし",
     tensionBase: 42,
     tensionRange: 25,
-    summary: "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。"
+    summary: "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。",
+    outcomes: { full: ["無事帰宅", "安全確認"], partial: ["遠回り帰宅"], fail: [] }
   },
   {
     id: "quest_caravan_escort",
@@ -175,6 +279,7 @@ window.masterQuests = [
     danger: "中",
     area: "生活圏の外縁を抜ける街道",
     durationBand: "mid_3h",
+    unlockedBy: "quest_barn_bite",
     recommended: ["戦士", "見習い盾役", "斥候"],
     tags: ["護衛", "隊商", "戦闘", "街道", "撤退判断", "掴み"],
     observationTarget: "なし",
@@ -182,10 +287,15 @@ window.masterQuests = [
     tensionRange: 25,
     enemyId: "enemy_road_raiders",
     battleEffectiveItemIds: ["item_bandage"],
-    summary: "生活圏の外縁を抜ける隊商を護る。道中で野盗に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。"
+    summary: "生活圏の外縁を抜ける隊商を護る。道中で野盗に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。",
+    // ★ 交戦回避（依頼未達）は未達（2026-08-01・段階4で直した）。挑まずに隊商ごと引き返した回で、
+    //   名前のとおり依頼を達していない。移行前は登録漏れで完全成功として成長計算されていた。
+    outcomes: { full: ["護衛成功", "護衛成功（負傷）"], partial: ["隊商通過（遅延あり）", "隊商通過（荷の一部損失）"], fail: ["荷を置いて撤退", "護衛失敗", "交戦回避（依頼未達）"] }
   },
   {
     id: "quest_caravan_search",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "隊商の緊急捜索",
     category: "捜索",
     danger: "中",
@@ -197,10 +307,18 @@ window.masterQuests = [
     tensionBase: 50,
     tensionRange: 25,
     hidden: true,
-    summary: "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。"
+    summary: "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。",
+    // 結末は工程ではなく編成で決まる例外。上から順に見て、当たった最初のものを採る。
+    outcomeOverride: {
+      rules: [{ when: ["斥候かエルシーがいる"], outcome: "隊商奪還" }],
+      default: "手がかりのみ"
+    },
+    outcomes: { full: ["隊商奪還"], partial: ["手がかりのみ"], fail: [] }
   },
   {
     id: "quest_caravan_lastchance",
+    // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
+    fieldworkHumanOnly: true,
     title: "最後の手がかり",
     category: "捜索",
     danger: "高",
@@ -212,7 +330,13 @@ window.masterQuests = [
     tensionBase: 60,
     tensionRange: 25,
     hidden: true,
-    summary: "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。"
+    summary: "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。",
+    // 結末は工程ではなく編成で決まる例外（捜索チェーンの2段目）。
+    outcomeOverride: {
+      rules: [{ when: ["斥候かエルシーがいる"], outcome: "辛くも奪還" }],
+      default: "隊商喪失"
+    },
+    outcomes: { full: [], partial: ["辛くも奪還"], fail: ["隊商喪失"] }
   },
   {
     id: "quest_old_stele_rubbing",
@@ -221,12 +345,14 @@ window.masterQuests = [
     danger: "低",
     area: "旧街道脇の石碑",
     durationBand: "short_30m",
+    unlockedBy: "quest_lingering_light",
     recommended: ["斥候", "薬草師", "慎重"],
     tags: ["記録", "石碑", "拓本", "旧街道", "文字", "歴史", "地域"],
     observationTarget: "なし",
     tensionBase: 34,
     tensionRange: 24,
-    summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。"
+    summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。",
+    outcomes: { full: ["拓本完了", "保存優先"], partial: ["一部判読"], fail: [] }
   },
   {
     id: "quest_lingering_light",
@@ -235,11 +361,24 @@ window.masterQuests = [
     danger: "低",
     area: "村はずれの道",
     durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
     recommended: ["慎重", "記録", "観察"],
     tags: ["調査", "夜道", "怪異", "記録"],
     observationTarget: "残る灯り",
     tensionBase: 62,
     tensionRange: 28,
-    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。"
+    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。",
+    // ★ この依頼だけ、結末が時間帯と支給品で決まる（工程も戦闘も通らない）。
+    //   例外であることが、このデータを見て分かるようにしてある。
+    outcomeOverride: {
+      rules: [
+        { when: ["夜である", "ランタンを持っている"], outcome: "調査成功" },
+        { when: ["夜である"], outcome: "確認のみ" }
+      ],
+      default: "異常なし"
+    },
+    // ★ 確認のみは部分（2026-08-01・段階4で直した）。灯りは見たが接近調査はしていない。
+    //   2026-07-31 に一度登録した値を、共通経路から外したときに一緒に消してしまっていた。
+    outcomes: { full: ["異常なし", "調査成功"], partial: ["確認のみ"], fail: [] }
   }
 ];
