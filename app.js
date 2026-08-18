@@ -6840,17 +6840,22 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     //   宣言がなければ冒頭で1回だけ計算した capability をそのまま使う（従来どおり）。
     const stepStats = fieldworkStepStats(quest, phase);
     let stepCapability = capability;
+    let phaseHolders = holders; // 宣言のない工程の担い手＝依頼単位の持ち主（humanOnly も依頼単位と同じ）
     if (stepStats) {
       const got = capabilityForStats(stepStats, party, { humanOnly: fieldworkStepHumanOnly(quest, phase) });
       stepCapability = got.capability;
+      phaseHolders = got.holders;
       stepStats.forEach((k) => usedStats.add(k));
-      const top = got.holders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);
-      if (top) stepLeads.push({ phase, statKey: top.key, id: top.adv.id, name: getDisplayName(top.adv), value: top.value });
     } else {
       // 宣言のない工程はジャンル表を見ている。★ 使ったものとして記録する
       //   （「伸びる stat ＝ 使う stat」。宣言と無宣言が混ざった依頼で漏れないように）。
       statKeys.forEach((k) => usedStats.add(k));
     }
+    // ★ 担い手は全工程で控える（2026-08-13・EX-057）。宣言のある工程だけ控える形だと
+    //   「効いた瞬間」が依頼単位の担い手（fw.support）しか読めず、per-step の humanOnly が
+    //   どこにも効かなかった（EX-057 の停止理由の2つ目）。
+    const top = phaseHolders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);
+    if (top) stepLeads.push({ phase, statKey: top.key, id: top.adv.id, name: getDisplayName(top.adv), value: top.value });
     const chance = Math.min(FIELDWORK_TUNING.setbackMax, Math.max(FIELDWORK_TUNING.setbackMin,
       FIELDWORK_TUNING.setbackFloor + (load - stepCapability) / FIELDWORK_TUNING.setbackScale));
     const stalled = random() < chance;
@@ -6887,14 +6892,16 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   // ★ 効いた瞬間（2026-08-04・EX-050）：一つも滞らなかったとき、誰の力量が支えたかを控える。
   //   戦闘の「防げた瞬間」と同じ考えで、**既にある事実を拾うだけ**。滞りが出た回は
   //   そちらが書くべき変化なので控えない（畑で「深手が出た戦闘では書かない」としたのと同じ）。
-  const topHolder = holders.reduce((best, h) => (best && best.value >= h.value ? best : h), null);
-  const support = setbacks === 0 && topHolder
-    ? { statKey: topHolder.key, id: topHolder.adv.id, name: getDisplayName(topHolder.adv), value: topHolder.value }
+  // ★ 担い手は工程単位（stepLeads）から採る（2026-08-13・EX-057）。最も効いた（値が最大の）
+  //   工程の担い手が主語になる。宣言のない依頼は全工程が同じ担い手なので、従来と同じ人が選ばれる。
+  const topLead = stepLeads.reduce((best, s) => (best && best.value >= s.value ? best : s), null);
+  const support = setbacks === 0 && topLead
+    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value }
     : null;
   // ★ lead は support と同じ持ち主を、滞りの有無によらず控えたもの（2026-08-05・EX-053）。
   //   「その工程を誰が担ったか」を書くために要る。新しい値は持たず、上で既に取っている最大値の持ち主を渡すだけ。
-  const lead = topHolder
-    ? { statKey: topHolder.key, id: topHolder.adv.id, name: getDisplayName(topHolder.adv), value: topHolder.value }
+  const lead = topLead
+    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value }
     : null;
   return {
     tier,
