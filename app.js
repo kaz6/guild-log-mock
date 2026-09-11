@@ -6960,21 +6960,53 @@ const FIELDWORK_TUNING = {
 //   犬に「読む」「手当てを整える」等をさせないためで、除外するのは**名前が文に出る側**だけ。
 function capabilityForStats(statKeys, party, options = {}) {
   const humanOnly = options.humanOnly === true;
+  // ★ 判定用語彙のフィルタ（2026-09-11・EX-074。EX-061 から続く接続の第一段）。
+  //   工程の行為（How）の語を持つ者だけを担い手の候補にする。
+  //   ★ 力量（capability）には一切効かせない。絞るのは担い手＝名前が文に出る側だけ（EX-056 と同型）。
+  //   ★ 向き（dir）は見ない。苦手（−）を持つ者も候補に残す
+  //     （「苦手な人がやってしまった」報告書に価値があるため。− は文面の選択にだけ使う）。
+  //   ★ 対象（What）は問わない。行為が一致すれば候補。
+  //   ★ 語を持つ者が0人なら絞らない（現状どおり全員から選ぶ）。
+  const acts = Array.isArray(options.acts) && options.acts.length > 0 ? options.acts : null;
+  const eligible = party.filter((adv) => !humanOnly || isHumanAdventurer(adv));
+  const spoken = acts ? eligible.filter((adv) => hasVocabAct(adv, acts)) : [];
+  const candidates = spoken.length > 0 ? spoken : eligible;
   const holders = [];
   const total = statKeys.reduce((sum, key) => {
     let best = 0;
-    let holder = null;
-    let holderValue = 0;
     party.forEach((adv) => {
       const value = adv.stats?.[key] ?? 0;
-      if (value > best) best = value; // 力量はこれまでどおり（犬も数える）
-      if (humanOnly && !isHumanAdventurer(adv)) return;
+      if (value > best) best = value; // 力量はこれまでどおり（犬も数える・絞り込みの影響を受けない）
+    });
+    let holder = null;
+    let holderValue = 0;
+    candidates.forEach((adv) => {
+      const value = adv.stats?.[key] ?? 0;
       if (value > holderValue) { holderValue = value; holder = adv; }
     });
     if (holder) holders.push({ key, adv: holder, value: holderValue });
     return sum + best;
   }, 0);
-  return { capability: statKeys.length > 0 ? total / statKeys.length : 0, holders };
+  // vocabFiltered＝語で実際に絞れたか（false なら語を持つ者が0人でフォールバックした）
+  return { capability: statKeys.length > 0 ? total / statKeys.length : 0, holders, vocabFiltered: spoken.length > 0 };
+}
+
+// 工程の行為の語。★ data-vocab.js の questSteps はその依頼の工程を順番に並べた表で、
+//   工程エンジンはその順に回すので、phase N の語は questSteps[N-1] を見る。
+//   宣言が無い／その位置に工程が無い／語が空 のときは null を返し、呼び出し側は絞らない。
+function fieldworkStepActs(quest, phase) {
+  const steps = window.masterVocab?.questSteps?.[quest?.id];
+  if (!Array.isArray(steps)) return null;
+  const acts = steps[phase - 1]?.acts;
+  if (!Array.isArray(acts) || acts.length === 0) return null;
+  return acts;
+}
+
+// その者がその行為の語を持っているか。★ 向き（dir）も対象（targets）も見ない。
+function hasVocabAct(adventurer, acts) {
+  const entries = window.masterVocab?.adventurers?.[adventurer?.id];
+  if (!Array.isArray(entries)) return false;
+  return entries.some((e) => Array.isArray(e.acts) && e.acts.some((a) => acts.includes(a)));
 }
 
 // 工程の宣言（quest.fieldworkSteps）を読む。宣言がなければ null を返し、
@@ -7069,13 +7101,25 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     // ★ 工程ごとに参照する育成値を切り替える（2026-08-06・EX-054）。
     //   宣言がなければ冒頭で1回だけ計算した capability をそのまま使う（従来どおり）。
     const stepStats = fieldworkStepStats(quest, phase);
+    // ★ 工程の行為の語で担い手の候補を絞る（2026-09-11・EX-074）。
+    //   育成値の宣言（stepStats）が無い依頼でも、語があればここで絞る＝工程単位で効く。
+    const stepActs = fieldworkStepActs(quest, phase);
     let stepCapability = capability;
     let phaseHolders = holders; // 宣言のない工程の担い手＝依頼単位の持ち主（humanOnly も依頼単位と同じ）
-    if (stepStats) {
-      const got = capabilityForStats(stepStats, party, { humanOnly: fieldworkStepHumanOnly(quest, phase) });
-      stepCapability = got.capability;
+    let vocabFiltered = false;
+    if (stepStats || stepActs) {
+      const got = capabilityForStats(stepStats ?? statKeys, party, {
+        humanOnly: fieldworkStepHumanOnly(quest, phase), // 宣言が無ければ依頼単位に落ちる
+        acts: stepActs
+      });
+      // ★ 力量は育成値の宣言があるときだけ差し替える。語だけのときは触らない
+      //   （同じ育成値・同じパーティなら値は同じだが、滞りの判定に一切触れないことを構造で保証する）。
+      if (stepStats) {
+        stepCapability = got.capability;
+        stepStats.forEach((k) => usedStats.add(k));
+      }
       phaseHolders = got.holders;
-      stepStats.forEach((k) => usedStats.add(k));
+      vocabFiltered = got.vocabFiltered;
     } else {
       // 宣言のない工程はジャンル表を見ている。★ 使ったものとして記録する
       //   （「伸びる stat ＝ 使う stat」。宣言と無宣言が混ざった依頼で漏れないように）。
@@ -7091,7 +7135,11 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
       stepLeads.push({
         phase, statKey: top.key, id: top.adv.id, name: getDisplayName(top.adv), value: top.value,
         species: top.adv.species ?? null,
-        label: (Array.isArray(quest.fieldworkSteps) ? quest.fieldworkSteps[phase - 1]?.label : null) ?? null
+        label: (Array.isArray(quest.fieldworkSteps) ? quest.fieldworkSteps[phase - 1]?.label : null) ?? null,
+        // ★ 語彙の接続の診断用（2026-09-11・EX-074）。判定には使わない。
+        //   acts＝その工程の行為の語／vocabFiltered＝語で実際に絞れたか（false＝語を持つ者が0人）
+        acts: stepActs ?? null,
+        vocabFiltered
       });
     }
     const chance = Math.min(FIELDWORK_TUNING.setbackMax, Math.max(FIELDWORK_TUNING.setbackMin,

@@ -343,6 +343,14 @@ window.masterQuests = [
     id: "quest_old_stele_rubbing",
     title: "古い石碑の拓本",
     category: "記録",
+    // ★ 担い手は人間だけ（2026-09-11・EX-074 で追加。EX-056 と同じ宣言）。
+    //   判定用語彙を担い手の選出に繋いだところ、犬だけが〈記録〉〈留める〉の語を持つ編成で
+    //   エルシーが担い手になり、「エルシーは確認の順番を崩さず、書き損じのないまま終えた。」が出た
+    //   （scripts/check-elsie-actions.js が違反1件として検出）。
+    //   ★ この依頼は category が「記録」で、効いた瞬間の文面は statKey（investigation）で選ばれる。
+    //   investigation には犬固有の文が無いので、どの工程を犬が担っても人間用の記録の文が出る。
+    //   だから工程単位ではなく依頼単位で外す（薬草包みの納品は exploration に犬固有の文があるので外さない）。
+    fieldworkHumanOnly: true,
     danger: "低",
     area: "旧街道脇の石碑",
     durationBand: "short_30m",
