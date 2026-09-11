@@ -90,10 +90,15 @@
 
 - Notion … 思考・議論・構想の置き場（生きた作業場）。仕様を練る段階のもの。
   チャットのClaudeと対話しながら育てる。まだ確定していない検討中の内容もここ。
-- リポジトリ内の .md（CURRENT_SPEC.md / NEXT_TASKS.md / AI_GUIDELINES.md 等）… 確定した正式仕様。
+- リポジトリ内の .md（docs/CURRENT_SPEC.md / NEXT_TASKS.md / AI_GUIDELINES.md 等）… 確定した正式仕様。
   コードの隣に置く、実装の拠り所。Notionで固まった内容をここへ落とす。
 
 基本の流れ：Notionで練る → 固まったら .md に反映する。
 .md を更新するときは、対応するNotionページを参照した上で行う。
+
+★ **ただし、どちらが正本かは文書ごとに違う**（2026-08-01 更新）。向きは「誰が書くか」で決まり、
+人・チャットが決めて書くもの＝Notion、Claude Code が生成するもの＝repo、
+実装から導出できる事実＝コード。**判定表は `CLAUDE.md` の「ドキュメントの正本」節**にある。
+`docs/CURRENT_SPEC.md` と `docs/SESSION_STATE.md` は repo が正本で、Notion 側は生成物。
 
 （補足：個人メモ用のObsidianは廃止し、上記の2箇所に集約する方針。）
