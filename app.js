@@ -6947,8 +6947,15 @@ const FIELDWORK_TUNING = {
   staminaHitMin: 12,
   staminaHitMax: 22,
   minStaminaRatio: 0.5,
-  setbacksForPartial: 1,
-  setbacksForFail: 2
+  // ★ 結末の閾値は「滞った工程の比率」で置く（2026-09-11・EX-077）。絶対件数（旧 1／2 件）だと
+  //   工程数と難度が癒着し、工程数を変えた瞬間に難度が別物になる（上限4→8 で完遂 71.3%→48.0%）。
+  //   「4工程中2つ滞った」と「8工程中2つ滞った」が同じ結果になるのは、工程数を変えなくても既に歪み。
+  setbackRatioPartial: 0.25,
+  setbackRatioFail: 0.5,
+  // ★ 未達には最低2件が要る＝**一度のつまずきでは未達にしない**。丸めの都合ではなく設計判断そのもの
+  //   なので式に残す。効くのは2工程のときだけ（3工程以上は ceil(0.5×n) が既に2以上）。
+  //   ★ 部分側に同じ下限は要らない（ceil(0.25×n) は n>=1 で常に1以上）。
+  setbacksForFailMin: 2
 };
 
 // 依頼で使う stat の平均力量。★ その stat を一番持っている者が担当する、という読み方（最大値を採る）。
@@ -7172,8 +7179,13 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     }
   }
 
-  const tier = setbacks >= FIELDWORK_TUNING.setbacksForFail ? "fail"
-    : setbacks >= FIELDWORK_TUNING.setbacksForPartial ? "partial" : "full";
+  // ★ 比率で判定する（2026-09-11・EX-077）。切り上げ。現行の工程数は 2〜4 なので閾値は 1／2 のままで、
+  //   現行の全依頼で恒等（5工程から分かれる）。★ ここは乱数を引かない位置なので、同一シードの結果は動かない。
+  const partialAt = Math.ceil(FIELDWORK_TUNING.setbackRatioPartial * phases);
+  const failAt = Math.max(FIELDWORK_TUNING.setbacksForFailMin,
+    Math.ceil(FIELDWORK_TUNING.setbackRatioFail * phases));
+  const tier = setbacks >= failAt ? "fail"
+    : setbacks >= partialAt ? "partial" : "full";
   const mainCause = ["weather", "fatigue", "skill"].reduce((a, b) => (causeCount[b] > causeCount[a] ? b : a), "skill");
   // ★ 効いた瞬間（2026-08-04・EX-050）：一つも滞らなかったとき、誰の力量が支えたかを控える。
   //   戦闘の「防げた瞬間」と同じ考えで、**既にある事実を拾うだけ**。滞りが出た回は
