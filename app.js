@@ -800,12 +800,37 @@ function settleMissingDeaths(now = Date.now()) {
   if (changed) saveState();
 }
 
+// 段階2・3の「{名前}」＝その者と最後に同じ遠征へ出ていた者（2026-09-11・EX-072）。
+// ★ 新しい値は持たない。行方不明になった当の報告書の参加者データ（report.adventurerIds）から導く。
+// ★ 自分自身と、自分も行方不明・死亡の者は候補から外す（「全員行方不明」で該当者が消えるのはこのため）。
+// ★ 複数いるときは参加者順＝編成順の先頭を採る（固定順。関係値ができたらそこで選び直す）。
+// 該当者がいなければ受付嬢の名前を入れる（仮置き）。
+function missingCompanionName(adventurer) {
+  const reportId = adventurer?.missing?.reportId;
+  const report = reportId != null ? state.reports.find((r) => r.id === reportId) : null;
+  const companion = (report?.adventurerIds ?? [])
+    .filter((id) => id !== adventurer.id)
+    .map(getAdventurer)
+    .filter(Boolean)
+    .find((a) => !a.missing);
+  return companion ? getDisplayName(companion) : (window.masterReceptionist?.name ?? "受付嬢");
+}
+
 // ★ 数字の残り時間は出さない。段階（3つ）だけ出す。死亡後は状態ピルが「死亡」を出すので段階は消す。
-function missingBadgeHtml(adventurer) {
+// ★ 2026-09-11（EX-072）にピルからカード内の行へ移した。文言が語（バッジ）から文になったので、
+//   右肩のピル列に押し込むと名前の欄を潰す（実測：名簿カードで「エルネ・シェルカ」が3行に折れた）。
+//   状態そのものは既存の状態ピル「行方不明」が出しているので、ここで重ねる必要はない。
+function missingStageHtml(adventurer) {
   const m = adventurer.missing;
   if (!m || m.deadAt != null) return "";
   const stage = missingStage(adventurer);
-  return stage ? `<span class="status-pill missing-stage">${escapeHtml(stage.label)}</span>` : "";
+  if (!stage) return "";
+  let html = `<p class="missing-stage-line">${escapeHtml(stage.label)}</p>`;
+  if (stage.companionLine) {
+    const line = stage.companionLine.replaceAll("{名前}", missingCompanionName(adventurer));
+    html += `<p class="missing-companion-line">${escapeHtml(line)}</p>`;
+  }
+  return html;
 }
 
 function injuryBadgeHtml(adventurer) {
@@ -1566,9 +1591,10 @@ function selectableAdventurerHtml(adventurer) {
         </div>
         <div class="status-pills">
           <span class="status-pill ${disabled ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
-          ${missingBadgeHtml(adventurer)}${injuryBadgeHtml(adventurer)}
+          ${injuryBadgeHtml(adventurer)}
         </div>
       </div>
+      ${missingStageHtml(adventurer)}
       <p class="muted">${escapeHtml(adventurer.memo)}</p>
     </article>
   `;
@@ -1676,9 +1702,10 @@ function adventurerListCardHtml(adventurer) {
         </div>
         <div class="status-pills">
           <span class="status-pill ${adventurer.status !== "待機中" ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
-          ${missingBadgeHtml(adventurer)}${injuryBadgeHtml(adventurer)}
+          ${injuryBadgeHtml(adventurer)}
         </div>
       </div>
+      ${missingStageHtml(adventurer)}
       <div class="tags">
         <span class="tag">${escapeHtml(adventurer.job)}</span>
         <span class="tag">${escapeHtml(adventurer.species === "dog" ? "犬" : adventurer.personality)}</span>

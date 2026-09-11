@@ -1192,9 +1192,23 @@ hr.soft {
   color: rgba(57, 39, 25, 0.72);
 }
 
-/* 行方不明の段階バッジ（2026-08-18・EX-070）。★ 数字は出さず段階の文言だけ。急かす色にしない */
-.status-pill.missing-stage {
+/* 行方不明の段階（2026-08-18・EX-070／2026-09-11・EX-072 でピル→行に変更）。
+   ★ 数字は出さず段階の文言だけ。急かす色にしない。 */
+.missing-stage-line {
+  margin: 8px 0 0;
+  padding-left: 9px;
+  border-left: 2px solid rgba(182, 160, 135, 0.45);
   color: #b6a087;
-  border: 1px solid rgba(182, 160, 135, 0.45);
-  background: rgba(182, 160, 135, 0.12);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 段階2・3に添える「目の前にいる人の顔」の行。事実（上の行）より一段弱く出す。 */
+.missing-companion-line {
+  margin: 2px 0 0;
+  padding-left: 9px;
+  border-left: 2px solid rgba(182, 160, 135, 0.2);
+  color: rgba(182, 160, 135, 0.78);
+  font-size: 12px;
+  font-weight: 500;
 }
