@@ -38,28 +38,25 @@ window.masterVocab = {
   // 依頼の工程。★ 文面から読める行為で書く（タグ名ではない）。
   //   label は工程の呼び名で、判定には使わない（人が読んで照合するためのもの）。
   questSteps: {
+    // ★ 2行（2026-09-12・EX-089）。`fieldworkPhases: 2` 固定なので、この2行で全行が読まれる。
+    //   ⚠️ **工程数を増やすとこの形は崩れます**——3工程・4工程では並びが変わるので、
+    //   そのときは退避（`masterVocabRetired`）から「樽を受け取る」「樽を担ぐ」を戻すこと。
     quest_tavern_errand: [
       { label: "店主に用件を伝えて頼む", acts: ["伝える"], targets: ["人"] },
-      { label: "樽を受け取る", acts: ["運ぶ"], targets: ["壊れ物"] },
-      { label: "樽を担ぐ", acts: ["運ぶ"], targets: ["重い"] },
       { label: "裏口まで運び込む", acts: ["運ぶ"], targets: ["重い"] }
     ],
     quest_herb: [
       { label: "森の浅い場所を進む", acts: ["進む"], targets: [] },
-      { label: "使える草と避ける草を見分ける", acts: ["察する"], targets: [] },
       // ★ 摘む動作は既存の工程文から落ちていた（EX-061 の実測）。〈採る〉の追加で書けるようになった行
       { label: "薬草を摘み取って袋に収める", acts: ["採る"], targets: [] },
       { label: "足跡を読む", acts: ["察する"], targets: ["生き物"] },
       { label: "薬草袋の破れを繕う", acts: ["留める"], targets: ["壊れ物"] },
-      { label: "小さな獣を遠ざける", acts: ["前に立つ"], targets: ["生き物"] },
       { label: "見て書き留める", acts: ["記録"], targets: ["生き物"] }
     ],
     quest_signpost: [
       { label: "道標のゆるみを確かめる", acts: ["確かめる"], targets: ["壊れ物"] },
-      { label: "表面を傷めずに読む", acts: ["記録"], targets: ["壊れ物"] },
       { label: "古地図と現地を突き合わせる", acts: ["記録", "察する"], targets: ["紙物"] },
       { label: "通行人から聞き出す", acts: ["伝える"], targets: ["人"] },
-      { label: "仮に留めて支える", acts: ["留める"], targets: ["壊れ物"] },
       { label: "書き写す", acts: ["記録"], targets: ["紙物"] }
     ],
     quest_letter: [
@@ -76,21 +73,16 @@ window.masterVocab = {
     //     押し出される行が「招待客を席まで案内する」になって〈伝える〉〈前に立つ〉が結婚式から消える。
     quest_wedding_support: [
       { label: "厨房を手伝う", acts: ["火と食"], targets: [] },
-      { label: "酒樽と長椅子を担ぐ", acts: ["運ぶ"], targets: ["重い"] },
       { label: "会場を整える", acts: ["整える"], targets: [] },
-      { label: "こぼさずに運ぶ", acts: ["運ぶ"], targets: ["壊れ物"] },
       { label: "招待客を席まで案内する", acts: ["伝える", "前に立つ"], targets: ["人"] },
       { label: "迷子を見つける", acts: ["察する"], targets: ["人"] },
-      { label: "夜間の見回り", acts: ["察する"], targets: [] },
       { label: "飾り紐を受け渡す", acts: ["運ぶ"], targets: ["壊れ物"] }
     ],
     quest_old_house_cleanup: [
       { label: "壊れた家具を運び出す", acts: ["運ぶ"], targets: ["重い"] },
-      { label: "床板を踏んで確かめる", acts: ["確かめる"], targets: [] },
       { label: "古い手紙を封を開けずに残す", acts: ["記録"], targets: ["紙物"] },
       { label: "使える物と処分品を見分ける", acts: ["察する"], targets: [] },
       { label: "近所から聞き取る", acts: ["伝える"], targets: ["人"] },
-      { label: "茶器を包む", acts: ["運ぶ", "留める"], targets: ["壊れ物"] },
       { label: "部屋割りと段取りを決める", acts: ["整える"], targets: [] }
     ],
     quest_field_mystery: [
@@ -109,36 +101,28 @@ window.masterVocab = {
     ],
     quest_old_bridge_repair: [
       { label: "岸側から板の緩みを確かめる", acts: ["確かめる"], targets: ["壊れ物"] },
-      { label: "傷んだ板を外し使える釘を選り分ける", acts: ["察する", "留める"], targets: ["壊れ物"] },
       { label: "仮に留めて印をつける", acts: ["留める"], targets: ["壊れ物"] },
       { label: "通行人を止める・笛で合図する", acts: ["伝える"], targets: ["人"] },
       { label: "迂回路を決めて誘導する", acts: ["整える", "伝える"], targets: ["人"] },
-      { label: "橋下の桁を照らして確かめる", acts: ["確かめる"], targets: [] },
       { label: "試し渡りをする", acts: ["進む", "確かめる"], targets: [] }
     ],
     quest_church_patrol: [
       { label: "柵と段差のゆるみを確かめる", acts: ["確かめる"], targets: ["壊れ物"] },
-      { label: "花壇と祈りの跡に触れずに確かめる", acts: ["察する"], targets: [] },
       { label: "巡回順を決める", acts: ["整える"], targets: [] },
       { label: "外縁を順に回る", acts: ["進む"], targets: [] },
       { label: "縄で結んで持たせる", acts: ["留める"], targets: ["壊れ物"] },
-      { label: "灯りで段差を照らして確かめる", acts: ["確かめる"], targets: [] },
       { label: "距離を保って観察する", acts: ["察する"], targets: [] }
     ],
     quest_herb_delivery: [
       { label: "結び目を確かめて結び直す", acts: ["留める"], targets: ["壊れ物"] },
-      { label: "濡らさずに運ぶ", acts: ["運ぶ"], targets: ["紙物", "壊れ物"] },
       { label: "崩れやすい包みを抱えて運ぶ", acts: ["運ぶ"], targets: ["壊れ物"] },
       { label: "ぬかるみの少ない道を選ぶ", acts: ["進む"], targets: [] },
-      { label: "荷紐を繕う", acts: ["留める"], targets: ["壊れ物"] },
       { label: "手渡して受領印をもらう", acts: ["伝える", "記録"], targets: ["人", "紙物"] }
     ],
     quest_missing_herbalist: [
       { label: "新しい足跡だけを追う", acts: ["察する"], targets: ["人"] },
-      { label: "笛を鳴らして返事を待つ", acts: ["伝える"], targets: ["人"] },
       { label: "分岐ごとに帰り道を確かめる", acts: ["察する", "進む"], targets: [] },
       { label: "落ちていた物から状況を読む", acts: ["察する"], targets: [] },
-      { label: "保護して連れ帰る", acts: ["前に立つ", "手当て"], targets: ["人"] },
       { label: "傷の手当てをする", acts: ["手当て"], targets: ["人"] }
     ],
     quest_evening_market_escort: [
@@ -170,10 +154,8 @@ window.masterVocab = {
     ],
     quest_old_stele_rubbing: [
       { label: "石碑の向きと周囲の地面を確かめる", acts: ["確かめる"], targets: [] },
-      { label: "苔を削らず読める部分だけ写し取る", acts: ["記録"], targets: ["壊れ物"] },
       { label: "風でずれないよう紙を留める", acts: ["留める"], targets: ["紙物"] },
       { label: "拓本を濡らさずに運ぶ", acts: ["運ぶ"], targets: ["紙物"] },
-      { label: "光を斜めから当てて浅い刻みを見る", acts: ["察する"], targets: [] },
       { label: "読めなかった箇所を補わずに残す", acts: ["記録"], targets: ["紙物"] }
     ],
     quest_lingering_light: [
@@ -261,4 +243,61 @@ window.masterVocab = {
       { acts: ["離れる"], targets: [], dir: "+" }
     ]
   }
+};
+
+// ────────────────────────────────────────────────────────────────
+// 退避（2026-09-12・EX-089）。★ **削除ではなく退避です。**
+//
+// なぜ抜いたか：工程の表は**回す工程数ぶんに均等に間引いて**読まれるので
+// （`fieldworkStepIndex`）、表が長いほど**一度も読まれない行**が出ます。
+// 現行の工程数（`FIELDWORK_TUNING.phasesMin: 2 / phasesMax: 4`）では
+// **6行以上の表に死に行が出て**、実測で102行中21行がそれでした。
+// 下の21行は**一度も担い手の選出に効いていなかった行**です。
+//
+// ★ **抜いても回る工程の並びは1つも変わりません**（同一シードで不一致0を実測）。
+//   均等間引きは表の両端を必ず含み間を等分するので、選ばれない行を抜いても
+//   残った行の選ばれ方が変わらないためです。
+//
+// ⚠️ **これは一般の定理ではなく、現行の phasesMin: 2 / phasesMax: 4 の下でだけ成り立ちます。**
+//    `phasesMax` を動かすと前提が壊れます。実例：隣の酒場に買い出しは
+//    `fieldworkPhases: 2` 固定なので2工程では不変ですが、**3工程・4工程では並びが変わります**
+//    （いまは到達しないだけ）。**工程数を動かすときは、この退避を戻すことと合わせて見直してください。**
+//
+// ★ **戻し方**：該当依頼の `questSteps` の元の位置（`旧 行N`）へ差し戻すだけです。
+//    文も語もそのまま残してあります。
+window.masterVocabRetired = {
+  // 旧 questSteps から抜いた工程（2026-09-12・EX-089。21行）
+  questSteps: [
+    // 隣の酒場に買い出し（quest_tavern_errand）
+    /* 旧 行2 */ { label: "樽を受け取る", acts: ["運ぶ"], targets: ["壊れ物"] },
+    /* 旧 行3 */ { label: "樽を担ぐ", acts: ["運ぶ"], targets: ["重い"] },
+    // 古い道標の確認（quest_signpost）
+    /* 旧 行2 */ { label: "表面を傷めずに読む", acts: ["記録"], targets: ["壊れ物"] },
+    /* 旧 行5 */ { label: "仮に留めて支える", acts: ["留める"], targets: ["壊れ物"] },
+    // 森の薬草採集（quest_herb）
+    /* 旧 行2 */ { label: "使える草と避ける草を見分ける", acts: ["察する"], targets: [] },
+    /* 旧 行6 */ { label: "小さな獣を遠ざける", acts: ["前に立つ"], targets: ["生き物"] },
+    // 結婚式の手伝い（quest_wedding_support）
+    /* 旧 行2 */ { label: "酒樽と長椅子を担ぐ", acts: ["運ぶ"], targets: ["重い"] },
+    /* 旧 行4 */ { label: "こぼさずに運ぶ", acts: ["運ぶ"], targets: ["壊れ物"] },
+    /* 旧 行7 */ { label: "夜間の見回り", acts: ["察する"], targets: [] },
+    // 廃屋の片付け（quest_old_house_cleanup）
+    /* 旧 行2 */ { label: "床板を踏んで確かめる", acts: ["確かめる"], targets: [] },
+    /* 旧 行6 */ { label: "茶器を包む", acts: ["運ぶ", "留める"], targets: ["壊れ物"] },
+    // 古い小橋の応急修理（quest_old_bridge_repair）
+    /* 旧 行2 */ { label: "傷んだ板を外し使える釘を選り分ける", acts: ["察する", "留める"], targets: ["壊れ物"] },
+    /* 旧 行6 */ { label: "橋下の桁を照らして確かめる", acts: ["確かめる"], targets: [] },
+    // 辺境教会周辺の定期巡回（quest_church_patrol）
+    /* 旧 行2 */ { label: "花壇と祈りの跡に触れずに確かめる", acts: ["察する"], targets: [] },
+    /* 旧 行6 */ { label: "灯りで段差を照らして確かめる", acts: ["確かめる"], targets: [] },
+    // 薬草包みの納品（quest_herb_delivery）
+    /* 旧 行2 */ { label: "濡らさずに運ぶ", acts: ["運ぶ"], targets: ["紙物", "壊れ物"] },
+    /* 旧 行5 */ { label: "荷紐を繕う", acts: ["留める"], targets: ["壊れ物"] },
+    // 帰ってこない薬草採りの確認（quest_missing_herbalist）
+    /* 旧 行2 */ { label: "笛を鳴らして返事を待つ", acts: ["伝える"], targets: ["人"] },
+    /* 旧 行5 */ { label: "保護して連れ帰る", acts: ["前に立つ", "手当て"], targets: ["人"] },
+    // 古い石碑の拓本（quest_old_stele_rubbing）
+    /* 旧 行2 */ { label: "苔を削らず読める部分だけ写し取る", acts: ["記録"], targets: ["壊れ物"] },
+    /* 旧 行5 */ { label: "光を斜めから当てて浅い刻みを見る", acts: ["察する"], targets: [] }
+  ]
 };
