@@ -3118,7 +3118,11 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_old_stele_rubbing: ["item_obs_sheet", "item_map", "item_oilcase", "item_lantern", "item_bandage", "item_whistle", "item_pot"]
   };
   const allowed = allowedByQuest[quest.id];
-  if (!allowed) return true;
+  // ★ 既定は全禁止（2026-09-12・EX-085）。旧実装は許可リストが無ければ全許可だったため、
+  //   **書き忘れが沈黙で通っていた**（隊商捜索チェーンの2件が実際に漏れ、煙幕まで許可されていた）。
+  //   全禁止なら「その依頼だけ支給品の行が一切出ない」という目に見える欠落として現れる。
+  //   ★ 切り替えた時点で全19依頼が許可リストを持っており、挙動は1件も変わっていない（11,400件で不一致0）。
+  if (!allowed) return false;
   if (itemId === "item_oilcase" && weather !== "小雨" && quest.id === "quest_wedding_support") return false;
   return allowed.includes(itemId);
 }
