@@ -2623,19 +2623,15 @@ function generateWeatherLog(quest, party, weather, rng) {
 
 const questEventPools = {
   quest_letter: {
-    weather: ["晴れ", "小雨", "霧", "強風", "雨上がり"],
     roadEvents: ["ぬかるみ", "古い道標", "商人とのすれ違い", "封蝋の確認", "宛先の聞き込み", "犬の遠吠え"]
   },
   quest_herb: {
-    weather: ["晴れ", "小雨", "霧", "雨上がり"],
     roadEvents: ["湿った足跡", "倒木", "森喰い兎", "薬草袋の破れ", "泥被り茸の群生", "休憩地点"]
   },
   quest_signpost: {
-    weather: ["晴れ", "小雨", "霧", "強風", "雨上がり"],
     roadEvents: ["道標の傾き", "苔に隠れた文字", "旧道の分岐", "壊れた橋", "通行人の証言", "根元のゆるみ"]
   },
   quest_church_patrol: {
-    weather: ["晴れ", "小雨", "霧", "雨上がり"],
     roadEvents: ["柵の緩み", "鐘楼の確認", "墓地の灯り", "巡礼路の草", "礼拝堂の気配", "裏手の林"]
   }
 };
@@ -3114,10 +3110,19 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_missing_herbalist: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot", "item_obs_sheet"],
     quest_evening_market_escort: ["item_lantern", "item_whistle", "item_map", "item_bandage", "item_pot"],
     quest_caravan_escort: ["item_bandage", "item_smoke", "item_whistle", "item_map", "item_lantern"],
+    // ★ 捜索チェーンの2件は登録漏れで、許可リストが無いと全許可に落ちていた（2026-09-12・EX-084）。
+    //   交戦しない依頼なので**煙幕は外し**、観察対象が「なし」なので**観察記録票も外す**。
+    //   護衛の許可から煙幕を抜き、2〜3時間の遠出なので携帯鍋を足した形。
+    quest_caravan_search: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot"],
+    quest_caravan_lastchance: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot"],
     quest_old_stele_rubbing: ["item_obs_sheet", "item_map", "item_oilcase", "item_lantern", "item_bandage", "item_whistle", "item_pot"]
   };
   const allowed = allowedByQuest[quest.id];
-  if (!allowed) return true;
+  // ★ 既定は全禁止（2026-09-12・EX-085）。旧実装は許可リストが無ければ全許可だったため、
+  //   **書き忘れが沈黙で通っていた**（隊商捜索チェーンの2件が実際に漏れ、煙幕まで許可されていた）。
+  //   全禁止なら「その依頼だけ支給品の行が一切出ない」という目に見える欠落として現れる。
+  //   ★ 切り替えた時点で全19依頼が許可リストを持っており、挙動は1件も変わっていない（11,400件で不一致0）。
+  if (!allowed) return false;
   if (itemId === "item_oilcase" && weather !== "小雨" && quest.id === "quest_wedding_support") return false;
   return allowed.includes(itemId);
 }
@@ -3184,7 +3189,13 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
   }
   if (has("item_oilcase") && canUseItemInQuest(quest, "item_oilcase", weather)) {
     const expert = expertFor("item_oilcase", [(p) => p.find((a) => a.background === "郵便配達人")]);
-    const isRainy = weather === "小雨";
+    // ★ 工程エンジンと同じ源で判定する（2026-09-12・EX-082）。本文側だけ「小雨」に限ると、
+    //   曇り・霧・風が強いでは工程エンジンが油紙を使っているのに「使わずに済んだ」と書いてしまう
+    //   （手紙・廃屋で晴れ以外は 100% 食い違っていた）。候補の数が変わるだけで pickOne は1回のまま。
+    const oilcaseWeatherLoad = weather == null
+      ? 0
+      : (FIELDWORK_TUNING.weatherLoad[weather] ?? FIELDWORK_TUNING.defaultWeatherLoad);
+    const isRainy = oilcaseWeatherLoad > 0;
     if (isRainy) {
       if (expert && !solo) {
         lines.push(`${h("item_oilcase")}が持っていた油紙の手紙入れを、${expert}が依頼書の保護に使うよう提案した。紙は濡れずに済んだ。`);
@@ -4040,7 +4051,10 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
     { text: `誰も叫ばなかった。納屋の中は牙と息だけが残っていた。`, minTension: 80 }
   ], tensionValue, rng);
   if (barnTensionLine) logs.push(barnTensionLine);
-  if (hasBandage && rng() < 0.5) {
+  // ★ 包帯の行は、戦闘で実際に手当てがあったときだけ書く（2026-09-12・EX-082）。
+  //   持っているだけで書くと、同じ報告書に「封を切られないまま戻ってきた」が並ぶ（実測12%）。
+  //   抽選（rng）は条件の中で先に済ませるので、乱数の消費は変わらない。
+  if (hasBandage && rng() < 0.5 && context.battleHealed === true) {
     logs.push(`牙が掠めた腕に、すぐ包帯が巻かれた。傷は浅かった。`);
   }
   if (!solo) {
@@ -4652,10 +4666,14 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
     logs.push(`${holderName("item_map")}は古地図で近道と安全な道を照らし合わせ、明るい方を選んだ。`);
   }
   if (itemIds.includes("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
-    logs.push(pick([
+    const whistleLine = pick([
       `笛は使わずに済んだが、合図の手段があるだけで親は少し安心したようだった。`,
       `${holderName("item_whistle")}は笛を手元に持ったまま歩いたが、鳴らす必要はなかった。`
-    ]));
+    ]);
+    // ★ 工程エンジンで笛が鳴った回は書かない（2026-09-12・EX-082）。同じ報告書に
+    //   「短い笛の音ですぐ立て直した」と並ぶため。抽選は済ませてから落とすので乱数の消費は変わらない
+    //   （EX-071 の樽と同じ形）。
+    if (whistleLine && context.whistleUsed !== true) logs.push(whistleLine);
   }
   if (itemIds.includes("item_bandage") && canUseItemInQuest(quest, "item_bandage", weather) && rng() < 0.45) {
     logs.push(`${holderName("item_bandage")}は子どもの擦れた膝に包帯を当て、歩きやすくしてから先へ進んだ。`);
@@ -5650,7 +5668,9 @@ function generateReport(expedition) {
     const outcomeInfo = questBattleOutcomeText(quest, battleOutcome, party);
 
     const questLogs = hunt
-      ? generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome })
+      ? generateBarnHuntLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome,
+        // ★ 「使った」と書いてよいかの事実（2026-09-12・EX-082）。EX-052 の effectiveBattleItemIds と同じ考え方。
+        battleHealed: Array.isArray(battle?.events) && battle.events.some((e) => e.type === "heal") })
       : generateBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, battleOutcome });
     // 交戦記録＋「防げた瞬間」＋「持たせたのに使わなかった支給品」。
     // ★ 畑は戦闘のチュートリアルなので、**うまく送れたときも理由が読める**ようにする（2026-07-31）。
@@ -6092,7 +6112,9 @@ function generateReport(expedition) {
     }).filter(Boolean);
     add("", `支給品：${escortSupplyDesc.length > 0 ? escortSupplyDesc.join(" / ") : "なし"}。`);
 
-    const escortLogs = generateEveningEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
+    const escortLogs = generateEveningEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue,
+      // ★ 「使わずに済んだ」と書いてよいかの事実（2026-09-12・EX-082）
+      whistleUsed: (field.fw?.events ?? []).some((e) => e.itemId === "item_whistle") });
     escortLogs.forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text));
 
@@ -6206,7 +6228,9 @@ function generateReport(expedition) {
     const personal = quest.id === "quest_tavern_errand"
       ? null
       : lifeQuestPersonalEventText(quest, party, rng, tensionValue ?? 50);
-    const supply = supplyEventText(quest, party, adventurerItemIds, rng);
+    // ★ 天候を渡す（2026-09-12・EX-082）。遠征依頼フローは渡していて、ここだけ抜けていた＝渡し忘れ。
+    //   渡さないと油紙の分岐が常に「使わずに済んだ」側に落ちる（廃屋は小雨でも食い違っていた）。
+    const supply = supplyEventText(quest, party, adventurerItemIds, rng, expedition.departWeather ?? "晴れ");
     const statsLog = statsPersonalityLog(party, rng);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
@@ -6917,7 +6941,12 @@ const FIELDWORK_TUNING = {
   phasesMin: 2,
   phasesMax: 4,
   // 天候＝依頼の難度に乗る固定値。遠征の間ずっと同じ重さでかかる。
-  weatherLoad: { "晴れ": 0, "雨上がり": 3, "曇り": 4, "強風": 7, "霧": 8, "小雨": 8, "雨": 11 },
+  // ★ キーは実際の天候名と一致させる（2026-09-12・EX-083）。「強風」と書かれていたため表に当たらず、
+  //   風が強い日は既定値4（＝曇りと同じ）で動いていた。意図の7が一度も効いていなかった。
+  // ★ 未実装の天候は表に載せない（2026-09-12・EX-084）。載せたままだと「実装済みだが効いていない」のか
+  //   「未実装」のか読めず、上の故障（強風）と同じ見た目になる。
+  //   消した値は記録として残す：「雨上がり」＝3 ／ 「雨」＝11（将来この2つを実装するときの出発点）。
+  weatherLoad: { "晴れ": 0, "曇り": 4, "風が強い": 7, "霧": 8, "小雨": 8 },
   defaultWeatherLoad: 4,
   // 危険度の基礎負荷。★ 育成値と同じ目盛りで置く（現状の値は 10〜28）。
   dangerLoad: { "低": 17, "中": 24, "高": 30 },

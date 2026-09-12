@@ -336,13 +336,13 @@ Notion 追記先
 - 低緊張の生活依頼（結婚式の手伝い等）に、戦闘・護衛・救助寄りの緊張感が高い文言（退路・負傷者・危険・制した、等）を混ぜない。
 
 ### 支給品
-- `canUseItemInQuest(quest, itemId, weather)` の `allowedByQuest` で依頼ごとに使用可否を管理する。新しい依頼を追加したら、ここに許可アイテムを追加する。
+- `canUseItemInQuest(quest, itemId, weather)` の `allowedByQuest` で依頼ごとに使用可否を管理する。★ **既定は全禁止**（2026-09-12・EX-085。許可リストが無ければ `false`）。**新しい依頼を追加したら必ずここに許可アイテムを追加すること。書き忘れると、その依頼だけ支給品の行が一切出なくなる**（旧実装は全許可に落ちていたため、書き忘れが沈黙で通り、実際に2依頼が漏れていた）。
 
 ## 新しい依頼ジャンルを追加するときの最小差分ポイント
 
 1. `masterQuests` に1件追加
 2. 専用の `generate*Logs()` 関数を新規作成（既存の似た依頼の関数を参考にする。既存関数の改造ではなく新規関数として作る）
-3. `canUseItemInQuest` の `allowedByQuest` に許可アイテムを追加
+3. `canUseItemInQuest` の `allowedByQuest` に許可アイテムを追加（★ **必須**。既定が全禁止なので、書かないと支給品の行が一切出ない）
 4. `generateReport()` に `quest.id` 分岐を追加し、上記関数を呼ぶ。エルシーのログ方針（インライン or withElsieLog）を決めて統一する
 5. 必要なら `generateHighlight()` に専用分岐を追加（なくても汎用フォールバックで動く）
 
