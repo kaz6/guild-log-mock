@@ -61,8 +61,18 @@ function formatUnlock(quest, titleById) {
   // ★ 理由を決め打ちしない（2026-09-13・EX-092）。`hidden` は捜索チェーン専用ではなくなった
   //   （退避した夜道 v1 も `hidden`）。生成物が事実と違うことを言わないようにする。
   if (quest.hidden) return "**掲示板に出ない**";
-  if (!quest.unlockedBy) return "なし（初期公開）";
-  return titleById.get(quest.unlockedBy) || `不明な依頼（\`${quest.unlockedBy}\`）`;
+  // ★ 解放条件は3種ある（2026-09-13・EX-093）。1つしか見ないと生成物が事実と違うことを言う——
+  //   実際、`unlockedAfterCount` だけを持つ廃屋の片付けが「なし（初期公開）」と出ていた。
+  const parts = [];
+  if (quest.unlockedBy) parts.push(titleById.get(quest.unlockedBy) || `不明な依頼（\`${quest.unlockedBy}\`）`);
+  if (typeof quest.unlockedAfterCount === "number") parts.push(`達成${quest.unlockedAfterCount}件`);
+  if (quest.reappearAfterCount) {
+    const r = quest.reappearAfterCount;
+    const min = r.min ?? 1;
+    const max = r.max ?? min;
+    parts.push(`★ 倒すまで再出現（消化数${min === max ? min : `${min}〜${max}`}）`);
+  }
+  return parts.length > 0 ? parts.join(" ＋ ") : "なし（初期公開）";
 }
 
 function stamp() {

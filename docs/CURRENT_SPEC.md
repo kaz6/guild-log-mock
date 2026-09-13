@@ -325,7 +325,15 @@ node scripts/gen-quest-table.js
 
 ## 依頼の表示制御（更新: 2026-07-27・体験版②-3）
 
-掲示板に出る依頼は `!quest.hidden && isQuestUnlocked(quest, clearedQuestIds)` で絞ります。
+掲示板に出る依頼は `!quest.hidden && isQuestUnlocked(quest, clearedQuestIds) && questBoardVisibility(quest, state.reports).visible` で絞ります。
+- ★ **3つ目が再出現**（2026-09-13・EX-093）。依頼データの宣言 `reappearAfterCount: { min, max }` を持つ依頼だけに効きます。
+  **倒していない間だけ掲示板に戻り、倒したら二度と出ません。** 倒したかどうかは結末の段ではなく
+  `hiddenTags.battleOutcome === "victory"`（＝戦闘の事実）で見ます。間隔は**依頼の消化数**で測り、
+  EX-049 で確定している「クールタイムは消化数1〜3」に合わせています（挑戦のたびに 1→2→3 と伸びます）。
+  - ⚠️ `state.reports` は **unshift（新しいものが先頭）**です。ここを取り違えると
+    「挑戦直後にすぐ戻り、以後は消化数と無関係に点滅する」という逆の挙動になります（初版が実際にそうでした）。
+  - ⚠️ 必要数は**添字ではなく挑戦回数**から決めます。添字は報告書が増えるたびに動きます。
+  - 旧セーブにある v1 の報告書は**挑戦に数えません**（`battleOutcome` も `daylightMiss` も持たないため）。
 **`hidden` と `unlockedBy` は別概念**です。
 
 | フィールド | 意味 | 対象 |
@@ -688,6 +696,10 @@ node scripts/gen-quest-table.js
 - **判定に使う育成値は `GROWTH_STAT_BY_CATEGORY` から導く。** 対応表を新設しない＝**「その依頼で伸びる stat ＝ その依頼で使う stat」**。これで exploration / investigation / negotiation が初めて判定入力になった。
  - ★ **工程ごとに別の育成値を宣言できます**（`quest.fieldworkSteps`・2026-08-06・EX-054）。宣言した工程だけその育成値で判定し、**宣言のない工程はジャンル表のまま**（ジャンル表は廃止しない）。★ **宣言は工程数を決めません**（2026-08-13・EX-057 で切り離した。数は `fieldworkPhases`＝下記が持ち、工程数より宣言が少ない依頼は余った工程がジャンル表を見ます）。
  - ★ **成長側は「その回に実際に使った育成値の和集合」（`hiddenTags.fieldwork.stats`）だけを読みます。** 依頼データを直接読まないのは、**対応表を1つに保って登録漏れを防ぐため**。
+  - ★ **2026-09-13・EX-093 に `hiddenTags.growthStats` を足しました**（工程エンジンを通らない依頼も
+    同じ形で主成長セットを宣言できます）。**`growthStats` があればそちらが勝ち**、無ければ
+    `fieldwork.stats`、それも無ければジャンル表です。夜道 v2 は**夜＝combat/survival ／ 昼＝investigation**。
+    ⚠️ 空配列を書くと宣言が無いものとして扱います（`fieldwork.stats` を黙って捨てないため）。
  - ★ **担い手を人間だけに絞る宣言もここに置きます**（`humanOnly`・2026-08-06・EX-056）。**工程ごと（`fieldworkSteps[i].humanOnly`）が優先し、工程を宣言していない依頼は依頼ごと（`quest.fieldworkHumanOnly`）で同じことを宣言します**（同じ鍵を2段で読むだけで、対応表は増やしません）。★ **力量の計算は変わりません。外すのは担い手＝名前が文に出る側だけ**（犬の鼻と警戒は工程を助けている、という読みは崩さない）。
  - 宣言を持つ依頼は現在1件です。**最初のクエスト「隣の酒場に買い出し」＝店主と話を通す（`negotiation`）／樽を担ぐ（`survival`）**（2026-08-06）。★ **体力に対応する育成値は現状 `survival` の1つだけ**なので流用しました（`maxHp` の元でもある）。**担ぎ手はこの宣言で決まります**（`survival` の持ち主＝ロウ）。
 - **工程が滞る確率＝ `floor + (負荷 − 力量) ÷ scale`**（乱数の閾値ではなく確率で置く）。育成値1あたり何%動くかがそのまま読める。
