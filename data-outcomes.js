@@ -470,7 +470,8 @@ window.masterOutcomeTexts = {
       history: "古い石碑の拓本。保存優先、読める範囲のみ記録。"
     }
   },
-  quest_lingering_light: {
+  // ★ v1（退避）。id を `_v1` にした（2026-09-13・EX-092）。
+  quest_lingering_light_v1: {
     "異常なし": {
       result: "異常なし",
       summary: "昼間の道に異常はなく、問題の灯りも確認されなかった。",
@@ -491,6 +492,38 @@ window.masterOutcomeTexts = {
       line: null,
       after: null,
       history: "{依頼名}：ランタンありで夜間確認。"
+    }
+  },
+  // ★ v2（2026-09-13・EX-092）。戦闘の結末3種＋昼の空振り。
+  //   ⚠️ この表が無いと questOutcomeText が null を返し、報告書の生成がそこで落ちる。
+  quest_lingering_light: {
+    victory: {
+      result: "灯りの正体を確かめた",
+      summary: "夜道の灯りに正面から向き合い、消えるまでを間近で記録した。正体はまだ不明。",
+      line: null,
+      after: null,
+      history: "夜道の灯りを確かめた。正体は未同定のまま、消えた方角だけが残った。"
+    },
+    withdraw: {
+      result: "接近調査は断念",
+      summary: "灯りに押し戻され、これ以上は近づけないと判断して道を引き返した。",
+      line: "{一行}は足元も見えないまま後ずさり、灯りに背を向けた。",
+      after: "報告書には「接近調査は断念。灯りはまだ道に残っている」と記されている。",
+      history: "夜道の灯りへの接近調査を断念。道には灯りが残ったまま。"
+    },
+    defeat: {
+      result: "夜道から押し戻された",
+      summary: "灯りに退路まで塞がれ、道の外まで押し戻された。",
+      line: "灯りは近づくほど遠ざかり、気づけば道の外に立たされていた。",
+      after: "報告書には「夜道から押し戻された。灯りには近づけていない」と記されている。",
+      history: "夜道の灯りに押し戻された。道には手が届いていない。"
+    },
+    daylight: {
+      result: "異常なし",
+      summary: "昼間の道に異常はなく、問題の灯りも確認されなかった。",
+      line: null,
+      after: null,
+      history: "{依頼名}：昼間確認では異常なし。灯りは夜にしか出ない。"
     }
   }
 };

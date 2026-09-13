@@ -363,9 +363,13 @@ window.masterQuests = [
     summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。",
     outcomes: { full: ["拓本完了", "保存優先"], partial: ["一部判読"], fail: [] }
   },
+  // ★ v1（2026-09-13・EX-092 で退避）。**削除ではなく退避**——v2 の良し悪しを判断してから消す。
+  //   `hidden: true` で掲示板に出さない。id を `_v1` にして、v2 が元の id を引き継いだ
+  //   （解放条件・許可リスト・文面表・観察対象のキーがそのまま生きる。石碑の `unlockedBy` も変えずに済む）。
   {
-    id: "quest_lingering_light",
-    title: "夜道に残る灯りの調査",
+    id: "quest_lingering_light_v1",
+    hidden: true,
+    title: "夜道に残る灯りの調査（v1・退避）",
     category: "調査",
     danger: "低",
     area: "村はずれの道",
@@ -389,5 +393,39 @@ window.masterQuests = [
     // ★ 確認のみは部分（2026-08-01・段階4で直した）。灯りは見たが接近調査はしていない。
     //   2026-07-31 に一度登録した値を、共通経路から外したときに一緒に消してしまっていた。
     outcomes: { full: ["異常なし", "調査成功"], partial: ["確認のみ"], fail: [] }
+  },
+  // ★ v2（2026-09-13・EX-092）。設計は DECISION_LOG 2026-09-13「「夜道に残る灯りの調査」を作り直す（v2）」。
+  //   ★ v1 の特殊裁定（outcomeOverride で結末を直に決める）をやめ、**通常の戦闘計算に乗せた**。
+  //   ランタンは特殊分岐ではなく `battleWeakenedBy`（敵の弱体化）で表す＝育成で越えられる形が自動的に成立する。
+  {
+    id: "quest_lingering_light",
+    title: "夜道に残る灯りの調査",
+    // ★ category は「調査」ではなく「戦闘」（2026-09-13・裁定）。調査のままだと主成長が
+    //   investigation だけで、**何度回しても combat が育たず「育成が十分ならランタンなしでも勝てる」に
+    //   到達しない**（GROWTH_STAT_BY_CATEGORY）。
+    category: "戦闘",
+    // ★ 危険度は「高」。ランタンなしでは押し戻される依頼を「低」で掲示すると掲示板が嘘をつく。
+    danger: "高",
+    area: "村はずれの道",
+    durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
+    recommended: ["戦士", "慎重", "観察"],
+    tags: ["戦闘", "夜道", "怪異", "記録"],
+    observationTarget: "残る灯り",
+    // ★ 緊張度は高め（設計8）。
+    tensionBase: 78,
+    tensionRange: 14,
+    enemyId: "enemy_night_light",
+    // ★ 相手から仕掛けられる＝「挑むかどうか」の判断が起きない（設計4「夜闇からの攻撃に手も足も出ない」）。
+    //   段階1を経ないので `withdraw_first` が出ず、**観察記録（図鑑）が残る**。v1 からの後退を避けるための要。
+    battleAmbush: true,
+    // ★ ランタンは「敵の弱体化」として表す。値は結末分布の目標から実測で決めた（下の DECISION_LOG 参照）。
+    // ★ 実測で決めた（基準4人・n=2,000）：ランタンありは 勝利 100.0%／深手・戦闘不能が出た回 8.1%。
+    battleWeakenedBy: { itemId: "item_lantern", hp: 0.20, threat: 0.25 },
+    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は何も起きない。灯りは近づく者を拒む。",
+    // ★ 昼の空振りは partial に置く（v1 は full だった）。**昼に行けばノーリスクで満額成長**になるのを避ける。
+    //   ⚠️ ここに載せ忘れた結末は GROWTH_TIER_BY_RESULT の既定 full（満額成長）に落ちるうえ、
+    //     ハイライトの失敗判定も効かなくなる（どちらも沈黙で通る）。
+    outcomes: { full: ["灯りの正体を確かめた"], partial: ["接近調査は断念", "異常なし"], fail: ["夜道から押し戻された"] }
   }
 ];
