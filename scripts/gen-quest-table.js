@@ -58,7 +58,9 @@ function formatDuration(quest, { bands, minutesPerDay, defaultBand }) {
 }
 
 function formatUnlock(quest, titleById) {
-  if (quest.hidden) return "**掲示板に出ない**（捜索チェーン専用）";
+  // ★ 理由を決め打ちしない（2026-09-13・EX-092）。`hidden` は捜索チェーン専用ではなくなった
+  //   （退避した夜道 v1 も `hidden`）。生成物が事実と違うことを言わないようにする。
+  if (quest.hidden) return "**掲示板に出ない**";
   if (!quest.unlockedBy) return "なし（初期公開）";
   return titleById.get(quest.unlockedBy) || `不明な依頼（\`${quest.unlockedBy}\`）`;
 }

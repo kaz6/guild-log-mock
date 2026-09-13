@@ -259,9 +259,18 @@ const GROWTH_TIER_BY_RESULT = buildGrowthTierByResult();
 
 function buildGrowthTierByResult() {
   const table = { ...GROWTH_TIER_COMMON };
+  // ★ この表は依頼をまたいで結末名を畳む。**同じ名前を別の段に置くと後勝ちで上書きされ、
+  //   別の依頼の成長倍率が黙って変わる**（2026-09-13・EX-092 で実際に起こしかけた——
+  //   夜道 v2 の昼を「異常なし」で partial に置き、辺境教会の巡回の full を潰していた）。
+  //   ★ 沈黙させないために警告を出す。表の形は変えない。
   (window.masterQuests ?? []).forEach((quest) => {
     ["full", "partial", "fail"].forEach((tier) => {
-      (quest.outcomes?.[tier] ?? []).forEach((name) => { table[name] = tier; });
+      (quest.outcomes?.[tier] ?? []).forEach((name) => {
+        if (table[name] && table[name] !== tier) {
+          console.warn(`[結末名の衝突] 「${name}」が ${table[name]} と ${tier} の両方にあります（${quest.id}）。成長倍率が後勝ちで決まります。`);
+        }
+        table[name] = tier;
+      });
     });
   });
   return table;
@@ -886,6 +895,22 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     );
   }
 
+  // ★ 夜道 v2（2026-09-13・EX-092）。結末で昼夜を見分ける（この関数は時間帯を受け取らないため）。
+  if (quest.id === "quest_lingering_light") {
+    if (reportResult === "昼に灯りは出ず") {
+      pool.push(
+        "エルシーは道端の匂いを一通り確かめ、何も見つけないまま戻ってきた。",
+        "エルシーは昼の道を一度だけ往復し、あとは荷物のそばで伏せていた。"
+      );
+    } else {
+      pool.push(
+        "エルシーは灯りの方へ耳を向けたまま、一歩も近づこうとしなかった。",
+        "エルシーは低く唸り、灯りと冒険者のあいだで足を止めた。",
+        "エルシーは暗がりで列の最後尾を保ち、離れた者の匂いを追い続けた。"
+      );
+    }
+  }
+
   if (quest.id === "quest_wedding_support") {
     pool.push(
       "エルシーは会場の端で伏せ、子どもたちに撫でられても静かにしていた。",
@@ -953,7 +978,10 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     );
   }
 
-  if (quest.category === "戦闘" || quest.id === "quest_field_mystery" || quest.id === "quest_barn_bite") {
+  // ★ 条件から `category === "戦闘"` を外した（2026-09-13・EX-092）。ここの文は『なにか』＝
+  //   畑・納屋の固有名を含むので、同じ category の依頼が増えると語彙が流れ込む
+  //   （夜道 v2 の相手は「灯り」で、昼は交戦すらしない）。**依頼IDで名指しする。**
+  if (quest.id === "quest_field_mystery" || quest.id === "quest_barn_bite") {
     pool.push(
       "エルシーは『なにか』が跳ねるたびに耳を立て、足元を小さく回って距離を取った。",
       "エルシーは低く唸りながら、『なにか』と冒険者の間に立とうとした。",
@@ -5222,7 +5250,10 @@ function nightLightResponseText(party, hasLantern, rng) {
 function generateNightLightBattleLogs(quest, party, adventurerItemIds, rng, context = {}) {
   const logs = [];
   const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
-  const hasLantern = itemIds.includes("item_lantern") && canUseItemInQuest(quest, "item_lantern");
+  // ★ 判定は `battleWeakenedBy`（敵の弱体化）と同じ「持っているか」だけにする（2026-09-13・EX-092）。
+  //   `canUseItemInQuest` を重ねると、許可リストからランタンを外したときに
+  //   **本文は「手元に明かりはなく」なのに敵だけ弱くなる**という食い違いが起きる。
+  const hasLantern = itemIds.includes("item_lantern");
   const battleOutcome = context.battleOutcome ?? "victory";
 
   logs.push(`夜道の先に、小さな灯りが一つ浮かんで見えた。`);
@@ -5230,12 +5261,15 @@ function generateNightLightBattleLogs(quest, party, adventurerItemIds, rng, cont
   logs.push(`足を止める間もなく、灯りは${partySubject(party)}との距離を詰めてきた。`);
   if (hasLantern) {
     // ★ 固定文。弱体化が効いた回には必ず出る（抽選にしない）。
-    logs.push(`${supplyItemHolderName(party, adventurerItemIds, "item_lantern")}がランタンを高く掲げた。光の輪の中で、灯りは急に小さくなった。`);
+    logs.push(`${supplyItemHolderName(party, adventurerItemIds, "item_lantern")}がランタンを高く掲げた。光の輪の縁で、灯りは一度だけ身を縮めた。`);
   } else {
     logs.push(`手元に明かりはなく、灯りがどこまで近いのかも測れなかった。`);
   }
   logs.push(nightLightResponseText(party, hasLantern, rng));
   if (battleOutcome === "victory") {
+    // ★ ランタンなしで押し切った回だけの1行（2026-09-13・EX-092）。これが無いと、
+    //   唯一の行動描写が「後ろへ下がる足場を探した」のまま勝ってしまい、設計6の山場が消える。
+    if (!hasLantern) logs.push(`明かりが無いまま、${partySubject(party)}は灯りの方へ踏み込んだ。暗がりは、もう足を止める理由にならなかった。`);
     logs.push(`灯りはしばらく揺れたあと、道の曲がり角の向こうで消えた。`);
   }
   return logs;
@@ -5352,7 +5386,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   //   ここを汎用分岐に任せると、押し戻された回に「無事に戻ってきた」が出る。
   if (quest.id === "quest_lingering_light") {
     const tier = GROWTH_TIER_BY_RESULT[result] ?? "full";
-    if (result === "異常なし") {
+    if (result === "昼に灯りは出ず") {
       const lines = [
         `昼の道はただの道だった。${subject}は日が落ちるのを待つことにした。`,
         `依頼人の言うとおり、昼には何も出なかった。それ自体が一つの記録になった。`

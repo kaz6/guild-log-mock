@@ -519,7 +519,9 @@ window.masterOutcomeTexts = {
       history: "夜道の灯りに押し戻された。道には手が届いていない。"
     },
     daylight: {
-      result: "異常なし",
+      // ★ 「異常なし」は辺境教会の巡回が full で使っている。結末名は依頼をまたいで1つの表に
+      //   畳まれるので、名前を分ける（2026-09-13・EX-092）。
+      result: "昼に灯りは出ず",
       summary: "昼間の道に異常はなく、問題の灯りも確認されなかった。",
       line: null,
       after: null,
