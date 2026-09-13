@@ -6437,7 +6437,15 @@ const BATTLE_TUNING = {
   //   煙幕は撤退の成否（retreatSuccessSmokeBonus）と結末（partial_loss / partial_detour）にだけ効く。
   scoreEnemyLowHpPenalty: -25,
   enemyLowHpRatio: 0.2,
-  scoreEffectiveItemPenalty: -20,
+  // ★ 包帯（正確には quest.battleEffectiveItemIds の残り個数）が判断を継続寄りに倒す重み。
+  //   2026-09-13 に -20 → -10（EX-090 で測り、EX-091 で実施）。★ 下げた理由は「包帯を判断から外す」
+  //   ではなく **-20 が事実より楽観していた**こと——護衛では包帯1枚が勝率を 1.6%→6.0% しか動かさないのに、
+  //   段階1の判断を「引き返す」から「挑む」へ反転させ、bail 48%/fail 45%/勝利 6% の戦いを作っていた。
+  //   ★ 反転の境界は実測済み：**護衛は -18 以下で反転／納屋は -1 以下で反転**（接敵スコア 護衛 57→37・
+  //   納屋 40→20、成立に要るスコアはどちらも 40）。-10 は -17〜-2 の窓の中で、
+  //   **納屋の反転（勝率 64.4%＝妥当）を残したまま護衛の反転だけを消す**値。
+  //   ⚠️ 0 にはしない。**「医療品を判断から外す」は 2026-07-31 に却下済み**（包帯は「勝つ手段がまだある」側）。
+  scoreEffectiveItemPenalty: -10,
   frontDamageShare: 0.6,
   attackSqrtCombatCoef: 3.5,
   attackWeaponCoef: 2,
