@@ -5290,10 +5290,16 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
 
   // 夜の戦闘・調査依頼
   if (isNight && (isBattle || isInvestigation)) {
+    // ★ 失敗した回に「無事に戻ってきた」を出さない（2026-09-13・EX-092）。
+    //   この分岐は結末を見ていなかったので、夜の敗北でもこの1文が出ていた——実測で
+    //   **夜の敗北・膠着 102件のうち 25件（24.5%）**。報告書に嘘を書かないのは隊商護衛で
+    //   既に通した基準（2026-08-04・EX-052）で、ここだけ外れていた。
+    //   ★ 判定は依頼データ由来（`quest.outcomes.fail` に載っている結末か）で、新しい表は増やさない。
+    const failed = GROWTH_TIER_BY_RESULT[result] === "fail";
     const lines = [
-      `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`,
-      `夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`
+      `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`
     ];
+    if (!failed) lines.push(`夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`);
     if (frontWeapon) lines.push(`${frontName}は${frontWeapon.name}を手に夜道へ向かった。帰還したとき、それは少し傷ついていた。`);
     if (acc) lines.push(`${accName}の${acc.name}は、夜の遠征でもいつも通りそこにあった。`);
     // 執着：idleLine（夜の静けさに合う）
