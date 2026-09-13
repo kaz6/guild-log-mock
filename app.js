@@ -352,7 +352,11 @@ function appendGrowthLogToReport(report, expedition) {
   //     鍵を1つ足しただけで、対応表は増えていない。
   //     ⚠️ `hiddenTags.fieldwork` を流用しない：あれは「工程エンジンを通った」ことの記録なので、
   //       通っていない依頼に書くと別の意味になる。
-  const declaredStats = report.hiddenTags?.growthStats ?? report.hiddenTags?.fieldwork?.stats;
+  //   ⚠️ `??` で繋がない：`growthStats: []`（空配列）を書くと `fieldwork.stats` が黙って捨てられる。
+  const growthStats = report.hiddenTags?.growthStats;
+  const declaredStats = Array.isArray(growthStats) && growthStats.length > 0
+    ? growthStats
+    : report.hiddenTags?.fieldwork?.stats;
   const categoryStats = Array.isArray(declaredStats) && declaredStats.length > 0
     ? declaredStats
     : growthStatsForCategory(quest.category);
@@ -1493,23 +1497,31 @@ function getClearedQuestIds() {
 function questBoardVisibility(quest, reports) {
   const rule = quest.reappearAfterCount;
   if (!rule) return { visible: true };
+  // ★ `state.reports` は **unshift**（新しいものが先頭・`app.js` の遠征完了処理）。
+  //   ここを取り違えると「挑戦直後にすぐ戻り、以後は消化数と無関係に点滅する」という**逆の挙動**になる。
+  //   2026-09-13（EX-093）の初版が実際にそうなっていた。
+  // ★ 旧セーブ対策：v1 の報告書は同じ `questId` を持つが `battleOutcome` も `daylightMiss` も無い。
+  //   v2 の挑戦だけを数える（v1 の記録を「挑戦」に数えると、旧セーブで待機に入ってしまう）。
+  const fromV2 = (report) =>
+    report.hiddenTags?.battleOutcome !== undefined || report.hiddenTags?.daylightMiss === true;
   const mine = [];
-  reports.forEach((report, index) => { if (report.questId === quest.id) mine.push({ report, index }); });
+  reports.forEach((report, index) => { if (report.questId === quest.id && fromV2(report)) mine.push({ report, index }); });
   if (mine.length === 0) return { visible: true, reason: "未着手" };
   if (mine.some((m) => m.report.hiddenTags?.battleOutcome === "victory")) return { visible: false, reason: "解決済み" };
   const min = rule.min ?? 1;
   const max = rule.max ?? min;
   const span = Math.max(1, max - min + 1);
-  const last = mine[mine.length - 1];
-  const need = min + (last.index % span);
-  const since = reports.length - 1 - last.index;
+  const last = mine[0];                       // 先頭が最新の挑戦
+  // ★ 必要数は「何回目の挑戦か」から決める。**添字は報告書が増えるたびに動く**ので使えない。
+  const need = min + ((mine.length - 1) % span);
+  const since = last.index;                   // その挑戦より新しい報告書の数＝挑戦後の消化数
   return { visible: since >= need, reason: since >= need ? "再出現" : "待機中", need, since };
 }
 
 function renderQuests() {
   // ★ 掲示板から消えた依頼を選んだままにしない（2026-09-13・EX-093）。
-  //   解放条件は増える方向にしか動かないが、**再出現つきの依頼は遠征から戻った瞬間に消えうる**。
-  //   ここで消しておかないと、その回だけ「無い依頼が選ばれている」画面になる。
+  //   ※ 通常の操作では `startExpedition` が選択を解除するのでここには来ない。
+  //     効くのは**再出現つきの依頼が選択されたまま状態が復元されたとき**だけの掃除。
   if (selectedQuestId) {
     const selected = getQuest(selectedQuestId);
     if (selected && !questBoardVisibility(selected, state.reports).visible) selectedQuestId = null;

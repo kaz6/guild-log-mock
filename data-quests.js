@@ -400,9 +400,10 @@ window.masterQuests = [
   {
     id: "quest_lingering_light",
     title: "夜道に残る灯りの調査",
-    // ★ category は「調査」ではなく「戦闘」（2026-09-13・裁定）。調査のままだと主成長が
-    //   investigation だけで、**何度回しても combat が育たず「育成が十分ならランタンなしでも勝てる」に
-    //   到達しない**（GROWTH_STAT_BY_CATEGORY）。
+    // ★ category は「調査」ではなく「戦闘」（2026-09-13・裁定）。
+    //   ⚠️ **2026-09-13・EX-093 以降、この依頼の成長は category ではなく
+    //     `hiddenTags.growthStats`（夜＝combat/survival ／ 昼＝investigation）が決める。**
+    //     category が効くのはハイライトの分岐と掲示板の表示だけ。
     category: "戦闘",
     // ★ 危険度は「高」。ランタンなしでは押し戻される依頼を「低」で掲示すると掲示板が嘘をつく。
     danger: "高",
