@@ -208,14 +208,42 @@ async function sweep(opts = {}) {
 }
 
 /**
+ * ★ 比較の既定の項目（2026-09-13・EX-093 で「成長段」を常設にした）。
+ *   結末 / あらすじ / 行数 / 本文 / 観察記録 / **成長段**。
+ *   ⚠️ 成長段を入れた理由：結末名は依頼をまたいで1つの表（`GROWTH_TIER_BY_RESULT`）に畳まれ、
+ *     **同じ名前を別の段に置くと後勝ちで上書きされて、別の依頼の成長倍率が黙って変わる**。
+ *     2026-09-13 に実際に起き（辺境教会の巡回が full → partial に落ちていた）、
+ *     **旧来の5項目では1件も差が出なかった**。入口に項目を増やすことでしか拾えない。
+ */
+const COMPARE_FIELDS = ["res", "sum", "n", "lines", "obs", "tier"];
+
+/**
+ * 既定の probe。上の6項目をそのまま返す。★ ページの中で走るので閉包を持てない。
+ * 使い方： sweep({ ..., probe: standardProbe, lines: true, keepLines: true })
+ * ※ 本文（lines）と観察記録が要らない検証では、自前の probe を書いてよい。
+ */
+function standardProbe(r) {
+  return {
+    res: r.result ?? null,
+    sum: r.summary ?? "",
+    n: (r.logs ?? []).length,
+    obs: r.observationNotes ? 1 : 0,
+    tier: (typeof GROWTH_TIER_BY_RESULT !== "undefined"
+      ? (GROWTH_TIER_BY_RESULT[r.result] ?? "full")
+      : null)
+  };
+}
+
+/**
  * 2つの sweep 結果を突き合わせて、フィールドごとの不一致件数を出す。
- * key  … 行を対応づける鍵（既定：axes の値をすべて連結）
- * by   … 不一致の内訳を出す切り口（省略可）
+ * key    … 行を対応づける鍵（既定：比較項目を除いた列をすべて連結）
+ * fields … 比較する項目（既定：COMPARE_FIELDS）
+ * by     … 不一致の内訳を出す切り口（省略可）
  */
 function compare(rowsA, rowsB, opts = {}) {
-  const key = opts.key ?? ((r) => Object.keys(r).filter((k) => !opts.fields.includes(k) && k !== "lines")
+  const fields = opts.fields ?? COMPARE_FIELDS;
+  const key = opts.key ?? ((r) => Object.keys(r).filter((k) => !fields.includes(k) && k !== "lines")
     .sort().map((k) => `${k}=${r[k]}`).join("/"));
-  const fields = opts.fields ?? [];
   const mapB = new Map(rowsB.map((r) => [key(r), r]));
   const diff = {}; const by = {};
   fields.forEach((f) => { diff[f] = 0; by[f] = {}; });
@@ -224,13 +252,24 @@ function compare(rowsA, rowsB, opts = {}) {
     const b = mapB.get(key(a));
     if (!b) { missing++; return; }
     fields.forEach((f) => {
-      if (a[f] !== b[f]) {
+      if (!sameValue(a[f], b[f])) {
         diff[f]++;
         if (opts.by) { const k = opts.by(a); by[f][k] = (by[f][k] ?? 0) + 1; }
       }
     });
   });
   return { total: rowsA.length, missing, diff, by };
+}
+
+// ★ 配列（本文の `lines` など）は `!==` では必ず不一致になる（参照比較）。
+//   既定の比較項目に本文が入っているので、ここを素通りさせると**全件不一致に見える**。
+//   2026-09-13（EX-093）に既定へ入れたときに実際にそう出た。
+function sameValue(x, y) {
+  if (x === y) return true;
+  if (Array.isArray(x) || Array.isArray(y) || (x && typeof x === "object") || (y && typeof y === "object")) {
+    return JSON.stringify(x) === JSON.stringify(y);
+  }
+  return false;
 }
 
 /** 行を keyFn で束ね、binFn が返した名札で数える。{ 鍵: { 名札: 件数, n: 合計 } } */
@@ -273,4 +312,4 @@ function scan(rows, spec) {
   return out;
 }
 
-module.exports = { sweep, compare, tally, scan };
+module.exports = { sweep, compare, tally, scan, standardProbe, COMPARE_FIELDS };

@@ -347,9 +347,14 @@ function appendGrowthLogToReport(report, expedition) {
   //   工程が使った育成値は hiddenTags.fieldwork.stats に入っている（宣言がなければ
   //   ジャンル表由来の値がそのまま入る）。**ここを経由することで対応表が1つのままになる。**
   //   工程を通らない依頼（戦闘・夜道）は従来どおりジャンル表へフォールバックする。
-  const fieldworkStats = report.hiddenTags?.fieldwork?.stats;
-  const categoryStats = Array.isArray(fieldworkStats) && fieldworkStats.length > 0
-    ? fieldworkStats
+  //   ★ 2026-09-13（EX-093）に、**工程エンジンを通らない依頼も同じ形で宣言できる**ようにした
+  //     （`hiddenTags.growthStats`）。仕組みは EX-054 のまま——「その回で実際に使った育成値に従う」。
+  //     鍵を1つ足しただけで、対応表は増えていない。
+  //     ⚠️ `hiddenTags.fieldwork` を流用しない：あれは「工程エンジンを通った」ことの記録なので、
+  //       通っていない依頼に書くと別の意味になる。
+  const declaredStats = report.hiddenTags?.growthStats ?? report.hiddenTags?.fieldwork?.stats;
+  const categoryStats = Array.isArray(declaredStats) && declaredStats.length > 0
+    ? declaredStats
     : growthStatsForCategory(quest.category);
   const battleGrowth = report.hiddenTags?.battleGrowth ?? null;
   const survivalMult = battleGrowth?.downed ? GROWTH_SURVIVAL_MULT.downed : GROWTH_SURVIVAL_MULT.safe;
@@ -1476,7 +1481,39 @@ function getClearedQuestIds() {
   return new Set(state.reports.map((report) => report.questId));
 }
 
+// ★ 再出現（2026-09-13・EX-093）。**倒していない間だけ掲示板に戻る**依頼のための判定。
+//   依頼データの宣言 `reappearAfterCount: { min, max }` を持つ依頼にだけ効く（持たない依頼は素通り）。
+//   ★ 間隔は**依頼の消化数**（`state.reports.length`）で測る。EX-049 で確定している
+//     「クールタイムは消化数1〜3」の規格に合わせた（設計時の「雑に50」は 2026-09-13 に撤回済み）。
+//   ★ 倒したかどうかは結末ラベルではなく `hiddenTags.battleOutcome === "victory"` で見る。
+//     この依頼の `outcomes.full` には昼の空振りが入らないよう名前を分けてあるが、
+//     **「倒した」は戦闘の事実であって結末の段ではない**ので、事実の側を見る。
+//   ⚠️ 掲示板は1秒ごとに描き直されるので、**判定は乱数を使わない**（毎秒ちらつくため）。
+//     必要な間隔は最後に行った回の位置から決めるので、同じ状態なら必ず同じ答えになる。
+function questBoardVisibility(quest, reports) {
+  const rule = quest.reappearAfterCount;
+  if (!rule) return { visible: true };
+  const mine = [];
+  reports.forEach((report, index) => { if (report.questId === quest.id) mine.push({ report, index }); });
+  if (mine.length === 0) return { visible: true, reason: "未着手" };
+  if (mine.some((m) => m.report.hiddenTags?.battleOutcome === "victory")) return { visible: false, reason: "解決済み" };
+  const min = rule.min ?? 1;
+  const max = rule.max ?? min;
+  const span = Math.max(1, max - min + 1);
+  const last = mine[mine.length - 1];
+  const need = min + (last.index % span);
+  const since = reports.length - 1 - last.index;
+  return { visible: since >= need, reason: since >= need ? "再出現" : "待機中", need, since };
+}
+
 function renderQuests() {
+  // ★ 掲示板から消えた依頼を選んだままにしない（2026-09-13・EX-093）。
+  //   解放条件は増える方向にしか動かないが、**再出現つきの依頼は遠征から戻った瞬間に消えうる**。
+  //   ここで消しておかないと、その回だけ「無い依頼が選ばれている」画面になる。
+  if (selectedQuestId) {
+    const selected = getQuest(selectedQuestId);
+    if (selected && !questBoardVisibility(selected, state.reports).visible) selectedQuestId = null;
+  }
   const selectedQuest = getQuest(selectedQuestId);
   const expeditionBlock = expeditionBlockedMessage(selectedAdventurerIds);
   const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && !state.expedition && !expeditionBlock;
@@ -1489,7 +1526,8 @@ function renderQuests() {
   const urgentQuestId = searchChain ? (searchChain.stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search") : null;
   const urgentQuest = urgentQuestId ? getQuest(urgentQuestId) : null;
   const clearedQuestIds = getClearedQuestIds();
-  const boardQuests = state.quests.filter((quest) => !quest.hidden && isQuestUnlocked(quest, clearedQuestIds));
+  const boardQuests = state.quests.filter((quest) =>
+    !quest.hidden && isQuestUnlocked(quest, clearedQuestIds) && questBoardVisibility(quest, state.reports).visible);
   if (urgentQuest) boardQuests.unshift(urgentQuest);
 
   app.innerHTML = `
@@ -5842,7 +5880,10 @@ function generateReport(expedition) {
         observationNotes: null, // 昼は灯りが出ないので観察対象がいない
         departConditions,
         highlight: generateHighlight(quest, party, itemIds, departConditions, dayInfo.result, rng),
-        hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, daylightMiss: true, recordDensityGain: 1 + logs.length },
+        // ★ 昼は交戦しないので combat を育てない（2026-09-13・EX-093 の裁定1）。
+        //   「伸びる stat ＝ 使う stat」（2026-08-01 確定）。**無傷・10分で戦闘値が育つ経路を作ると、
+        //   夜に挑まず昼を回すのが最適になり、設計6（育成で越える）が空洞化する。**
+        hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, daylightMiss: true, growthStats: ["investigation"], recordDensityGain: 1 + logs.length },
         ...tensionMeta,
         createdAt: new Date().toISOString()
       }, quest, party, rng);
@@ -5904,6 +5945,8 @@ function generateReport(expedition) {
         combat: true,
         investigation: true,
         timeOfDay: departTimeOfDay,
+        // ★ 夜は交戦するので combat / survival（category「戦闘」と同じ）。昼と分けるために明示する。
+        growthStats: ["combat", "survival"],
         target: "残る灯り",
         battleOutcome,
         battleHpRatios: battleHpRatiosOf(battle),
