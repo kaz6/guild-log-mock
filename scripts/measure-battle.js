@@ -9,7 +9,9 @@
 //        measureBattle({ trials: 8000 }) のように試行回数を上げられる。
 
 (function () {
-  const BATTLE_QUESTS = ["quest_barn_bite", "quest_caravan_escort"];
+  const BATTLE_QUESTS = ["quest_barn_bite", "quest_caravan_escort", "quest_lingering_light"];
+  // ★ 夜にしか交戦しない依頼（2026-09-13・EX-092）。昼に回すと戦闘を通らず空表になる。
+  const NIGHT_ONLY = { quest_lingering_light: "夜" };
   const BASE_PARTY = ["adv_mina", "adv_gadd", "adv_elne", "adv_row"];
 
   function getParty(ids) {
@@ -55,7 +57,7 @@
         adventurerIds: partyIds,
         adventurerItemIds: Object.fromEntries(partyIds.map((id, idx) => [id, idx === 0 ? itemIds : []])),
         seed: Math.floor(Math.random() * 1e9),
-        departTimeOfDay: "昼",
+        departTimeOfDay: NIGHT_ONLY[questId] ?? "昼",
         departWeather: "晴れ"
       });
       const b = r.hiddenTags?.branch ?? "(none)";

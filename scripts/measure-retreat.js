@@ -63,6 +63,10 @@
           const r = window.simulateBattle(quest, party, set.items, Math.random);
           if (!r) return;
           const d = r.decisions.find((x) => x.at === "first");
+          // ★ battleAmbush の依頼は段階1を経ないので "first" が無い（2026-09-13・EX-092）。
+          //   ここで落とさずに飛ばす（この表は「接敵で引くか」を見るためのもので、
+          //   遭遇が判断を経由しない依頼はそもそも対象外）。
+          if (!d) return;
           out.contact.push({
             敵: e.key,
             編成: p.key,

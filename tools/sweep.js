@@ -88,6 +88,9 @@ function pageRunner(cfg) {
   const rows = [];
   combos.forEach((c) => {
     const party = c.party ?? cfg.party;
+    // ★ 時間帯も軸にできる（2026-09-13・EX-093）。夜にしか起きない依頼を昼固定で回すと
+    //   結末に一度も到達しないまま「不一致0」が出る。既定は cfg.timeOfDay のまま。
+    const timeOfDay = c.timeOfDay ?? cfg.timeOfDay;
     const holder = cfg.holder ?? party[0];
     let itemIds = {};
     if (c.item != null) {
@@ -116,7 +119,7 @@ function pageRunner(cfg) {
         adventurerIds: party,
         adventurerItemIds: itemIds,
         seed: c.seed,
-        departTimeOfDay: cfg.timeOfDay,
+        departTimeOfDay: timeOfDay,
         departWeather: c.weather ?? cfg.weather,
         startTime: 0,
         durationMs: 1,
@@ -166,6 +169,10 @@ async function sweep(opts = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
+  // ★ 黄色の warn もどの検証にも掛かっていなかった（2026-09-13・EX-093）。
+  //   結末名の衝突はここにしか出ないので拾う。
+  const warnings = [];
+  page.on("console", (m) => { if (m.type() === "warning") warnings.push(m.text()); });
 
   const axes = { ...(opts.axes ?? {}) };
   const variants = opts.variants ?? { "": null };
@@ -201,36 +208,106 @@ async function sweep(opts = {}) {
   if (opts.out) fs.writeFileSync(opts.out, JSON.stringify(all));
   if (!opts.quiet) {
     const bad = all.filter((r) => r.error).length;
-    console.log(`件数 ${all.length} / 生成に失敗 ${bad} / pageerror ${errors.length}`, errors.slice(0, 2));
+    console.log(`件数 ${all.length} / 生成に失敗 ${bad} / pageerror ${errors.length} / warn ${warnings.length}`, errors.slice(0, 2), warnings.slice(0, 2));
   }
   all.pageErrors = errors;
+  all.pageWarnings = warnings;
   return all;
 }
 
 /**
+ * ★ 比較の既定の項目（2026-09-13・EX-093 で「成長段」を常設にした）。
+ *   結末 / あらすじ / 行数 / 本文 / 観察記録 / **成長段**。
+ *   ⚠️ 成長段を入れた理由：結末名は依頼をまたいで1つの表（`GROWTH_TIER_BY_RESULT`）に畳まれ、
+ *     **同じ名前を別の段に置くと後勝ちで上書きされて、別の依頼の成長倍率が黙って変わる**。
+ *     2026-09-13 に実際に起き（辺境教会の巡回が full → partial に落ちていた）、
+ *     **旧来の5項目では1件も差が出なかった**。入口に項目を増やすことでしか拾えない。
+ */
+//   ⚠️ 本文は `lines` ではなく **`body`（指紋）**で持つ。`lines` は `keepLines: true` を
+//     付けたときしか行に乗らないので、**付け忘れると両側 undefined ＝「不一致0」と黙って出る**
+//     （2026-09-13 に実際にそう出た）。指紋なら常に乗り、行も太らない。
+const COMPARE_FIELDS = ["res", "sum", "n", "body", "obs", "tier"];
+
+/**
+ * 既定の probe。上の6項目をそのまま返す。★ ページの中で走るので閉包を持てない。
+ * 使い方： sweep({ ..., probe: standardProbe, lines: true, keepLines: true })
+ * ※ 本文（lines）と観察記録が要らない検証では、自前の probe を書いてよい。
+ */
+function standardProbe(r) {
+  // 本文の指紋（長さ＋FNV-1a）。★ 本文そのものは運ばない（17MB になる）が、
+  //   1文字でも変われば必ず変わるので「黙って通る」ことがない。
+  const text = (r.logs ?? []).map((l) => l.text ?? "").join("\n");
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return {
+    res: r.result ?? null,
+    sum: r.summary ?? "",
+    n: (r.logs ?? []).length,
+    body: `${text.length}:${(h >>> 0).toString(36)}`,
+    // ★ 0/1 に潰さない。観察記録は「誰が何を書いたか」まで変わりうる（sameValue が JSON で比べる）。
+    obs: r.observationNotes ?? null,
+    // ★ 表が引けないときは null にしない。null は両側一致して**検査が黙って消える**。
+    tier: (typeof GROWTH_TIER_BY_RESULT !== "undefined"
+      ? (GROWTH_TIER_BY_RESULT[r.result] ?? "full")
+      : "__成長段の表が引けない__")
+  };
+}
+
+/**
  * 2つの sweep 結果を突き合わせて、フィールドごとの不一致件数を出す。
- * key  … 行を対応づける鍵（既定：axes の値をすべて連結）
- * by   … 不一致の内訳を出す切り口（省略可）
+ * key    … 行を対応づける鍵（既定：比較項目を除いた列をすべて連結）
+ * fields … 比較する項目（既定：COMPARE_FIELDS）
+ * by     … 不一致の内訳を出す切り口（省略可）
  */
 function compare(rowsA, rowsB, opts = {}) {
-  const key = opts.key ?? ((r) => Object.keys(r).filter((k) => !opts.fields.includes(k) && k !== "lines")
+  const fields = opts.fields ?? COMPARE_FIELDS;
+  const key = opts.key ?? ((r) => Object.keys(r).filter((k) => !fields.includes(k) && k !== "lines")
     .sort().map((k) => `${k}=${r[k]}`).join("/"));
-  const fields = opts.fields ?? [];
   const mapB = new Map(rowsB.map((r) => [key(r), r]));
   const diff = {}; const by = {};
   fields.forEach((f) => { diff[f] = 0; by[f] = {}; });
+  // ★ probe が返していない項目は、両側 undefined で必ず「不一致0」になる。
+  //   **黙って0を返さない**——何を比べていないかを結果に出す（2026-09-13・EX-093）。
+  //   ★ 片側だけ見ると、before/after を入れ替えただけで警告が消える。両側を見る。
+  const absent = fields.filter((f) =>
+    rowsA.every((r) => r[f] === undefined) || rowsB.every((r) => r[f] === undefined));
+  // ★ undefined でなくても、**全行が同じ値なら検査は働いていない**（2026-09-14・EX-094）。
+  //   実例：担い手を見るつもりの項目が全行 null で、`absent` にも掛からず「不一致0」と出た。
+  //   ※ 軸が狭くて自然に一定になることもあるので、これは**警告であってエラーではない**。
+  const allSame = (rows, f) => {
+    if (rows.length === 0) return false;
+    const first = JSON.stringify(rows[0][f]);
+    return rows.every((r) => JSON.stringify(r[f]) === first);
+  };
+  const constant = fields.filter((f) => !absent.includes(f) && (allSame(rowsA, f) || allSame(rowsB, f)));
+  // ★★ **いちばん効く警告**（2026-09-14・EX-094）。probe が返しているのに `fields` に入れ忘れた項目は、
+  //   既定の `key` がそれを**結合鍵に取り込む**ので、差があっても `diff` は0のまま `missing` に落ちる。
+  //   「`keepLines` を忘れる」と同じ失敗が、名前を変えて残っていた。**返した項目は全部見張る。**
+  const listed = new Set([...fields, ...(opts.keyFields ?? [])]);
+  const unchecked = rowsA.length === 0 ? [] : Object.keys(rowsA[0]).filter((k) => !listed.has(k) && k !== "lines");
   let missing = 0;
   rowsA.forEach((a) => {
     const b = mapB.get(key(a));
     if (!b) { missing++; return; }
     fields.forEach((f) => {
-      if (a[f] !== b[f]) {
+      if (!sameValue(a[f], b[f])) {
         diff[f]++;
         if (opts.by) { const k = opts.by(a); by[f][k] = (by[f][k] ?? 0) + 1; }
       }
     });
   });
-  return { total: rowsA.length, missing, diff, by };
+  return { total: rowsA.length, missing, absent, constant, unchecked, diff, by };
+}
+
+// ★ 配列（本文の `lines` など）は `!==` では必ず不一致になる（参照比較）。
+//   既定の比較項目に本文が入っているので、ここを素通りさせると**全件不一致に見える**。
+//   2026-09-13（EX-093）に既定へ入れたときに実際にそう出た。
+function sameValue(x, y) {
+  if (x === y) return true;
+  if (Array.isArray(x) || Array.isArray(y) || (x && typeof x === "object") || (y && typeof y === "object")) {
+    return JSON.stringify(x) === JSON.stringify(y);
+  }
+  return false;
 }
 
 /** 行を keyFn で束ね、binFn が返した名札で数える。{ 鍵: { 名札: 件数, n: 合計 } } */
@@ -273,4 +350,4 @@ function scan(rows, spec) {
   return out;
 }
 
-module.exports = { sweep, compare, tally, scan };
+module.exports = { sweep, compare, tally, scan, standardProbe, COMPARE_FIELDS };

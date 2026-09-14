@@ -259,9 +259,18 @@ const GROWTH_TIER_BY_RESULT = buildGrowthTierByResult();
 
 function buildGrowthTierByResult() {
   const table = { ...GROWTH_TIER_COMMON };
+  // ★ この表は依頼をまたいで結末名を畳む。**同じ名前を別の段に置くと後勝ちで上書きされ、
+  //   別の依頼の成長倍率が黙って変わる**（2026-09-13・EX-092 で実際に起こしかけた——
+  //   夜道 v2 の昼を「異常なし」で partial に置き、辺境教会の巡回の full を潰していた）。
+  //   ★ 沈黙させないために警告を出す。表の形は変えない。
   (window.masterQuests ?? []).forEach((quest) => {
     ["full", "partial", "fail"].forEach((tier) => {
-      (quest.outcomes?.[tier] ?? []).forEach((name) => { table[name] = tier; });
+      (quest.outcomes?.[tier] ?? []).forEach((name) => {
+        if (table[name] && table[name] !== tier) {
+          console.warn(`[結末名の衝突] 「${name}」が ${table[name]} と ${tier} の両方にあります（${quest.id}）。成長倍率が後勝ちで決まります。`);
+        }
+        table[name] = tier;
+      });
     });
   });
   return table;
@@ -338,9 +347,18 @@ function appendGrowthLogToReport(report, expedition) {
   //   工程が使った育成値は hiddenTags.fieldwork.stats に入っている（宣言がなければ
   //   ジャンル表由来の値がそのまま入る）。**ここを経由することで対応表が1つのままになる。**
   //   工程を通らない依頼（戦闘・夜道）は従来どおりジャンル表へフォールバックする。
-  const fieldworkStats = report.hiddenTags?.fieldwork?.stats;
-  const categoryStats = Array.isArray(fieldworkStats) && fieldworkStats.length > 0
-    ? fieldworkStats
+  //   ★ 2026-09-13（EX-093）に、**工程エンジンを通らない依頼も同じ形で宣言できる**ようにした
+  //     （`hiddenTags.growthStats`）。仕組みは EX-054 のまま——「その回で実際に使った育成値に従う」。
+  //     鍵を1つ足しただけで、対応表は増えていない。
+  //     ⚠️ `hiddenTags.fieldwork` を流用しない：あれは「工程エンジンを通った」ことの記録なので、
+  //       通っていない依頼に書くと別の意味になる。
+  //   ⚠️ `??` で繋がない：`growthStats: []`（空配列）を書くと `fieldwork.stats` が黙って捨てられる。
+  const growthStats = report.hiddenTags?.growthStats;
+  const declaredStats = Array.isArray(growthStats) && growthStats.length > 0
+    ? growthStats
+    : report.hiddenTags?.fieldwork?.stats;
+  const categoryStats = Array.isArray(declaredStats) && declaredStats.length > 0
+    ? declaredStats
     : growthStatsForCategory(quest.category);
   const battleGrowth = report.hiddenTags?.battleGrowth ?? null;
   const survivalMult = battleGrowth?.downed ? GROWTH_SURVIVAL_MULT.downed : GROWTH_SURVIVAL_MULT.safe;
@@ -886,6 +904,22 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     );
   }
 
+  // ★ 夜道 v2（2026-09-13・EX-092）。結末で昼夜を見分ける（この関数は時間帯を受け取らないため）。
+  if (quest.id === "quest_lingering_light") {
+    if (reportResult === "昼に灯りは出ず") {
+      pool.push(
+        "エルシーは道端の匂いを一通り確かめ、何も見つけないまま戻ってきた。",
+        "エルシーは昼の道を一度だけ往復し、あとは荷物のそばで伏せていた。"
+      );
+    } else {
+      pool.push(
+        "エルシーは灯りの方へ耳を向けたまま、一歩も近づこうとしなかった。",
+        "エルシーは低く唸り、灯りと冒険者のあいだで足を止めた。",
+        "エルシーは暗がりで列の最後尾を保ち、離れた者の匂いを追い続けた。"
+      );
+    }
+  }
+
   if (quest.id === "quest_wedding_support") {
     pool.push(
       "エルシーは会場の端で伏せ、子どもたちに撫でられても静かにしていた。",
@@ -953,7 +987,10 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     );
   }
 
-  if (quest.category === "戦闘" || quest.id === "quest_field_mystery" || quest.id === "quest_barn_bite") {
+  // ★ 条件から `category === "戦闘"` を外した（2026-09-13・EX-092）。ここの文は『なにか』＝
+  //   畑・納屋の固有名を含むので、同じ category の依頼が増えると語彙が流れ込む
+  //   （夜道 v2 の相手は「灯り」で、昼は交戦すらしない）。**依頼IDで名指しする。**
+  if (quest.id === "quest_field_mystery" || quest.id === "quest_barn_bite") {
     pool.push(
       "エルシーは『なにか』が跳ねるたびに耳を立て、足元を小さく回って距離を取った。",
       "エルシーは低く唸りながら、『なにか』と冒険者の間に立とうとした。",
@@ -1448,7 +1485,47 @@ function getClearedQuestIds() {
   return new Set(state.reports.map((report) => report.questId));
 }
 
+// ★ 再出現（2026-09-13・EX-093）。**倒していない間だけ掲示板に戻る**依頼のための判定。
+//   依頼データの宣言 `reappearAfterCount: { min, max }` を持つ依頼にだけ効く（持たない依頼は素通り）。
+//   ★ 間隔は**依頼の消化数**（`state.reports.length`）で測る。EX-049 で確定している
+//     「クールタイムは消化数1〜3」の規格に合わせた（設計時の「雑に50」は 2026-09-13 に撤回済み）。
+//   ★ 倒したかどうかは結末ラベルではなく `hiddenTags.battleOutcome === "victory"` で見る。
+//     この依頼の `outcomes.full` には昼の空振りが入らないよう名前を分けてあるが、
+//     **「倒した」は戦闘の事実であって結末の段ではない**ので、事実の側を見る。
+//   ⚠️ 掲示板は1秒ごとに描き直されるので、**判定は乱数を使わない**（毎秒ちらつくため）。
+//     必要な間隔は最後に行った回の位置から決めるので、同じ状態なら必ず同じ答えになる。
+function questBoardVisibility(quest, reports) {
+  const rule = quest.reappearAfterCount;
+  if (!rule) return { visible: true };
+  // ★ `state.reports` は **unshift**（新しいものが先頭・`app.js` の遠征完了処理）。
+  //   ここを取り違えると「挑戦直後にすぐ戻り、以後は消化数と無関係に点滅する」という**逆の挙動**になる。
+  //   2026-09-13（EX-093）の初版が実際にそうなっていた。
+  // ★ 旧セーブ対策：v1 の報告書は同じ `questId` を持つが `battleOutcome` も `daylightMiss` も無い。
+  //   v2 の挑戦だけを数える（v1 の記録を「挑戦」に数えると、旧セーブで待機に入ってしまう）。
+  const fromV2 = (report) =>
+    report.hiddenTags?.battleOutcome !== undefined || report.hiddenTags?.daylightMiss === true;
+  const mine = [];
+  reports.forEach((report, index) => { if (report.questId === quest.id && fromV2(report)) mine.push({ report, index }); });
+  if (mine.length === 0) return { visible: true, reason: "未着手" };
+  if (mine.some((m) => m.report.hiddenTags?.battleOutcome === "victory")) return { visible: false, reason: "解決済み" };
+  const min = rule.min ?? 1;
+  const max = rule.max ?? min;
+  const span = Math.max(1, max - min + 1);
+  const last = mine[0];                       // 先頭が最新の挑戦
+  // ★ 必要数は「何回目の挑戦か」から決める。**添字は報告書が増えるたびに動く**ので使えない。
+  const need = min + ((mine.length - 1) % span);
+  const since = last.index;                   // その挑戦より新しい報告書の数＝挑戦後の消化数
+  return { visible: since >= need, reason: since >= need ? "再出現" : "待機中", need, since };
+}
+
 function renderQuests() {
+  // ★ 掲示板から消えた依頼を選んだままにしない（2026-09-13・EX-093）。
+  //   ※ 通常の操作では `startExpedition` が選択を解除するのでここには来ない。
+  //     効くのは**再出現つきの依頼が選択されたまま状態が復元されたとき**だけの掃除。
+  if (selectedQuestId) {
+    const selected = getQuest(selectedQuestId);
+    if (selected && !questBoardVisibility(selected, state.reports).visible) selectedQuestId = null;
+  }
   const selectedQuest = getQuest(selectedQuestId);
   const expeditionBlock = expeditionBlockedMessage(selectedAdventurerIds);
   const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && !state.expedition && !expeditionBlock;
@@ -1461,7 +1538,15 @@ function renderQuests() {
   const urgentQuestId = searchChain ? (searchChain.stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search") : null;
   const urgentQuest = urgentQuestId ? getQuest(urgentQuestId) : null;
   const clearedQuestIds = getClearedQuestIds();
-  const boardQuests = state.quests.filter((quest) => !quest.hidden && isQuestUnlocked(quest, clearedQuestIds));
+  const boardQuests = state.quests.filter((quest) =>
+    !quest.hidden && isQuestUnlocked(quest, clearedQuestIds) && questBoardVisibility(quest, state.reports).visible);
+  // ★ 掲示板から消えている理由のうち、**待機中だけ**を1行で出す（2026-09-14・EX-095）。
+  //   「解決済み」は出さない——勝った回の結末文が既に言っているので、二度書かない。
+  //   「戻ってきた」も出さない——**忘れた頃に掲示板にある**のが設計7の質感で、告知すると「イベント発生」になる。
+  //   ★ `state` は1つも増やさない（毎回 `state.reports` から導く）。数字は出さない。
+  const waitingQuests = state.quests.filter((quest) =>
+    !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
+    && questBoardVisibility(quest, state.reports).reason === "待機中");
   if (urgentQuest) boardQuests.unshift(urgentQuest);
 
   app.innerHTML = `
@@ -1474,6 +1559,11 @@ function renderQuests() {
       <span class="weather-bar-icon">🚨</span>
       <span class="weather-bar-text">隊商を護り切れなかった。捜索に向かえる者を編成せよ。</span>
     </div>` : ""}
+    ${waitingQuests.map((quest) => `
+    <div class="weather-bar">
+      <span class="weather-bar-icon">🕗</span>
+      <span class="weather-bar-text">${quest.title}の件は、まだ次の話が来ていない。</span>
+    </div>`).join("")}
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間帯：</span>
       ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
@@ -3103,7 +3193,11 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_signpost: ["item_whistle", "item_map", "item_bandage", "item_obs_sheet", "item_pot"],
     quest_field_mystery: ["item_bandage", "item_whistle", "item_obs_sheet"],
     quest_barn_bite: ["item_bandage", "item_whistle", "item_lantern", "item_obs_sheet"],
+    // ★ 夜道 v2 は包帯を許可しない（2026-09-13・裁定）。許可すると段階1の閾値が動く…のではなく、
+    //   この依頼は battleAmbush で段階1を経ないため判断には効かないが、**戦闘中の手当てで
+    //   結末分布が動く**ので、v1 どおりの3品に留める。
     quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"],
+    quest_lingering_light_v1: ["item_lantern", "item_obs_sheet", "item_map"],
     quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"],
     quest_church_patrol: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot"],
     quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"],
@@ -5181,6 +5275,68 @@ function generateLightInvestigationLogs(quest, party, adventurerItemIds, departT
   return logs;
 }
 
+// ★ 夜道 v2 の本文（2026-09-13・EX-092）。**既存の戦闘ログは流用しない**——
+//   `generateBattleLogs` は「薄暗い畑の中」など畑・納屋の語彙を持っているため。
+//   固定文（ランタンが効いた瞬間）は抽選にしない。設計5「固定文を出して弱体化」に従う。
+function generateNightLightDayLogs(quest, party, adventurerItemIds, rng) {
+  const itemIds = getAllItemIds(adventurerItemIds);
+  const hasMap = itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map");
+  const logs = [`昼の道には、人の足跡と荷車の跡が残っているだけだった。`];
+  logs.push(lightInvestigationResponseText(party, false, itemIds.includes("item_lantern"), rng));
+  if (hasMap) logs.push(`古地図と照らしても、道筋そのものに新しい変化は見つからなかった。`);
+  logs.push(`依頼人は、やはり夜にだけ出るのだと言った。${partySubject(party)}は日が落ちてから出直すことにした。`);
+  return logs;
+}
+
+// ★ v2 の対応行。v1 の `lightInvestigationResponseText` は流用しない——あちらは
+//   「近づくかどうかを選べる」前提の文（深追いを避けた／次回に回した）で、
+//   **遭遇が判断を経由しない v2 では本文が嘘になる**（実際に交戦しているのに「避けた」と書かれる）。
+function nightLightResponseText(party, hasLantern, rng) {
+  const stat = pickOne(["caution", "memory", "curiosity", "courage", "kindness"], rng);
+  const adv = bestByTendency(party, stat);
+  const name = getDisplayName(adv);
+  if (hasLantern) {
+    if (stat === "memory") return `${name}は光が届く範囲を測りながら、灯りの動きを書き留めた。`;
+    if (stat === "caution") return `${name}は帰り道の轍から目を離さず、光の輪の縁を保った。`;
+    if (stat === "curiosity") return `${name}は灯りの芯を覗き込もうとして、明かりごと半歩踏み込んだ。`;
+    if (stat === "courage") return `${name}は明かりを掲げたまま前に出て、灯りとの間に立った。`;
+    return `${name}は列の後ろまで光が届くように、ランタンの角度を直した。`;
+  }
+  if (stat === "memory") return `${name}は見えたものだけを頭の中で数えた。書き留める手元すら見えなかった。`;
+  if (stat === "caution") return `${name}は帰り道の方角だけを頼りに、後ろへ下がる足場を探した。`;
+  if (stat === "curiosity") return `${name}は灯りの形を見極めようとしたが、輪郭は近づくほどほどけていった。`;
+  if (stat === "courage") return `${name}は一歩前に出たが、足元が見えないためそこで止まった。`;
+  return `${name}は仲間の位置を声で確かめながら、暗がりの中で列を保った。`;
+}
+
+function generateNightLightBattleLogs(quest, party, adventurerItemIds, rng, context = {}) {
+  const logs = [];
+  const itemIds = context.itemIds ?? getAllItemIds(adventurerItemIds);
+  // ★ 判定は `battleWeakenedBy`（敵の弱体化）と同じ「持っているか」だけにする（2026-09-13・EX-092）。
+  //   `canUseItemInQuest` を重ねると、許可リストからランタンを外したときに
+  //   **本文は「手元に明かりはなく」なのに敵だけ弱くなる**という食い違いが起きる。
+  const hasLantern = itemIds.includes("item_lantern");
+  const battleOutcome = context.battleOutcome ?? "victory";
+
+  logs.push(`夜道の先に、小さな灯りが一つ浮かんで見えた。`);
+  // ★ 遭遇は判断を経由しない（battleAmbush）。近づいたのではなく、灯りの方が距離を詰めてくる。
+  logs.push(`足を止める間もなく、灯りは${partySubject(party)}との距離を詰めてきた。`);
+  if (hasLantern) {
+    // ★ 固定文。弱体化が効いた回には必ず出る（抽選にしない）。
+    logs.push(`${supplyItemHolderName(party, adventurerItemIds, "item_lantern")}がランタンを高く掲げた。光の輪の縁で、灯りは一度だけ身を縮めた。`);
+  } else {
+    logs.push(`手元に明かりはなく、灯りがどこまで近いのかも測れなかった。`);
+  }
+  logs.push(nightLightResponseText(party, hasLantern, rng));
+  if (battleOutcome === "victory") {
+    // ★ ランタンなしで押し切った回だけの1行（2026-09-13・EX-092）。これが無いと、
+    //   唯一の行動描写が「後ろへ下がる足場を探した」のまま勝ってしまい、設計6の山場が消える。
+    if (!hasLantern) logs.push(`明かりが無いまま、${partySubject(party)}は灯りの方へ踏み込んだ。暗がりは、もう足を止める理由にならなかった。`);
+    logs.push(`灯りはしばらく揺れたあと、道の曲がり角の向こうで消えた。`);
+  }
+  return logs;
+}
+
 // ★ 支給品が実際に効いた id を工程の events から拾う（2026-08-04・EX-050）。
 //   ハイライトの判定に使う。持っているだけで「使う場面があった」と書くと本文と食い違う。
 function effectiveItemIds(fw) {
@@ -5288,12 +5444,58 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     return pickOne(lines, rng);
   }
 
+  // ★ 夜道 v2 専用（2026-09-13・EX-092）。結末ごとに書き分ける——
+  //   ここを汎用分岐に任せると、押し戻された回に「無事に戻ってきた」が出る。
+  if (quest.id === "quest_lingering_light") {
+    const tier = GROWTH_TIER_BY_RESULT[result] ?? "full";
+    if (result === "昼に灯りは出ず") {
+      const lines = [
+        `昼の道はただの道だった。${subject}は日が落ちるのを待つことにした。`,
+        `依頼人の言うとおり、昼には何も出なかった。それ自体が一つの記録になった。`
+      ];
+      return pickOne(lines, rng);
+    }
+    if (tier === "fail") {
+      const lines = [
+        `灯りは近づくほど遠ざかり、${subject}は道の外まで押し戻された。`,
+        `明かりのない夜道で、距離も方角も測れなかった。それが今回分かったすべてだ。`
+      ];
+      if (obs) lines.push(`${obsName}【${obs.label}】— ${obs.idleLine}`);
+      return pickOne(lines, rng);
+    }
+    if (tier === "partial") {
+      const lines = [
+        `${subject}は灯りに背を向けた。逃げたのではなく、今日はここまでだと決めた。`,
+        `灯りは道に残ったままだ。見た、という事実だけを持ち帰った。`
+      ];
+      if (obs) lines.push(`${obsName}【${obs.label}】— ${obs.idleLine}`);
+      return pickOne(lines, rng);
+    }
+    const lines = [
+      `灯りが消えるまでの数秒を、${subject}は最後まで見ていた。`,
+      `${frontName}は灯りの前から動かなかった。正体は分からないままだが、道は元に戻った。`
+    ];
+    if (acc) lines.push(`${accName}の${acc.name}は、夜の遠征でもいつも通りそこにあった。`);
+    if (obs) lines.push(`${obsName}【${obs.label}】— ${obs.positiveLine}`);
+    return pickOne(lines, rng);
+  }
+
   // 夜の戦闘・調査依頼
   if (isNight && (isBattle || isInvestigation)) {
+    // ★ 失敗した回に「無事に戻ってきた」を出さない（2026-09-13・EX-092）。
+    //   この分岐は結末を見ていなかったので、夜の敗北でもこの1文が出ていた——実測で
+    //   **夜の敗北・膠着 102件のうち 25件（24.5%）**。報告書に嘘を書かないのは隊商護衛で
+    //   既に通した基準（2026-08-04・EX-052）で、ここだけ外れていた。
+    //   ★ 判定は依頼データ由来（`quest.outcomes` のどの段に載っている結末か）で、新しい表は増やさない。
+    //   ★ 2026-09-13 に「fail のときだけ」から「完遂できた回だけ」に広げた——中止（部分）の回にも
+    //     この1行が出ており、昼の分岐を同じ形に直したときに夜だけ緩いままになっていた。
+    const done = (GROWTH_TIER_BY_RESULT[result] ?? "full") === "full";
     const lines = [
-      `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`,
-      `夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`
+      `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`
     ];
+    lines.push(done
+      ? `夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`
+      : `夜の${quest.area}に、やり残したものがある。${subject}はそれを書いてから筆を置いた。`);
     if (frontWeapon) lines.push(`${frontName}は${frontWeapon.name}を手に夜道へ向かった。帰還したとき、それは少し傷ついていた。`);
     if (acc) lines.push(`${accName}の${acc.name}は、夜の遠征でもいつも通りそこにあった。`);
     // 執着：idleLine（夜の静けさに合う）
@@ -5303,16 +5505,30 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
 
   // 戦闘依頼（夜以外）
   if (isBattle) {
+    // ★ 結末を見る（2026-09-13・EX-092）。以前は `result === "討伐"` だけで討伐／追い払いを
+    //   見分けており、**中止・失敗の回にも「追い払いは成功した」「それで十分だった」が出ていた**
+    //   （実測で 討伐中止 33.2%／討伐失敗 31.3%）。隊商護衛で通した「報告書に嘘を書かない」
+    //   （2026-08-04・EX-052）がここだけ外れていた。
+    //   ★ 成否の判定は依頼データ由来（`quest.outcomes`）で、新しい表は増やさない。
+    const done = (GROWTH_TIER_BY_RESULT[result] ?? "full") === "full";
     const isDefeat = result === "討伐";
     const lines = [
-      `${frontName}は怯まず前に出た。それが今回の遠征で一番はっきりしたことだ。`,
-      isDefeat ? `「なにか」は仕留められた。ただし正体は、まだ誰も知らない。` : `追い払いは成功した。ただし正体は、まだ誰も知らない。`
+      `${frontName}は怯まず前に出た。それが今回の遠征で一番はっきりしたことだ。`
     ];
+    if (done) {
+      lines.push(isDefeat ? `「なにか」は仕留められた。ただし正体は、まだ誰も知らない。` : `追い払いは成功した。ただし正体は、まだ誰も知らない。`);
+    } else {
+      lines.push(`「なにか」は${quest.area}に残ったままだ。正体も、まだ誰も知らない。`);
+    }
     if (frontWeapon) {
       lines.push(`${frontName}は${frontWeapon.name}を構え、${quest.area}の入口から最後まで動かなかった。`);
-      lines.push(isDefeat
-        ? `${frontWeapon.name}が「なにか」の動きを止めた。それで十分だった。`
-        : `${frontWeapon.name}が「なにか」の退路を${quest.area}の外へ向けた。それで十分だった。`);
+      if (done) {
+        lines.push(isDefeat
+          ? `${frontWeapon.name}が「なにか」の動きを止めた。それで十分だった。`
+          : `${frontWeapon.name}が「なにか」の退路を${quest.area}の外へ向けた。それで十分だった。`);
+      } else {
+        lines.push(`${frontWeapon.name}は届かなかった。${quest.area}の入口から先へは進めていない。`);
+      }
     }
     if (acc) lines.push(`${accName}の${acc.name}は、帰還後もしばらくその手元にあった。`);
     // 執着：positiveLine（行動として出た面）
@@ -5612,7 +5828,8 @@ function generateReport(expedition) {
     };
   }
 
-  if (quest.id === "quest_lingering_light") {
+  // ★ v1（退避）。id を `_v1` にした（2026-09-13・EX-092）。掲示板には出ないが、経路は残す。
+  if (quest.id === "quest_lingering_light_v1") {
     const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
     const isNight = departTimeOfDay === "夜";
     const hasLantern = itemIds.includes("item_lantern");
@@ -5652,6 +5869,115 @@ function generateReport(expedition) {
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, lightResult, rng),
       hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
+      ...tensionMeta,
+      createdAt: new Date().toISOString()
+    }, quest, party, rng);
+  }
+
+  // ★ 夜道 v2（2026-09-13・EX-092）：昼は空振り、夜は交戦。
+  //   ★ v1 の特殊裁定（outcomeOverride）は使わない。夜は通常の戦闘計算に乗せる。
+  if (quest.id === "quest_lingering_light") {
+    const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
+    const isNight = departTimeOfDay === "夜";
+
+    if (!isNight) {
+      const dayInfo = questOutcomeText(quest.id, "daylight", party, itemIds);
+      const dayLogs = generateNightLightDayLogs(quest, party, adventurerItemIds, rng);
+      dayLogs.forEach((text, index) => add(index === dayLogs.length - 1 ? "afterglow" : "action", text));
+      return withElsieLog({
+        id: `report_${Date.now()}`,
+        questId: quest.id,
+        adventurerIds: expedition.adventurerIds,
+        adventurerItemIds,
+        itemIds,
+        opened: false,
+        applied: false,
+        result: dayInfo.result,
+        summary: dayInfo.summary,
+        historyLine: dayInfo.history,
+        adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, {
+          result: dayInfo.result,
+          elsieRoleNote: "鼻と警戒で",
+          roleNoteFor: () => "昼の確認に"
+        }),
+        logs,
+        observationNotes: null, // 昼は灯りが出ないので観察対象がいない
+        departConditions,
+        highlight: generateHighlight(quest, party, itemIds, departConditions, dayInfo.result, rng),
+        // ★ 昼は交戦しないので combat を育てない（2026-09-13・EX-093 の裁定1）。
+        //   「伸びる stat ＝ 使う stat」（2026-08-01 確定）。**無傷・10分で戦闘値が育つ経路を作ると、
+        //   夜に挑まず昼を回すのが最適になり、設計6（育成で越える）が空洞化する。**
+        hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, daylightMiss: true, growthStats: ["investigation"], recordDensityGain: 1 + logs.length },
+        ...tensionMeta,
+        createdAt: new Date().toISOString()
+      }, quest, party, rng);
+    }
+
+    const battle = simulateBattle(quest, party, itemIds, rng);
+    const battleOutcome = battle ? battle.outcome : "victory";
+    const missingIds = battleMissingIds(battle, party);
+    const outcomeInfo = questBattleOutcomeText(quest, battleOutcome, party);
+    const questLogs = generateNightLightBattleLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, battleOutcome });
+    const dramaLines = [
+      ...generateSimpleBattleDramaLog(battle, party, rng),
+      ...battleDefenseHighlights(battle, party, rng),
+      ...unusedSupplyLines(battle, party, adventurerItemIds, rng)
+    ];
+    if (battleOutcome === "victory") {
+      questLogs.forEach((text, index) => {
+        if (index === questLogs.length - 1) {
+          dramaLines.forEach((line) => add(line.kind, line.text));
+          add("afterglow", text);
+        } else {
+          add("action", text);
+        }
+      });
+    } else {
+      questLogs.forEach((text) => add("action", text));
+      dramaLines.forEach((line) => add(line.kind, line.text));
+      if (missingIds.length > 0) add("drama", missingLineText(missingIds, party));
+      add("action", outcomeInfo.line);
+      add("afterglow", outcomeInfo.after);
+    }
+
+    // ★ 夜は必ず観察記録が残る。**これが v2 の主眼**——v1 は「確認のみ」で図鑑に残っていたのに、
+    //   段階1で引き返す形にすると残らなくなる（`withdraw_first` は観察記録を落とす）。
+    //   battleAmbush で段階1を経ないので、押し戻された回でも灯りは見ている。
+    const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
+    return withElsieLog({
+      id: `report_${Date.now()}`,
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: outcomeInfo.result,
+      summary: outcomeInfo.summary,
+      historyLine: outcomeInfo.history,
+      adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, {
+        result: outcomeInfo.result,
+        elsieRoleNote: "鼻と警戒で",
+        roleNoteFor: (adv) =>
+          adv.tendencies?.courage >= 4 ? "前に出る判断で" : adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.memory >= 4 ? "記録役として" : "夜道の調査に"
+      }),
+      logs,
+      observationNotes,
+      departConditions,
+      highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng),
+      hiddenTags: {
+        combat: true,
+        investigation: true,
+        timeOfDay: departTimeOfDay,
+        // ★ 夜は交戦するので combat / survival（category「戦闘」と同じ）。昼と分けるために明示する。
+        growthStats: ["combat", "survival"],
+        target: "残る灯り",
+        battleOutcome,
+        battleHpRatios: battleHpRatiosOf(battle),
+        battleCritIds: battleCritIdsOf(battle),
+        ...(missingIds.length > 0 ? { missingIds } : {}),
+        recordDensityGain: 1 + logs.length
+      },
       ...tensionMeta,
       createdAt: new Date().toISOString()
     }, quest, party, rng);
@@ -6437,7 +6763,15 @@ const BATTLE_TUNING = {
   //   煙幕は撤退の成否（retreatSuccessSmokeBonus）と結末（partial_loss / partial_detour）にだけ効く。
   scoreEnemyLowHpPenalty: -25,
   enemyLowHpRatio: 0.2,
-  scoreEffectiveItemPenalty: -20,
+  // ★ 包帯（正確には quest.battleEffectiveItemIds の残り個数）が判断を継続寄りに倒す重み。
+  //   2026-09-13 に -20 → -10（EX-090 で測り、EX-091 で実施）。★ 下げた理由は「包帯を判断から外す」
+  //   ではなく **-20 が事実より楽観していた**こと——護衛では包帯1枚が勝率を 1.6%→6.0% しか動かさないのに、
+  //   段階1の判断を「引き返す」から「挑む」へ反転させ、bail 48%/fail 45%/勝利 6% の戦いを作っていた。
+  //   ★ 反転の境界は実測済み：**護衛は -18 以下で反転／納屋は -1 以下で反転**（接敵スコア 護衛 57→37・
+  //   納屋 40→20、成立に要るスコアはどちらも 40）。-10 は -17〜-2 の窓の中で、
+  //   **納屋の反転（勝率 64.4%＝妥当）を残したまま護衛の反転だけを消す**値。
+  //   ⚠️ 0 にはしない。**「医療品を判断から外す」は 2026-07-31 に却下済み**（包帯は「勝つ手段がまだある」側）。
+  scoreEffectiveItemPenalty: -10,
   frontDamageShare: 0.6,
   attackSqrtCombatCoef: 3.5,
   attackWeaponCoef: 2,
@@ -6504,9 +6838,22 @@ const BATTLE_TUNING = {
   critMinHpRatio: 0.05
 };
 
-function getEnemyForQuest(quest) {
+// ★ 依頼データの宣言 `battleWeakenedBy` で、支給品を持っているときだけ敵を弱くする
+//   （2026-09-13・EX-092）。**特殊分岐ではなく宣言**なので、持たない依頼は今までどおり。
+//   ねらいは「ランタンを通常の戦闘計算に乗せる」こと——そうすれば育成で越えられる形が自動的に
+//   成立し、エンジンの外に特殊裁定を積まずに済む。
+//   ⚠️ id / name / shortName は保つ（`battle.enemyId` から名前を引き直す箇所が3つある）。
+function getEnemyForQuest(quest, heldItemIds) {
   if (!quest || !quest.enemyId || !Array.isArray(window.masterEnemies)) return null;
-  return window.masterEnemies.find((e) => e.id === quest.enemyId) ?? null;
+  const base = window.masterEnemies.find((e) => e.id === quest.enemyId) ?? null;
+  if (!base) return null;
+  const weaken = quest.battleWeakenedBy;
+  if (!weaken || !Array.isArray(heldItemIds) || !heldItemIds.includes(weaken.itemId)) return base;
+  return {
+    ...base,
+    hp: Math.max(1, Math.round(base.hp * (weaken.hp ?? 1))),
+    threat: Math.max(1, Math.round(base.threat * (weaken.threat ?? 1)))
+  };
 }
 
 // 前衛は毎ラウンド選び直す。HP率のもっとも高い者が前へ出る（H1-a・2026-07-29）。
@@ -6626,7 +6973,8 @@ function battleStatusWord(hp, maxHp, gotCrit = false) {
 }
 
 function simulateBattle(quest, party, itemIds, rng) {
-  const enemy = getEnemyForQuest(quest);
+  // ⚠️ heldItems の宣言はこの下なので、ここでは引数をそのまま渡す（順番を入れ替えない）。
+  const enemy = getEnemyForQuest(quest, Array.isArray(itemIds) ? itemIds : []);
   if (!enemy) return null;
   const random = rng ?? Math.random;
   const humans = party.filter((a) => a.species !== "dog");
@@ -6713,12 +7061,22 @@ function simulateBattle(quest, party, itemIds, rng) {
   };
 
   // ★段階1（接敵）：戦うか、挑まずに引き返すか。予想ラウンド数で判断する（2026-07-30 裁定・論点1=A）。
+  // ★ `battleAmbush` の依頼は段階1を経ない（2026-09-13・EX-092）。**相手から仕掛けられるので
+  //   「挑むかどうか」の判断がそもそも起きない。** 撤退は段階2〜4でこれまでどおり成立する。
+  //   ⚠️ decisions / logVoteMilestone / events の3行ごと囲うこと。`first` を null にして if だけ
+  //     書き替えると `logVoteMilestone(null)` と `first.ratio` で落ちる。
+  //   ★ 副作用として `withdraw_first` が出なくなる＝観察記録の抑制（この下の報告書側）も外れる。
+  //     夜道 v2 で図鑑が残るのはこれが理由。
   context.medicalLeft = medicalLeft;
-  const first = computeBattleResolveDecision(fighters, enemyHp, enemy, context, "first");
-  decisions.push({ at: "first", ...first });
-  logVoteMilestone(first, 0);
-  events.push({ type: "retreat", at: "first", round: 0, retreat: first.retreat, ratio: first.ratio });
-  if (first.retreat) {
+  const ambush = quest.battleAmbush === true;
+  let first = null;
+  if (!ambush) {
+    first = computeBattleResolveDecision(fighters, enemyHp, enemy, context, "first");
+    decisions.push({ at: "first", ...first });
+    logVoteMilestone(first, 0);
+    events.push({ type: "retreat", at: "first", round: 0, retreat: first.retreat, ratio: first.ratio });
+  }
+  if (first && first.retreat) {
     outcome = "withdraw_first";
   } else {
     for (let round = 1; round <= BATTLE_TUNING.maxRounds; round++) {
