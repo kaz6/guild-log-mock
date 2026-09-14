@@ -47,6 +47,8 @@
 | 遠征ギルドログ（プロジェクトルート） | `399a8a5dfd45819d8d8aca0c86f9aade` |
 | `_tasks`（実装タスク） | `39da8a5dfd4581159f9fdfb6b6e37f35`（★ **タスク番号 EX-000 ↔ UUID の対応表**はこのページ。次に使う番号もここ） |
 | `02_operations/ドキュメント運用規約` | `3a9a8a5dfd458160bffcd90e48bf5b08` |
+| `02_operations/スキル：session-end` | `3a9a8a5dfd4581778774f6f01b2cca4a`（★ **`.claude/skills/session-end/SKILL.md` のマスター**。写しと突き合わせるときはここを読む。2026-09-15・EX-100 に登録） |
+| `02_operations`（親フォルダ） | `3aaa8a5dfd4581a89b8bdcab635ec552` |
 
 ⚠️ **「DECISION_LOG（設計判断の記録）」は遠征と別企画（IGPJ_02 天使様）の両方に同名で存在する。** 検索で当てにいくと別企画のページを踏む（2026-07-26に実際に発生）。**必ず上表のIDで指定すること。**
 
