@@ -363,37 +363,6 @@ window.masterQuests = [
     summary: "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。",
     outcomes: { full: ["拓本完了", "保存優先"], partial: ["一部判読"], fail: [] }
   },
-  // ★ v1（2026-09-13・EX-092 で退避）。**削除ではなく退避**——v2 の良し悪しを判断してから消す。
-  //   `hidden: true` で掲示板に出さない。id を `_v1` にして、v2 が元の id を引き継いだ
-  //   （解放条件・許可リスト・文面表・観察対象のキーがそのまま生きる。石碑の `unlockedBy` も変えずに済む）。
-  {
-    id: "quest_lingering_light_v1",
-    hidden: true,
-    title: "夜道に残る灯りの調査（v1・退避）",
-    category: "調査",
-    danger: "低",
-    area: "村はずれの道",
-    durationBand: "near_10m",
-    unlockedBy: "quest_tavern_errand",
-    recommended: ["慎重", "記録", "観察"],
-    tags: ["調査", "夜道", "怪異", "記録"],
-    observationTarget: "残る灯り",
-    tensionBase: 62,
-    tensionRange: 28,
-    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。",
-    // ★ この依頼だけ、結末が時間帯と支給品で決まる（工程も戦闘も通らない）。
-    //   例外であることが、このデータを見て分かるようにしてある。
-    outcomeOverride: {
-      rules: [
-        { when: ["夜である", "ランタンを持っている"], outcome: "調査成功" },
-        { when: ["夜である"], outcome: "確認のみ" }
-      ],
-      default: "異常なし"
-    },
-    // ★ 確認のみは部分（2026-08-01・段階4で直した）。灯りは見たが接近調査はしていない。
-    //   2026-07-31 に一度登録した値を、共通経路から外したときに一緒に消してしまっていた。
-    outcomes: { full: ["異常なし", "調査成功"], partial: ["確認のみ"], fail: [] }
-  },
   // ★ v2（2026-09-13・EX-092）。設計は DECISION_LOG 2026-09-13「「夜道に残る灯りの調査」を作り直す（v2）」。
   //   ★ v1 の特殊裁定（outcomeOverride で結末を直に決める）をやめ、**通常の戦闘計算に乗せた**。
   //   ランタンは特殊分岐ではなく `battleWeakenedBy`（敵の弱体化）で表す＝育成で越えられる形が自動的に成立する。
@@ -436,3 +405,91 @@ window.masterQuests = [
     outcomes: { full: ["灯りの正体を確かめた"], partial: ["接近調査は断念", "昼に灯りは出ず"], fail: ["夜道から押し戻された"] }
   }
 ];
+
+// ★ 退避（2026-09-14・EX-096）。**削除ではなく退避**——`masterVocabRetired`（`data-vocab.js`）と同じ形。
+//   「夜道に残る灯りの調査」v1 を、2026-09-13（EX-092）に v2 へ作り直した。v1 は判断が済むまで
+//   `hidden: true` で残していたが、v2 が目標の結末分布を満たし、観察記録も全結末で残る
+//   （v1 からの後退が解消された）ので、**比較の役目が終わったと裁定して掲示板から外した**。
+//
+// ★ **戻し方**：`quest` を `masterQuests` の石碑の次の位置へ戻す。あわせて次の3つが要る。
+//   1. `data-outcomes.js` の `masterOutcomesRetired.quest_lingering_light_v1` を `masterOutcomes` へ
+//   2. `app.js` の `canUseItemInQuest` の `allowedByQuest` に下の `allowedItemIds` を足す
+//      （★ 既定は全禁止なので、書かないと支給品の行が一切出ない）
+//   3. `app.js` の `generateReport` に `quest.id === "quest_lingering_light_v1"` の分岐と、
+//      本文を組む `generateLightInvestigationLogs` を戻す（コードは commit 2ae88eb 以前に残っている）
+//
+// ⚠️ **旧セーブは戻さなくても壊れない。** v1 時代の報告書は `questId: "quest_lingering_light"` を
+//    持っており、その id は v2 が継いでいるので、石碑の解放（`getClearedQuestIds`）も
+//    報告書の表示も引き続き成立する（2026-09-14 に実機で確認済み）。
+window.masterQuestsRetired = {
+  // 依頼定義そのもの（2026-09-13 に `_v1` へ改名した状態のまま）
+  quest: {
+    id: "quest_lingering_light_v1",
+    hidden: true,
+    title: "夜道に残る灯りの調査（v1・退避）",
+    category: "調査",
+    danger: "低",
+    area: "村はずれの道",
+    durationBand: "near_10m",
+    unlockedBy: "quest_tavern_errand",
+    recommended: ["慎重", "記録", "観察"],
+    tags: ["調査", "夜道", "怪異", "記録"],
+    observationTarget: "残る灯り",
+    tensionBase: 62,
+    tensionRange: 28,
+    summary: "夜になると誰も持っていない灯りが見えるという道を調べる。昼は通常の道として確認する。",
+    // ★ この依頼だけ、結末が時間帯と支給品で決まっていた（工程も戦闘も通らない）。
+    outcomeOverride: {
+      rules: [
+        { when: ["夜である", "ランタンを持っている"], outcome: "調査成功" },
+        { when: ["夜である"], outcome: "確認のみ" }
+      ],
+      default: "異常なし"
+    },
+    outcomes: { full: ["異常なし", "調査成功"], partial: ["確認のみ"], fail: [] }
+  },
+  // `allowedByQuest` の行（app.js の `canUseItemInQuest`）
+  allowedItemIds: ["item_lantern", "item_obs_sheet", "item_map"],
+  // 結末ラベル → 名簿の履歴に出る語（app.js の `LIGHT_HISTORY_LABEL`）
+  historyLabel: { 調査成功: "夜間調査", 確認のみ: "灯り確認", 異常なし: "昼間確認" },
+  // ★ 本文（`generateLightInvestigationLogs` が組んでいた行）。**分岐ごとにそのまま残す。**
+  //   `{隊}` は `partySubject(party)`。抽選で選ぶ行は関数名を添えた（関数自体は v2 も使うものだけ残した）。
+  logLines: {
+    昼: [
+      "昼の道には、人の足跡と荷車の跡が残っているだけだった。",
+      "（lightInvestigationResponseText：昼・ランタン有無で選ぶ。★ この関数は v2 の昼ルートも使うので残してある）",
+      "（古地図を持っているときだけ）古地図と照らしても、道筋そのものに新しい変化は見つからなかった。",
+      "問題の灯りは見えず、報告書には「昼間の異常は確認できず」と記されている。",
+      "依頼人は、やはり夜にだけ見えるのだと言った。"
+    ],
+    夜_ランタンあり: [
+      "夜道の先に、小さな灯りが一つ浮かんで見えた。",
+      "ランタンの明かりを地面に落とすと、帰り道の轍がはっきり見えた。",
+      "（lightInvestigationResponseText：夜・ランタンあり）",
+      "（lightInvestigationInteractionText：同行者どうしのやり取り。出ない回もある）",
+      "灯りはしばらく揺れたあと、道の曲がり角の向こうで消えた。",
+      "（観察記録が出ないときだけ）報告書には「ランタンなしでの再調査は避けること」と書き添えられている。"
+    ],
+    夜_ランタンなし: [
+      "夜道の先に、小さな灯りが一つ浮かんで見えた。",
+      "足元が暗く、帰り道の目印もすぐに見えなくなった。",
+      "（lightInvestigationResponseText：夜・ランタンなし）",
+      "{隊}は深追いせず、その場で引き返した。",
+      "報告書には「灯りは確認。ただし接近調査は不可」とだけ残っている。"
+    ],
+    // 夜のときだけ末尾に付く観察記録の行（`lightObservationRecordText`）。
+    // ★ 観察記録票を持つ人間がいるときだけ出る。`{記録者}` はその持ち手の表示名。
+    観察記録: [
+      "{記録者}は観察記録票に、灯りが見えた位置と消えた方角を書き残した。",
+      "報告書には、{記録者}の記録として灯りの揺れ方と見えた高さが追記されている。",
+      "{記録者}は、灯りが道の曲がり角の向こうで消えたことだけを観察記録票に残した。"
+    ],
+    // 同行者どうしのやり取り（`lightInvestigationInteractionText`）。
+    // ★ ソロのときは出ない。組み合わせが成立した行の中から1つ引く。
+    やり取り: [
+      "（ミナ＋ガッド）{ミナ}が灯りの位置を読み上げると、{ガッド}は道の端で足場を確かめた。",
+      "（ミナ＋エルネ）{ミナ}が消えた方角を記録し、{エルネ}は帰り道の目印を確認した。",
+      "（ガッド＋エルネ）{エルネ}が「ここまでにしましょう」と言うと、{ガッド}は不満を飲み込んで引き返した。"
+    ]
+  }
+};

@@ -3197,7 +3197,6 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     //   この依頼は battleAmbush で段階1を経ないため判断には効かないが、**戦闘中の手当てで
     //   結末分布が動く**ので、v1 どおりの3品に留める。
     quest_lingering_light: ["item_lantern", "item_obs_sheet", "item_map"],
-    quest_lingering_light_v1: ["item_lantern", "item_obs_sheet", "item_map"],
     quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"],
     quest_church_patrol: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot"],
     quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"],
@@ -3321,7 +3320,6 @@ const OUTCOME_CONDITIONS = {
 };
 
 // 夜道の灯りの名簿行に出る短い札。結末から引く（時間帯とランタンをここで見直さない）。
-const LIGHT_HISTORY_LABEL = { 調査成功: "夜間調査", 確認のみ: "灯り確認", 異常なし: "昼間確認" };
 
 // 結末を条件で直接決める依頼（工程や戦闘の結果を見ない例外）を、依頼データの outcomeOverride で表す。
 // 上から順に見て、条件がすべて当てはまった最初のものを採る。どれにも当たらなければ default。
@@ -4239,32 +4237,6 @@ function lightInvestigationResponseText(party, isNight, hasLantern, rng) {
   return withOther
     ? `${name}は${getDisplayName(other)}の足元を確かめ、無理に進まないよう促した。`
     : `${name}は無理をせず、見える範囲の情報だけを持ち帰ることにした。`;
-}
-
-function lightInvestigationInteractionText(party, rng) {
-  if (isSoloHumanParty(party)) return null;
-  const mina = party.find((a) => a.id === "adv_mina");
-  const gadd = party.find((a) => a.id === "adv_gadd");
-  const elne = party.find((a) => a.id === "adv_elne");
-  const nm = (adv) => adv ? getDisplayName(adv) : null;
-  const lines = [];
-
-  if (mina && gadd) lines.push(`${nm(mina)}が灯りの位置を読み上げると、${nm(gadd)}は道の端で足場を確かめた。`);
-  if (mina && elne) lines.push(`${nm(mina)}が消えた方角を記録し、${nm(elne)}は帰り道の目印を確認した。`);
-  if (gadd && elne) lines.push(`${nm(elne)}が「ここまでにしましょう」と言うと、${nm(gadd)}は不満を飲み込んで引き返した。`);
-
-  return lines.length > 0 ? pickOne(lines, rng) : null;
-}
-
-function lightObservationRecordText(party, adventurerItemIds, rng) {
-  const holder = party.find((adv) => isHumanAdventurer(adv) && getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet"));
-  if (!holder) return null;
-  const name = getDisplayName(holder);
-  return pickOne([
-    `${name}は観察記録票に、灯りが見えた位置と消えた方角を書き残した。`,
-    `報告書には、${name}の記録として灯りの揺れ方と見えた高さが追記されている。`,
-    `${name}は、灯りが道の曲がり角の向こうで消えたことだけを観察記録票に残した。`
-  ], rng);
 }
 
 function bridgeRepairOutcomeText(outcome, party, rng) {
@@ -5239,42 +5211,6 @@ function generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, context 
   return logs;
 }
 
-function generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng) {
-  const logs = [];
-  const isNight = departTimeOfDay === "夜";
-  const itemIds = getAllItemIds(adventurerItemIds);
-  const hasLantern = itemIds.includes("item_lantern");
-  const hasMap = itemIds.includes("item_map") && canUseItemInQuest(quest, "item_map");
-  const observation = isNight ? lightObservationRecordText(party, adventurerItemIds, rng) : null;
-
-  if (!isNight) {
-    logs.push(`昼の道には、人の足跡と荷車の跡が残っているだけだった。`);
-    logs.push(lightInvestigationResponseText(party, false, hasLantern, rng));
-    if (hasMap) logs.push(`古地図と照らしても、道筋そのものに新しい変化は見つからなかった。`);
-    logs.push(`問題の灯りは見えず、報告書には「昼間の異常は確認できず」と記されている。`);
-    logs.push(`依頼人は、やはり夜にだけ見えるのだと言った。`);
-    return logs;
-  }
-
-  logs.push(`夜道の先に、小さな灯りが一つ浮かんで見えた。`);
-  if (hasLantern) {
-    logs.push(`ランタンの明かりを地面に落とすと、帰り道の轍がはっきり見えた。`);
-    logs.push(lightInvestigationResponseText(party, true, true, rng));
-    const interaction = lightInvestigationInteractionText(party, rng);
-    if (interaction) logs.push(interaction);
-    logs.push(`灯りはしばらく揺れたあと、道の曲がり角の向こうで消えた。`);
-    if (!observation) logs.push(`報告書には「ランタンなしでの再調査は避けること」と書き添えられている。`);
-  } else {
-    logs.push(`足元が暗く、帰り道の目印もすぐに見えなくなった。`);
-    logs.push(lightInvestigationResponseText(party, true, false, rng));
-    logs.push(`${partySubject(party)}は深追いせず、その場で引き返した。`);
-    logs.push(`報告書には「灯りは確認。ただし接近調査は不可」とだけ残っている。`);
-  }
-
-  if (observation) logs.push(observation);
-  return logs;
-}
-
 // ★ 夜道 v2 の本文（2026-09-13・EX-092）。**既存の戦闘ログは流用しない**——
 //   `generateBattleLogs` は「薄暗い畑の中」など畑・納屋の語彙を持っているため。
 //   固定文（ランタンが効いた瞬間）は抽選にしない。設計5「固定文を出して弱体化」に従う。
@@ -5826,52 +5762,6 @@ function generateReport(expedition) {
       hiddenTags: { fixedReport: true, reportAuthor: quest.reportAuthor ?? null, recordDensityGain: 1 + logs.length },
       createdAt: new Date().toISOString()
     };
-  }
-
-  // ★ v1（退避）。id を `_v1` にした（2026-09-13・EX-092）。掲示板には出ないが、経路は残す。
-  if (quest.id === "quest_lingering_light_v1") {
-    const departTimeOfDay = expedition.departTimeOfDay ?? "昼";
-    const isNight = departTimeOfDay === "夜";
-    const hasLantern = itemIds.includes("item_lantern");
-    // ★ この依頼だけは共通経路に乗せない（2026-07-31 裁定）。結末が時間帯とランタンで決まる
-    //   特殊な作りで、時間帯の扱いは後回しと確定しているため。移行前の挙動のまま据え置く。
-    //   ただし「どう決まるか」は依頼データの outcomeOverride が持つ（2026-08-01・段階3）。
-    //   例外であることが data-quests.js を見て分かる状態にするのが目的。
-    const lightResult = overriddenOutcome(quest, { party, itemIds, timeOfDay: departTimeOfDay });
-    const lightInfo = questOutcomeText(quest.id, lightResult, party, itemIds);
-    const lightSummary = lightInfo.summary;
-    const lightHistory = lightInfo.history;
-
-    const lightLogs = generateLightInvestigationLogs(quest, party, adventurerItemIds, departTimeOfDay, rng);
-    lightLogs.forEach((text, index) => add(index === lightLogs.length - 1 ? "afterglow" : "action", text));
-    const observationNotes = isNight ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null;
-    const adventurerHistoryLines = buildSafeAdventurerHistoryLines(party, quest, {
-      result: LIGHT_HISTORY_LABEL[lightResult] ?? "昼間確認",
-      elsieRoleNote: "鼻と警戒で",
-      roleNoteFor: (adv) =>
-        adv.tendencies?.caution >= 4 ? "慎重な距離取りで" : adv.tendencies?.memory >= 4 ? "記録役として" : adv.tendencies?.kindness >= 4 ? "周囲への気配りで" : "調査に"
-    });
-
-    return withElsieLog({
-      id: `report_${Date.now()}`,
-      questId: quest.id,
-      adventurerIds: expedition.adventurerIds,
-      adventurerItemIds,
-      itemIds,
-      opened: false,
-      applied: false,
-      result: lightResult,
-      summary: lightSummary,
-      historyLine: lightHistory,
-      adventurerHistoryLines,
-      logs,
-      observationNotes,
-      departConditions,
-      highlight: generateHighlight(quest, party, itemIds, departConditions, lightResult, rng),
-      hiddenTags: { investigation: true, timeOfDay: departTimeOfDay, hasLantern, recordDensityGain: 1 + logs.length },
-      ...tensionMeta,
-      createdAt: new Date().toISOString()
-    }, quest, party, rng);
   }
 
   // ★ 夜道 v2（2026-09-13・EX-092）：昼は空振り、夜は交戦。
