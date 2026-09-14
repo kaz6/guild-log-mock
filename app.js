@@ -1540,6 +1540,13 @@ function renderQuests() {
   const clearedQuestIds = getClearedQuestIds();
   const boardQuests = state.quests.filter((quest) =>
     !quest.hidden && isQuestUnlocked(quest, clearedQuestIds) && questBoardVisibility(quest, state.reports).visible);
+  // ★ 掲示板から消えている理由のうち、**待機中だけ**を1行で出す（2026-09-14・EX-095）。
+  //   「解決済み」は出さない——勝った回の結末文が既に言っているので、二度書かない。
+  //   「戻ってきた」も出さない——**忘れた頃に掲示板にある**のが設計7の質感で、告知すると「イベント発生」になる。
+  //   ★ `state` は1つも増やさない（毎回 `state.reports` から導く）。数字は出さない。
+  const waitingQuests = state.quests.filter((quest) =>
+    !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
+    && questBoardVisibility(quest, state.reports).reason === "待機中");
   if (urgentQuest) boardQuests.unshift(urgentQuest);
 
   app.innerHTML = `
@@ -1552,6 +1559,11 @@ function renderQuests() {
       <span class="weather-bar-icon">🚨</span>
       <span class="weather-bar-text">隊商を護り切れなかった。捜索に向かえる者を編成せよ。</span>
     </div>` : ""}
+    ${waitingQuests.map((quest) => `
+    <div class="weather-bar">
+      <span class="weather-bar-icon">🕗</span>
+      <span class="weather-bar-text">${quest.title}の件は、まだ次の話が来ていない。</span>
+    </div>`).join("")}
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間帯：</span>
       ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
