@@ -507,7 +507,8 @@ window.masterOutcomeTexts = {
 };
 
 // ★ 退避（2026-09-14・EX-096）。夜道 v1 の結末文。**削除ではなく退避**。
-//   戻すときは `masterOutcomes` へ `quest_lingering_light_v1` として差し戻すだけ。
+//   戻すときは **`window.masterOutcomeTexts`** へ `quest_lingering_light_v1` として差し戻すだけ
+//   （`app.js` の `questOutcomeText` が読むのはこの名前。`masterOutcomes` というグローバルは無い）。
 //   経緯と、あわせて戻すもの（依頼定義・許可リスト・本文）は `data-quests.js` の
 //   `masterQuestsRetired` の頭の注記を見ること。
 window.masterOutcomesRetired = {

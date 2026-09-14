@@ -3315,11 +3315,12 @@ const OUTCOME_CONDITIONS = {
   エルシーがいる: (ctx) => partyHasElsie(ctx.party),
   古地図を持っている: (ctx) => (ctx.itemIds ?? []).includes("item_map"),
   ランタンを持っている: (ctx) => (ctx.itemIds ?? []).includes("item_lantern"),
+  // ★ この2つ（夜である／ランタンを持っている）は、いま生きた依頼からは使われていない
+  //   （2026-09-14・EX-096 で夜道 v1 を退避したため）。**未使用に見えても消さないこと**——
+  //   `data-quests.js` の `masterQuestsRetired.quest.outcomeOverride` が参照している。
   夜である: (ctx) => ctx.timeOfDay === "夜",
   斥候かエルシーがいる: (ctx) => ctx.party.some((adv) => adv.job === "斥候") || partyHasElsie(ctx.party)
 };
-
-// 夜道の灯りの名簿行に出る短い札。結末から引く（時間帯とランタンをここで見直さない）。
 
 // 結末を条件で直接決める依頼（工程や戦闘の結果を見ない例外）を、依頼データの outcomeOverride で表す。
 // 上から順に見て、条件がすべて当てはまった最初のものを採る。どれにも当たらなければ default。
@@ -4204,6 +4205,10 @@ function questBattleOutcomeText(quest, battleOutcome, party) {
   return questOutcomeText(quest.id, key, party, []);
 }
 
+// ★ 生きた呼び出しは v2 の昼ルート（`generateNightLightDayLogs`）1箇所だけで、**`isNight` は false 固定**。
+//   つまり下の `if (hasLantern)` 以下（夜・ランタンあり／なし）は**いま到達しない**（2026-09-14・EX-096）。
+//   ⚠️ **死蔵に見えても消さないこと**——夜道 v1 を戻すときに要る本文で、退避の一部として残している
+//   （`data-quests.js` の `masterQuestsRetired` を参照）。
 function lightInvestigationResponseText(party, isNight, hasLantern, rng) {
   const stat = pickOne(["caution", "memory", "curiosity", "courage", "kindness"], rng);
   const adv = bestByTendency(party, stat);

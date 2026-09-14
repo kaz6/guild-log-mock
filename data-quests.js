@@ -412,11 +412,27 @@ window.masterQuests = [
 //   （v1 からの後退が解消された）ので、**比較の役目が終わったと裁定して掲示板から外した**。
 //
 // ★ **戻し方**：`quest` を `masterQuests` の石碑の次の位置へ戻す。あわせて次の3つが要る。
-//   1. `data-outcomes.js` の `masterOutcomesRetired.quest_lingering_light_v1` を `masterOutcomes` へ
+//   1. `data-outcomes.js` の `masterOutcomesRetired.quest_lingering_light_v1` を
+//      **`window.masterOutcomeTexts`** へ（`app.js` の `questOutcomeText` が読む唯一の名前）
 //   2. `app.js` の `canUseItemInQuest` の `allowedByQuest` に下の `allowedItemIds` を足す
 //      （★ 既定は全禁止なので、書かないと支給品の行が一切出ない）
-//   3. `app.js` の `generateReport` に `quest.id === "quest_lingering_light_v1"` の分岐と、
-//      本文を組む `generateLightInvestigationLogs` を戻す（コードは commit 2ae88eb 以前に残っている）
+//   3. `app.js` に次の**4つ**を戻す（どれか1つでも欠けると落ちる）：
+//      `generateReport` の `quest.id === "quest_lingering_light_v1"` 分岐 ／
+//      `generateLightInvestigationLogs` ／ `lightObservationRecordText` ／
+//      `lightInvestigationInteractionText` ／ `LIGHT_HISTORY_LABEL`（下の `historyLabel`）
+//      ※ コードは commit `2ae88eb` までに残っている（`git show 2ae88eb:app.js`）。
+//
+// ⚠️ **消してはいけないもの（いま未使用に見えるが、戻すときに要る）**：
+//   - `app.js` の `OUTCOME_CONDITIONS` の `夜である` と `ランタンを持っている`
+//     （下の `outcomeOverride` が参照する。生きた依頼からは既に使われていない）
+//   - `app.js` の `lightInvestigationResponseText` の**夜側の分岐**
+//     （生きた呼び出しは v2 の昼ルートだけで `isNight` は false 固定）
+//
+// ⚠️ **ここは「読むための控え」であって、これだけでは復元できない。** 本文の並べ方（古地図の有無で
+//    増える行・観察記録が出ないときだけ足す行・最後の1行を `afterglow` にする扱い）はコードにしかない。
+//    **復元元は git**（上の commit）で、下の `logLines` は「何が書かれていたか」を読むための控え。
+//    ★ `masterVocabRetired` は実行可能なリテラルをそのまま置いているが、こちらは本文が関数の中に
+//    あったので同じ形にはできなかった。**文字列そのものは1行も落とさず写してある**（2026-09-14 に照合済み）。
 //
 // ⚠️ **旧セーブは戻さなくても壊れない。** v1 時代の報告書は `questId: "quest_lingering_light"` を
 //    持っており、その id は v2 が継いでいるので、石碑の解放（`getClearedQuestIds`）も
@@ -452,7 +468,8 @@ window.masterQuestsRetired = {
   allowedItemIds: ["item_lantern", "item_obs_sheet", "item_map"],
   // 結末ラベル → 名簿の履歴に出る語（app.js の `LIGHT_HISTORY_LABEL`）
   historyLabel: { 調査成功: "夜間調査", 確認のみ: "灯り確認", 異常なし: "昼間確認" },
-  // ★ 本文（`generateLightInvestigationLogs` が組んでいた行）。**分岐ごとにそのまま残す。**
+  // ★ 本文（`generateLightInvestigationLogs` が組んでいた行）の控え。**文字列はそのまま。**
+  //   ⚠️ 並べ方の条件（括弧書きの部分）は散文で書いてあるだけで、実行できる形ではない。
   //   `{隊}` は `partySubject(party)`。抽選で選ぶ行は関数名を添えた（関数自体は v2 も使うものだけ残した）。
   logLines: {
     昼: [
