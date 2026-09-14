@@ -269,6 +269,14 @@ function compare(rowsA, rowsB, opts = {}) {
   // ★ probe が返していない項目は、両側 undefined で必ず「不一致0」になる。
   //   **黙って0を返さない**——何を比べていないかを結果に出す（2026-09-13・EX-093）。
   const absent = fields.filter((f) => rowsA.every((r) => r[f] === undefined));
+  // ★ undefined でなくても、**全行が同じ値なら検査は働いていない**（2026-09-14・EX-094）。
+  //   実例：担い手を見るつもりの項目が全行 null で、`absent` にも掛からず「不一致0」と出た。
+  //   ※ 軸が狭くて自然に一定になることもあるので、これは**警告であってエラーではない**。
+  const constant = fields.filter((f) => {
+    if (absent.includes(f) || rowsA.length === 0) return false;
+    const first = JSON.stringify(rowsA[0][f]);
+    return rowsA.every((r) => JSON.stringify(r[f]) === first);
+  });
   let missing = 0;
   rowsA.forEach((a) => {
     const b = mapB.get(key(a));
@@ -280,7 +288,7 @@ function compare(rowsA, rowsB, opts = {}) {
       }
     });
   });
-  return { total: rowsA.length, missing, absent, diff, by };
+  return { total: rowsA.length, missing, absent, constant, diff, by };
 }
 
 // ★ 配列（本文の `lines` など）は `!==` では必ず不一致になる（参照比較）。
