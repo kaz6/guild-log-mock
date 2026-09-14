@@ -1549,13 +1549,73 @@ function questBoardVisibility(quest, reports) {
   return { visible: since >= need, reason: since >= need ? "再出現" : "待機中", need, since };
 }
 
+// ── 掲示板の枠（2026-09-15・EX-102）─────────────────────────────────────────
+// ★ 解放の深さ。`unlockedBy` を辿った段数で、初期公開と `unlockedAfterCount` だけの依頼は 0。
+//   ★ 枠があふれたときは**浅い順**に出す（進行に要るものが先に出る）。
+//   ⚠️ 環（循環参照）があっても止まらないよう、辿った id を覚えながら進む。
+function questUnlockDepth(quest) {
+  const seen = new Set();
+  let cur = quest;
+  let depth = 0;
+  while (cur && cur.unlockedBy && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    cur = getQuest(cur.unlockedBy);
+    depth += 1;
+  }
+  return depth;
+}
+
+// ★ クールタイム。**一度行った依頼は引っ込み、消化数1〜3で戻る**（EX-049 の確定事項）。
+//   ⚠️ 判定に乱数を使わない。掲示板は操作のたびに描き直され、遠征中は毎秒走るので、
+//     乱数を引くと毎秒ちらつく（2026-09-13・EX-093 と同じ理由）。
+//   ★ `state` を増やさない。必要数も経過数も `state.reports` から導く。
+//   ★ 必要数は「何回目の実施か」で 1→2→3→1… と巡回する（再出現の規格に合わせた）。
+function questCooldownState(quest, reports) {
+  const rule = window.masterBoardRules?.cooldown;
+  const mine = [];
+  // ★ `reports` は unshift（新しいものが先頭）。添字がそのまま「その回より新しい報告書の数」になる。
+  reports.forEach((report, index) => { if (report.questId === quest.id) mine.push(index); });
+  if (mine.length === 0) return { ready: true, reason: "未着手", fresh: true, since: Infinity };
+  if (!rule) return { ready: true, reason: "再掲", fresh: false, since: mine[0] };
+  const min = rule.min ?? 1;
+  const max = rule.max ?? min;
+  const span = Math.max(1, max - min + 1);
+  const need = min + ((mine.length - 1) % span);
+  const since = mine[0];
+  return { ready: since >= need, reason: since >= need ? "再掲" : "小休止", fresh: false, need, since };
+}
+
+// 掲示板に並べる依頼を決める。★ 並び順は「未消化 → 既消化」で、どちらも決定的。
+//   - 未消化：**解放の浅い順**（同じ深さなら定義順）。進行に要るものが先に出る。
+//   - 既消化：クールタイムが明けたものだけを、**久しく行っていない順**（同点は定義順）。
+//   ★ 枠は `masterBoardRules.slots`。緊急依頼（捜索チェーン）は枠の外なので、ここには入れない。
+function buildBoardQuests(clearedQuestIds, reports) {
+  const slots = window.masterBoardRules?.slots;
+  const candidates = state.quests
+    .filter((quest) => !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
+      && questBoardVisibility(quest, reports).visible)
+    .map((quest, order) => ({ quest, order, cool: questCooldownState(quest, reports) }));
+  const byOrder = (a, b) => a.order - b.order;
+  const fresh = candidates.filter((c) => c.cool.fresh)
+    .sort((a, b) => (questUnlockDepth(a.quest) - questUnlockDepth(b.quest)) || byOrder(a, b));
+  const rested = candidates.filter((c) => !c.cool.fresh && c.cool.ready)
+    .sort((a, b) => (b.cool.since - a.cool.since) || byOrder(a, b));
+  const ordered = [...fresh, ...rested].map((c) => c.quest);
+  return typeof slots === "number" ? ordered.slice(0, slots) : ordered;
+}
+
 function renderQuests() {
-  // ★ 掲示板から消えた依頼を選んだままにしない（2026-09-13・EX-093）。
+  // ★ 掲示板から消えた依頼を選んだままにしない（2026-09-13・EX-093／2026-09-15・EX-102 で枠あふれへ拡張）。
   //   ※ 通常の操作では `startExpedition` が選択を解除するのでここには来ない。
-  //     効くのは**再出現つきの依頼が選択されたまま状態が復元されたとき**だけの掃除。
+  //     効くのは**掲示板から消えた依頼が選択されたまま状態が復元されたとき**の掃除
+  //     （消える理由は3つ：再出現の待機中／クールタイムの小休止／枠あふれ）。
+  const clearedQuestIds = getClearedQuestIds();
+  const boardQuests = buildBoardQuests(clearedQuestIds, state.reports);
   if (selectedQuestId) {
     const selected = getQuest(selectedQuestId);
-    if (selected && !questBoardVisibility(selected, state.reports).visible) selectedQuestId = null;
+    // ★ 枠あふれで落ちたものも掃除の対象（2026-09-15・EX-102）。表示判定だけを見ていると、
+    //   枠から押し出された依頼が選ばれたまま残る。
+    if (selected && !boardQuests.some((quest) => quest.id === selected.id)) selectedQuestId = null;
   }
   const selectedQuest = getQuest(selectedQuestId);
   const expeditionBlock = expeditionBlockedMessage(selectedAdventurerIds);
@@ -1568,13 +1628,13 @@ function renderQuests() {
   const searchChain = state.searchChain;
   const urgentQuestId = searchChain ? (searchChain.stage === 2 ? "quest_caravan_lastchance" : "quest_caravan_search") : null;
   const urgentQuest = urgentQuestId ? getQuest(urgentQuestId) : null;
-  const clearedQuestIds = getClearedQuestIds();
-  const boardQuests = state.quests.filter((quest) =>
-    !quest.hidden && isQuestUnlocked(quest, clearedQuestIds) && questBoardVisibility(quest, state.reports).visible);
   // ★ 掲示板から消えている理由のうち、**待機中だけ**を1行で出す（2026-09-14・EX-095）。
   //   「解決済み」は出さない——勝った回の結末文が既に言っているので、二度書かない。
   //   「戻ってきた」も出さない——**忘れた頃に掲示板にある**のが設計7の質感で、告知すると「イベント発生」になる。
   //   ★ `state` は1つも増やさない（毎回 `state.reports` から導く）。数字は出さない。
+  //   ★ **クールタイムの小休止と枠あふれはここに出さない**（2026-09-15・EX-102 の裁定）。
+  //     出すと毎回ずらずら並ぶうえ、「忘れた頃に掲示板にある」という質感が消える。
+  //     この行が受け持つのは**再出現つきの依頼の待機中だけ**。
   const waitingQuests = state.quests.filter((quest) =>
     !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
     && questBoardVisibility(quest, state.reports).reason === "待機中");
