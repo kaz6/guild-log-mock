@@ -778,8 +778,8 @@ node scripts/gen-quest-table.js
     影響はありません（19依頼 18,240件の結末名51種に含まれないことを確認済み）。
   - ⚠️ **`state.expedition` が `quest_lingering_light_v1` を指しているセーブは、以前は画面ごと落ちました**
     （`render()` が毎秒 TypeError）。★ **2026-09-14・EX-097 で防御を入れ、遠征を中断して畳むようにしました**
-    （「データ保存」の節を参照）。報告書側は元から `quest?.` の任意連鎖で守られており落ちません
-    （題が「報告書」に落ち、石碑の解放を失うだけ）。
+    （「データ保存」の節を参照）。v1 は `hidden` で選べなかったので**通常の遊び方では作れません**。
+    報告書側は `quest?.` の任意連鎖で守られており落ちません（題が「報告書」に落ち、石碑の解放を失うだけ）。
 
 ### 基準値（基準編成4人・支給品なし・昼/晴れ・N=500/依頼・2026-07-31）
 
@@ -945,9 +945,6 @@ node scripts/gen-quest-table.js
 - `quests` / `items` はマスターデータを正として使う
 - `adventurers` はマスターデータを基本にし、`favorite / memo / history / status / stats / nickname` を保存対象として反映する（nicknameは体験版①で保存漏れを修正）
 - 閉じている間に遠征が完了していた場合、再訪時はホーム最上部の「今回の帰還」カードから確認する（起動中の帰還は従来どおり全画面リザルト）
-- `selectedAdventurerItems` は旧形式（`advId: "itemId"`）から新形式（`advId: ["id1", "id2"]`）へ自動変換する
-- `reports` / `reportMemos` / `beastLog` を保存する
-- `player` に `appointedAt`（就任日・2026-08-09）を持つ。**旧セーブは最古の報告書の作成日時で補完**する（`schemaVersion` は据え置き）
 - ★ **依頼が見つからない遠征は中断する**（2026-09-14・EX-097）。`state.expedition.questId` が
   `masterQuests` に無いとき、`checkExpeditionCompletion` は**所要時間を待たずに遠征を畳みます**。
   - 畳み方：**冒険者を待機中に戻す**（★ 行方不明の者はそのまま）／**暦は進めない**／**報告書は作らない**／
@@ -958,6 +955,9 @@ node scripts/gen-quest-table.js
   - 起きるのは**依頼を入れ替えたとき**（v2 へ作り直す／実験的な依頼を足して消す）で、
     **通常の遊び方では作れません**。それでも入れたのは、放置すると `render()` が毎秒落ちて
     **画面ごと出なくなる**＝損害が大きすぎるためです。
+- `selectedAdventurerItems` は旧形式（`advId: "itemId"`）から新形式（`advId: ["id1", "id2"]`）へ自動変換する
+- `reports` / `reportMemos` / `beastLog` を保存する
+- `player` に `appointedAt`（就任日・2026-08-09）を持つ。**旧セーブは最古の報告書の作成日時で補完**する（`schemaVersion` は据え置き）
 
 ---
 
