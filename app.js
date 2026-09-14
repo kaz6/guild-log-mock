@@ -1056,8 +1056,39 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// 依頼が見つからない遠征を畳む（2026-09-14・EX-097）。**中断であって失敗ではない。**
+// ★ 起きるのは**依頼を入れ替えたとき**——v2 へ作り直す／実験的な依頼を足して消す。
+//   2026-09-14 の夜道 v1 の退避（EX-096）で実際に踏める形が残った。
+// ★ 冒険者は失わせない（「プレイヤーを責めない」）。暦も進めない。報告書も作らない——
+//   死んだ `questId` の報告書を残すと、解放条件（`getClearedQuestIds`）と報告メモに
+//   その id が混ざり、**画面が落ちなくなる代わりに記録が汚れる**。
+function abortExpeditionWithoutQuest() {
+  const lost = state.expedition;
+  console.warn(`依頼 "${lost.questId}" が見つかりません。進行中の遠征を中断し、冒険者を待機中に戻しました。`);
+  // ★ 行方不明の時計は、この遠征ぶんを積んでから止める（EX-070 の完了時と同じ扱い）。
+  const realEnd = Math.min(Date.now(), expeditionRealEndMs(lost));
+  state.adventurers.forEach((adv) => {
+    const m = adv.missing;
+    if (!m || m.anchorStart == null) return;
+    m.baseMs = (m.baseMs ?? 0) + Math.max(0, realEnd - m.anchorStart);
+    m.anchorStart = null;
+  });
+  lost.adventurerIds.forEach((id) => {
+    const adv = getAdventurer(id);
+    if (adv && !adv.missing) adv.status = "待機中"; // ★ 行方不明者は「待機中」に戻さない
+  });
+  state.expedition = null;
+  saveState();
+}
+
 function checkExpeditionCompletion() {
   if (!state.expedition) return;
+  // ★ 依頼が引けない遠征は、所要時間を待たずにここで畳む（2026-09-14・EX-097）。
+  //   放置すると `generateReport` が落ち、`render()` が毎秒失敗して**画面ごと出なくなる**。
+  if (!getQuest(state.expedition.questId)) {
+    abortExpeditionWithoutQuest();
+    return;
+  }
   // durationMs は素の値を保存し、比較時に倍率を掛ける（出発済みの遠征も加速できる）。
   const elapsed = (Date.now() - state.expedition.startTime) * getDemoSpeed();
   if (elapsed < state.expedition.durationMs) return;
