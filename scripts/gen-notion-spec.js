@@ -18,9 +18,19 @@ const src = fs.readFileSync(SRC, "utf8");
 // 2. Markdown の表を Notion のタグへ
 // 3. コードブロックをやめる（日本語を入れると壊れる）
 // 4. バッククォートの中に日本語があれば「」へ（太字にすると、周りの太字と入れ子になって壊れる）
+// 5. ★ 記号だけ・1文字だけのコードスパンも「」へ（2026-09-14・EX-098）。
+//    **Notion 側でスパンごと消える**——実例：向きの説明の `+` と `-` が本文から落ちて
+//    「向き：得意 ／ 苦手」になっていた（2026-09-14 に写しとの全文照合で発見）。
+//    ★ 文字そのものは変えない（全角に置き換えない）。囲みだけを「」に替える。
 
 function isAscii(text) {
   return !/[^\x00-\x7F]/.test(text);
+}
+
+// Notion がスパンごと落とす形かどうか。英数字を1つも含まない、または1文字だけのもの。
+// ★ 原因が「1文字だから」か「記号だけだから」かは切り分けていないので、両方を拾う広い条件にしてある。
+function dropsInNotion(text) {
+  return text.length <= 1 || !/[A-Za-z0-9]/.test(text);
 }
 
 // サロゲートペアの絵文字は Notion の本文に入れない（規約どおり。アイコンは icon で付ける）
@@ -29,7 +39,8 @@ function stripEmoji(text) {
 }
 
 function convertInline(line) {
-  return stripEmoji(line).replace(/`([^`]+)`/g, (m, inner) => (isAscii(inner) ? m : `「${inner}」`));
+  return stripEmoji(line).replace(/`([^`]+)`/g, (m, inner) =>
+    (isAscii(inner) && !dropsInNotion(inner) ? m : `「${inner}」`));
 }
 
 const lines = src.split("\n");
