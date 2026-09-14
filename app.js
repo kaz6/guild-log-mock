@@ -243,8 +243,12 @@ const GROWTH_STAT_BY_CATEGORY = {
   輸送: ["exploration"],
   保全: ["support"],
   生活: ["negotiation"],
-  救助: ["exploration", "support"],
   護衛: ["survival"],
+  // ★ 2026-09-15（EX-104）に「救助」を「捜索」へ統合した。**この世界に「急を要する救出」は成立しない**
+  //   （知られる前に死ぬ）ので、救助は常に捜索の結果にしかならない。別ジャンルにすると
+  //   「探さずに助ける依頼」が要り、世界則と矛盾する。
+  //   ⚠️ 統合で消したのは 救助＝["exploration","support"] の行。**support は引き継いでいない**
+  //     （値を動かすかは別の裁定。統合の時点では振る舞いを変えない）。
   捜索: ["exploration", "investigation"],
   記録: ["investigation"]
 };
@@ -443,7 +447,7 @@ function generatePartyBanterLog(party, quest, tensionValue, rng) {
       `${na}が間合いを詰めようとしたとき、${nb}は手のひらで制止した。`,
       `${na}が先へ踏み出すと、${nb}は横から足元だけを確かめた。`
     ],
-    救助: [
+    捜索: [
       `${na}が足跡を指すと、${nb}はその先の草むらを見た。`,
       `${na}が立ち止まって耳を澄ますと、${nb}は周囲の動きを確かめた。`,
       `${na}がゆっくり進むと、${nb}は後方から同じ間隔を保った。`
@@ -545,7 +549,7 @@ function generatePresenceLog(adv, quest, rng) {
       `${name}は一行の後方で、退路の方を短く確かめていた。`,
       `${name}は武器の位置を直し、無言で間合いを保っていた。`
     ],
-    救助: [
+    捜索: [
       `${name}は少し離れた場所で、足跡の向きだけを見ていた。`,
       `${name}は一行の端で、周囲の物音に耳を澄ました。`
     ],
@@ -891,7 +895,10 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     "エルシーの白い毛には草の種がいくつもついていたが、本人はどこか満足そうだった。"
   ];
 
-  if (quest.category === "救助" || reportResult === "保護" || reportResult === "発見") {
+  // ★ 2026-09-15（EX-104）に `category === "救助"` の条件を外した。救助というジャンルが無くなったため。
+  //   残したのは**結末＝事実の側**（保護・発見）だけ。捜索3件のうち隊商チェーン2件は人を保護しないので、
+  //   ジャンルで足すと合わない行が入る。
+  if (reportResult === "保護" || reportResult === "発見") {
     pool.push("エルシーは負傷者のそばを離れず、袖口をくわえて引いた。");
   }
 
@@ -5653,13 +5660,13 @@ function defaultNewQuestRoleNote(quest, adv) {
     if (adv.personality === "慎重") return "丁寧な運搬で";
     return "輸送補助で";
   }
-  if (category === "救助") {
+  if (category === "捜索") {
     if (adv.job === "斥候") return "足跡追跡で";
     if (adv.job === "薬草師") return "痕跡判断で";
     if (adv.job === "見習い盾役") return "帰路確認で";
     if (adv.job === "戦士") return "呼びかけと支援で";
     if (adv.personality === "慎重") return "慎重な捜索で";
-    return "救助補助で";
+    return "捜索補助で";
   }
   if (category === "護衛") {
     if (adv.job === "見習い盾役") return "前衛と足場確認で";
@@ -7308,7 +7315,7 @@ const FIELDWORK_TUNING = {
   setbackMax: 0.6,
   // 支給品。ランタンは時間帯の話なので入れない（時間帯は後回しと確定済み）。観察記録票は記録用で判定に効かない。
   mapLoadRelief: 5,
-  mapCategories: ["探索", "輸送", "捜索", "護衛", "記録", "救助"],
+  mapCategories: ["探索", "輸送", "捜索", "護衛", "記録"], // ★ 2026-09-15（EX-104）に「救助」を統合して落とした（捜索が既に入っている）
   potFatigueRelief: 6,
   oilcaseWeatherRelief: 0.5,
   whistleRecoverMax: 1,

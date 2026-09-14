@@ -341,7 +341,10 @@ Notion 追記先
 - `masterQuests`：依頼の定義（id, title, category, danger, area, recommended, tags, observationTarget, tensionBase/tensionRange, summary）
 - `masterItems`：支給品の定義
 - `masterAdventurers`（相当データ）：冒険者データ。weapon / accessory / obsession / traits / stats を持つ
-- `masterObservations`：観察対象（図鑑）の元データ
+- ★ **観察記録は `generateAdventurerObservationNote`（`app.js`）の分岐が書く**。依頼データの `observationTarget` で引き、
+  **専用の分岐が無い対象は「短い観察だったため、詳細な記録はできなかった。」という総称の1文に落ちる**（＝観察が主眼の依頼を足すときは分岐を1本足す）。
+  図鑑は**記入型**で、`state.beastLog` にプレイヤーが書く。
+  ⚠️ **`masterObservations` は存在しない**（2026-07-26 の体験版①で observations 系統を一式削除。ここの旧記述を 2026-09-15・EX-104 に訂正した）
 
 ### ログ生成の中心
 - `generateReport(expedition)` が司令塔。`quest.id` で分岐し、依頼ジャンルごとに専用の `generate*Logs()` 関数（例: `generateBattleLogs` / `generateBarnHuntLogs` / `generateBridgeRepairLogs` など）を呼ぶか、`questEventPools` / `lifeQuestEventPools` を使った汎用フローに乗せる。
@@ -359,7 +362,7 @@ Notion 追記先
 ### 緊張度（tension）
 - `tensionBase` / `tensionRange` を持つ依頼のみ `computeTensionValue` / `tensionToLevel` が働く。
 - `pickTensionOne` / `pickTensionLines` で緊張度に応じた文言を選ぶ。
-- 低緊張の生活依頼（結婚式の手伝い等）に、戦闘・護衛・救助寄りの緊張感が高い文言（退路・負傷者・危険・制した、等）を混ぜない。
+- 低緊張の生活依頼（結婚式の手伝い等）に、戦闘・護衛・捜索寄りの緊張感が高い文言（退路・負傷者・危険・制した、等）を混ぜない。
 
 ### 支給品
 - `canUseItemInQuest(quest, itemId, weather)` の `allowedByQuest` で依頼ごとに使用可否を管理する。★ **既定は全禁止**（2026-09-12・EX-085。許可リストが無ければ `false`）。**新しい依頼を追加したら必ずここに許可アイテムを追加すること。書き忘れると、その依頼だけ支給品の行が一切出なくなる**（旧実装は全許可に落ちていたため、書き忘れが沈黙で通り、実際に2依頼が漏れていた）。
