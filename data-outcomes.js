@@ -470,30 +470,6 @@ window.masterOutcomeTexts = {
       history: "古い石碑の拓本。保存優先、読める範囲のみ記録。"
     }
   },
-  // ★ v1（退避）。id を `_v1` にした（2026-09-13・EX-092）。
-  quest_lingering_light_v1: {
-    "異常なし": {
-      result: "異常なし",
-      summary: "昼間の道に異常はなく、問題の灯りも確認されなかった。",
-      line: null,
-      after: null,
-      history: "{依頼名}：昼間確認では異常なし。"
-    },
-    "確認のみ": {
-      result: "確認のみ",
-      summary: "夜道の灯りは確認したが、暗さのため接近調査は避けた。",
-      line: null,
-      after: null,
-      history: "{依頼名}：夜間に灯りを確認、接近は保留。"
-    },
-    "調査成功": {
-      result: "調査成功",
-      summary: "夜道の灯りを安全な距離から確認し、消えた方角を記録した。",
-      line: null,
-      after: null,
-      history: "{依頼名}：ランタンありで夜間確認。"
-    }
-  },
   // ★ v2（2026-09-13・EX-092）。戦闘の結末3種＋昼の空振り。
   //   ⚠️ この表が無いと questOutcomeText が null を返し、報告書の生成がそこで落ちる。
   quest_lingering_light: {
@@ -526,6 +502,37 @@ window.masterOutcomeTexts = {
       line: null,
       after: null,
       history: "{依頼名}：昼間確認では異常なし。灯りは夜にしか出ない。"
+    }
+  }
+};
+
+// ★ 退避（2026-09-14・EX-096）。夜道 v1 の結末文。**削除ではなく退避**。
+//   戻すときは **`window.masterOutcomeTexts`** へ `quest_lingering_light_v1` として差し戻すだけ
+//   （`app.js` の `questOutcomeText` が読むのはこの名前。`masterOutcomes` というグローバルは無い）。
+//   経緯と、あわせて戻すもの（依頼定義・許可リスト・本文）は `data-quests.js` の
+//   `masterQuestsRetired` の頭の注記を見ること。
+window.masterOutcomesRetired = {
+  quest_lingering_light_v1: {
+    "異常なし": {
+      result: "異常なし",
+      summary: "昼間の道に異常はなく、問題の灯りも確認されなかった。",
+      line: null,
+      after: null,
+      history: "{依頼名}：昼間確認では異常なし。"
+    },
+    "確認のみ": {
+      result: "確認のみ",
+      summary: "夜道の灯りは確認したが、暗さのため接近調査は避けた。",
+      line: null,
+      after: null,
+      history: "{依頼名}：夜間に灯りを確認、接近は保留。"
+    },
+    "調査成功": {
+      result: "調査成功",
+      summary: "夜道の灯りを安全な距離から確認し、消えた方角を記録した。",
+      line: null,
+      after: null,
+      history: "{依頼名}：ランタンありで夜間確認。"
     }
   }
 };
