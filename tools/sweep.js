@@ -268,15 +268,23 @@ function compare(rowsA, rowsB, opts = {}) {
   fields.forEach((f) => { diff[f] = 0; by[f] = {}; });
   // ★ probe が返していない項目は、両側 undefined で必ず「不一致0」になる。
   //   **黙って0を返さない**——何を比べていないかを結果に出す（2026-09-13・EX-093）。
-  const absent = fields.filter((f) => rowsA.every((r) => r[f] === undefined));
+  //   ★ 片側だけ見ると、before/after を入れ替えただけで警告が消える。両側を見る。
+  const absent = fields.filter((f) =>
+    rowsA.every((r) => r[f] === undefined) || rowsB.every((r) => r[f] === undefined));
   // ★ undefined でなくても、**全行が同じ値なら検査は働いていない**（2026-09-14・EX-094）。
   //   実例：担い手を見るつもりの項目が全行 null で、`absent` にも掛からず「不一致0」と出た。
   //   ※ 軸が狭くて自然に一定になることもあるので、これは**警告であってエラーではない**。
-  const constant = fields.filter((f) => {
-    if (absent.includes(f) || rowsA.length === 0) return false;
-    const first = JSON.stringify(rowsA[0][f]);
-    return rowsA.every((r) => JSON.stringify(r[f]) === first);
-  });
+  const allSame = (rows, f) => {
+    if (rows.length === 0) return false;
+    const first = JSON.stringify(rows[0][f]);
+    return rows.every((r) => JSON.stringify(r[f]) === first);
+  };
+  const constant = fields.filter((f) => !absent.includes(f) && (allSame(rowsA, f) || allSame(rowsB, f)));
+  // ★★ **いちばん効く警告**（2026-09-14・EX-094）。probe が返しているのに `fields` に入れ忘れた項目は、
+  //   既定の `key` がそれを**結合鍵に取り込む**ので、差があっても `diff` は0のまま `missing` に落ちる。
+  //   「`keepLines` を忘れる」と同じ失敗が、名前を変えて残っていた。**返した項目は全部見張る。**
+  const listed = new Set([...fields, ...(opts.keyFields ?? [])]);
+  const unchecked = rowsA.length === 0 ? [] : Object.keys(rowsA[0]).filter((k) => !listed.has(k) && k !== "lines");
   let missing = 0;
   rowsA.forEach((a) => {
     const b = mapB.get(key(a));
@@ -288,7 +296,7 @@ function compare(rowsA, rowsB, opts = {}) {
       }
     });
   });
-  return { total: rowsA.length, missing, absent, constant, diff, by };
+  return { total: rowsA.length, missing, absent, constant, unchecked, diff, by };
 }
 
 // ★ 配列（本文の `lines` など）は `!==` では必ず不一致になる（参照比較）。
