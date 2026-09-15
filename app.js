@@ -3595,11 +3595,55 @@ function generateLingeringLightNote(adv, rng) {
   return `${name}は、小さな灯りが道の先に見え、しばらくして消えたと記録した。詳細は次回確認が必要。`;
 }
 
-function generateAdventurerObservationNote(target, adv, rng) {
+// ★ 種別ごとの既定の観察文（2026-09-15・EX-106）。
+//   ⚠️ **既定は「書けなかった」ではない。** 観察記録票を持って行った者が書いた紙なので、
+//     「詳細な記録はできなかった」を既定にすると**票を持たせた回ほど嘘になる**（旧実装がそうだった）。
+//   ★ 引くのは**対象の種別**（依頼データの `observationKind`）。図鑑の分類語と同じ語を使う。
+//     1語だけなので**条件式をデータへ持ち出したことにはならない**
+//     （2026-08-01 に却下された「依頼固有の34行を全部データに出す」とは別物）。
+//   ★ 段の分け方は既存の専用分岐に合わせた（memory / curiosity / それ以外）。
+//   ⚠️ **文面は仮置き。** チャット側が書き直す前提で、まず穴を塞ぐために置いている。
+const OBSERVATION_KIND_NOTES = {
+  獣: {
+    memory: [
+      `{名前}は、体の大きさと毛の色、逃げた方角を書き留めた。足跡は途中で草むらに入って途切れている。`,
+      `{名前}の記録には、鳴き声の高さと、近づいたときの距離の取り方が残っている。`
+    ],
+    curiosity: [
+      `{名前}は姿よりも、餌にしていたものと通り道を気にしていた。次はそこを先に見ると早い。`,
+      `{名前}は逃げたあとの草の倒れ方を確かめていた。ねぐらが近いかもしれない。`
+    ],
+    base: [
+      `{名前}は、素早く動く獣だったとだけ書いた。特徴はまだ少ない。`,
+      `{名前}は、姿を見た時間と場所を書き留めた。次に来たときの手掛かりにはなる。`
+    ]
+  },
+  // 種別が書かれていないときの受け皿。★ ここに落ちるのは `observationKind` の**付け忘れ**か、
+  //   **この表に無い種別を書いたとき**。どちらも `scripts/check-observation-targets.js` が検出する。
+  既定: {
+    memory: [`{名前}は、見たままの形と大きさ、見つけた場所を書き留めた。`],
+    curiosity: [`{名前}は、なぜそこに在るのかを気にして、周りの様子まで書いている。`],
+    base: [`{名前}は、見たものの特徴を短く書き留めた。`]
+  }
+};
+
+function generateKindObservationNote(target, adv, rng, kind) {
+  const name = getDisplayName(adv);
+  const table = OBSERVATION_KIND_NOTES[kind] ?? OBSERVATION_KIND_NOTES["既定"];
+  const memory = adv.tendencies?.memory ?? 3;
+  const curiosity = adv.tendencies?.curiosity ?? 3;
+  const pool = memory >= 4 ? table.memory : curiosity >= 4 ? table.curiosity : table.base;
+  // ★ プールの長さに関わらず `pickOne` を必ず1回だけ引く（不変条件）。
+  //   これが「種別を足しても既存の乱数列が動かない」根拠なので、崩さないこと。
+  // ★ 差し込みは `{名前}` のプレースホルダ（行方不明の段階文言＝`masterMissingClock.stages` と同じ型）。
+  return pickOne(pool, rng).replaceAll("{名前}", name);
+}
+
+function generateAdventurerObservationNote(target, adv, rng, kind) {
   if (target === "森喰い兎") return generateRabbitNote(adv, rng);
   if (target === "「なにか」") return generateMysteryFieldNote(adv, rng);
   if (target === "残る灯り") return generateLingeringLightNote(adv, rng);
-  return `${getDisplayName(adv)}は${target}の様子を確認した。短い観察だったため、詳細な記録はできなかった。`;
+  return generateKindObservationNote(target, adv, rng, kind);
 }
 
 function generateObservationNotes(quest, party, adventurerItemIds, rng) {
@@ -3612,7 +3656,7 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
   const notes = holders.map((adv) => ({
     adventurerId: adv.id,
     name: getDisplayName(adv),
-    text: generateAdventurerObservationNote(quest.observationTarget, adv, rng)
+    text: generateAdventurerObservationNote(quest.observationTarget, adv, rng, quest.observationKind)
   }));
   return { target: quest.observationTarget, notes };
 }
@@ -5739,7 +5783,7 @@ function finalizeQuestReport(options) {
       expedition.adventurerItemIds ??
         Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]))
     ),
-    observationNotes = null,
+    observationNotes, // ★ 既定を置かない（undefined＝「渡されなかった」と区別するため。2026-09-15・EX-106）
     hiddenTags = {},
     highlight = null,
     tensionValue = null,
@@ -5748,6 +5792,14 @@ function finalizeQuestReport(options) {
     wrapElsie = false,
     usedItemIds = null
   } = options;
+
+  // ★ 観察記録は**渡されなかったら生成する**（2026-09-15・EX-106）。
+  //   既定を null にしていたせいで、この関数を使う3つの分岐（教会巡回・隊商護衛・捜索チェーン）は
+  //   **観察対象を付けた瞬間に記録が1行も出ないまま黙って通る**状態だった。
+  //   意図して出さないときは `observationNotes: null` を**明示的に**渡し、理由を添える。
+  const resolvedObservationNotes = observationNotes !== undefined
+    ? observationNotes
+    : (rng ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null);
 
   const report = {
     id: `report_${Date.now()}`,
@@ -5762,7 +5814,7 @@ function finalizeQuestReport(options) {
     historyLine,
     adventurerHistoryLines: adventurerHistoryLines ?? {},
     logs,
-    observationNotes,
+    observationNotes: resolvedObservationNotes,
     departConditions,
     highlight: highlight ?? (rng ? generateHighlight(quest, party, itemIds, departConditions, result, rng, usedItemIds) : null),
     hiddenTags: {
@@ -5859,6 +5911,8 @@ function generateReport(expedition) {
       historyLine: fill(template.historyLine),
       adventurerHistoryLines,
       logs,
+      // ★ 定型報告書には観察記録を足さない（2026-08-18・EX-064。文は定型で、可変は名前だけ）。
+      //   ここが null なのは**意図**（2026-09-15・EX-106 で確認）。
       observationNotes: null,
       departConditions,
       highlight: fill(template.highlight),
@@ -5894,7 +5948,8 @@ function generateReport(expedition) {
           roleNoteFor: () => "昼の確認に"
         }),
         logs,
-        observationNotes: null, // 昼は灯りが出ないので観察対象がいない
+        // ★ 昼は灯りが出ないので観察対象がいない。ここが null なのは**意図**（2026-09-15・EX-106 で確認）。
+        observationNotes: null,
         departConditions,
         highlight: generateHighlight(quest, party, itemIds, departConditions, dayInfo.result, rng),
         // ★ 昼は交戦しないので combat を育てない（2026-09-13・EX-093 の裁定1）。
@@ -6148,7 +6203,9 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationNotes: null,
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
+      observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { preservation: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
@@ -6206,7 +6263,9 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationNotes: null,
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
+      observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { transport: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
@@ -6269,7 +6328,9 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationNotes: null,
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
+      observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { rescue: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
@@ -6466,7 +6527,9 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationNotes: null,
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
+      observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { escort: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
@@ -6523,7 +6586,9 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      observationNotes: null,
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
+      observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
       hiddenTags: { record: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
