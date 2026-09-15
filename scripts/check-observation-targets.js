@@ -1,4 +1,4 @@
-// 観察記録の穴を検出する（2026-09-15・EX-106）。★ 外部依存ゼロ。`node scripts/check-observation-targets.js`
+// 観察記録の穴を検出する（2026-09-15・EX-105）。★ 外部依存ゼロ。`node scripts/check-observation-targets.js`
 //
 // ★ なぜ要るか
 //   観察記録は**沈黙して落ちる**。どの穴も、画面にもログにも何も出ないまま
