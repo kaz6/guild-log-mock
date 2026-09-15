@@ -68,6 +68,32 @@ window.masterQuests = [
     outcomes: { full: ["成功", "採集優先", "観察優先"], partial: ["小成功"], fail: [] }
   },
   {
+    // ★ 調査ジャンルの1件目（2026-09-15・EX-106）。★ **前情報のない任務**——村人が
+    //   「見たことのない草がある」と言ってきただけで、何なのかは誰も知らない。
+    //   ★ 観察記録が主眼。仮称は命名の対象になりうる形で置く（正式名が付くのは体験版の後）。
+    id: "quest_unknown_grass",
+    // ★ 担い手は人間だけ（2026-09-11・EX-074／2026-09-15・EX-106）。この依頼は category が「調査」で、
+    //   効いた瞬間の文面は statKey（investigation）で選ばれる。investigation には犬固有の文が無いので、
+    //   どの工程を犬が担っても人間用の記録の文が出る（古い石碑の拓本と同じ理由）。
+    fieldworkHumanOnly: true,
+    title: "森の際に出た見慣れない草の確認",
+    category: "調査",
+    danger: "低",
+    area: "森の際の湿った窪地",
+    durationBand: "short_30m",
+    unlockedBy: "quest_herb",
+    recommended: ["薬草師", "慎重"],
+    tags: ["調査", "植物", "記録", "未同定"],
+    // ★ 呼称は既存に合わせて**鉤括弧で「なにか」を括る**形（「なにか」／嚙みつく「なにか」）。
+    //   入れ子を避けるため、内側は二重鉤括弧にしている。
+    observationTarget: "灰かぶりのような『なにか』",
+    observationKind: "植物",
+    tensionBase: 20,
+    tensionRange: 14,
+    summary: "森の際の窪地に、誰も見たことのない草が出ているという。何なのかは分かっていない。見て、書き留めて帰る。",
+    outcomes: { full: ["群生確認", "標本確保"], partial: ["採取見送り"], fail: [] }
+  },
+  {
     id: "quest_signpost",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,

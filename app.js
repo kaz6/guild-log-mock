@@ -2819,6 +2819,11 @@ const questEventPools = {
   quest_signpost: {
     roadEvents: ["道標の傾き", "苔に隠れた文字", "旧道の分岐", "壊れた橋", "通行人の証言", "根元のゆるみ"]
   },
+  // ★ 調査ジャンルの1件目（2026-09-15・EX-106）。⚠️ **未登録だと汎用フローが落ちて報告書が作れない。**
+  //   ★ 名前だけ流用しても文は要る（未登録の名前は「〜について、短い確認を行った。」1行に落ちる）。
+  quest_unknown_grass: {
+    roadEvents: ["湿った足跡", "窪地の入口", "苔の色の違い", "倒木", "土の匂い", "群れの縁"]
+  },
   quest_church_patrol: {
     roadEvents: ["柵の緩み", "鐘楼の確認", "墓地の灯り", "巡礼路の草", "礼拝堂の気配", "裏手の林"]
   }
@@ -2930,6 +2935,24 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     通行人の証言: [
       `通行人は「最近、道標を直そうとした者がいた」と話した。名前までは分からない。`,
       `旅人から、雨の日だけ旧道を使う者がいると聞いた。理由はまだ分からない。`
+    ],
+    // ★ 調査ジャンルの1件目（2026-09-15・EX-106）。「湿った足跡」「倒木」は既存の文を流用する。
+    //   ⚠️ 文面は仮置き。チャット側が書き直す前提。
+    窪地の入口: [
+      `窪地の入口は一段下がっていて、外からは草が見えない。${solo ? `${name(soloAdv)}は` : `${group}は`}足元を確かめながら降りた。`,
+      `${name(scout)}は入口の幅と、そこだけ風が通らないことを書き留めた。`
+    ],
+    苔の色の違い: [
+      `窪地の縁だけ苔の色が濃い。${name(herbalist)}は指で触れて、湿り気の違いを確かめた。`,
+      `${name(scout)}は苔の切れ目をたどり、草の出ている範囲と重なることに気づいた。`
+    ],
+    土の匂い: [
+      `掘り返した土の匂いは、森の他の場所と少し違った。${name(herbalist)}は袖で口元を覆ってから確かめ直した。`,
+      `${name(warrior)}が足で土を軽く払うと、下から白い粉のようなものが出た。`
+    ],
+    群れの縁: [
+      `草は窪地の一角にだけまとまっていて、縁から先には一本も出ていない。`,
+      `${name(scout)}は群れの縁に沿って歩き、端の位置を報告書に写し取った。`
     ],
     根元のゆるみ: [
       `道標の根元は雨でゆるんでいた。${has("item_bandage") ? "包帯を仮の固定具として巻き、石を積んで補強した。" : solo ? `${name(soloAdv)}は石を積んで応急処置をした。` : `${group}は石を積んで応急処置をした。`}`,
@@ -3298,6 +3321,8 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_old_bridge_repair: ["item_bandage", "item_whistle", "item_map", "item_pot", "item_lantern"],
     quest_church_patrol: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot"],
     quest_herb_delivery: ["item_oilcase", "item_map", "item_pot", "item_whistle", "item_lantern", "item_bandage"],
+    // ★ 調査ジャンルの1件目（2026-09-15・EX-106）。★ **観察記録票は必須**（観察記録が主眼の依頼）。
+    quest_unknown_grass: ["item_map", "item_oilcase", "item_pot", "item_obs_sheet"],
     quest_missing_herbalist: ["item_bandage", "item_whistle", "item_map", "item_lantern", "item_pot", "item_obs_sheet"],
     quest_evening_market_escort: ["item_lantern", "item_whistle", "item_map", "item_bandage", "item_pot"],
     quest_caravan_escort: ["item_bandage", "item_smoke", "item_whistle", "item_map", "item_lantern"],
@@ -3616,6 +3641,20 @@ const OBSERVATION_KIND_NOTES = {
     base: [
       `{名前}は、素早く動く獣だったとだけ書いた。特徴はまだ少ない。`,
       `{名前}は、姿を見た時間と場所を書き留めた。次に来たときの手掛かりにはなる。`
+    ]
+  },
+  植物: {
+    memory: [
+      `{名前}は、葉の形と付き方、丈、生えていた場所の湿り具合を書き留めた。`,
+      `{名前}の記録には、茎の色と切り口の匂い、群れの広がり方が残っている。`
+    ],
+    curiosity: [
+      `{名前}は、そこだけに生えている理由を気にしていた。周りの土と日当たりを見比べている。`,
+      `{名前}は虫が寄っているかを確かめていた。寄らないなら理由があるはず、と書いている。`
+    ],
+    base: [
+      `{名前}は、見慣れない草だったとだけ書いた。丈と色は残してある。`,
+      `{名前}は、生えていた場所を書き留めた。持ち帰りはしていない。`
     ]
   },
   // 種別が書かれていないときの受け皿。★ ここに落ちるのは `observationKind` の**付け忘れ**か、
