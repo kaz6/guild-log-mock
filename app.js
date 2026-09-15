@@ -3620,7 +3620,7 @@ function generateLingeringLightNote(adv, rng) {
   return `${name}は、小さな灯りが道の先に見え、しばらくして消えたと記録した。詳細は次回確認が必要。`;
 }
 
-// ★ 種別ごとの既定の観察文（2026-09-15・EX-106）。
+// ★ 種別ごとの既定の観察文（2026-09-15・EX-105）。
 //   ⚠️ **既定は「書けなかった」ではない。** 観察記録票を持って行った者が書いた紙なので、
 //     「詳細な記録はできなかった」を既定にすると**票を持たせた回ほど嘘になる**（旧実装がそうだった）。
 //   ★ 引くのは**対象の種別**（依頼データの `observationKind`）。図鑑の分類語と同じ語を使う。
@@ -5822,7 +5822,7 @@ function finalizeQuestReport(options) {
       expedition.adventurerItemIds ??
         Object.fromEntries((expedition.itemIds ?? []).map((iId, i) => [expedition.adventurerIds[i] ?? `anon_${i}`, iId]))
     ),
-    observationNotes, // ★ 既定を置かない（undefined＝「渡されなかった」と区別するため。2026-09-15・EX-106）
+    observationNotes, // ★ 既定を置かない（undefined＝「渡されなかった」と区別するため。2026-09-15・EX-105）
     hiddenTags = {},
     highlight = null,
     tensionValue = null,
@@ -5832,7 +5832,7 @@ function finalizeQuestReport(options) {
     usedItemIds = null
   } = options;
 
-  // ★ 観察記録は**渡されなかったら生成する**（2026-09-15・EX-106）。
+  // ★ 観察記録は**渡されなかったら生成する**（2026-09-15・EX-105）。
   //   既定を null にしていたせいで、この関数を使う3つの分岐（教会巡回・隊商護衛・捜索チェーン）は
   //   **観察対象を付けた瞬間に記録が1行も出ないまま黙って通る**状態だった。
   //   意図して出さないときは `observationNotes: null` を**明示的に**渡し、理由を添える。
@@ -5951,7 +5951,7 @@ function generateReport(expedition) {
       adventurerHistoryLines,
       logs,
       // ★ 定型報告書には観察記録を足さない（2026-08-18・EX-064。文は定型で、可変は名前だけ）。
-      //   ここが null なのは**意図**（2026-09-15・EX-106 で確認）。
+      //   ここが null なのは**意図**（2026-09-15・EX-105 で確認）。
       observationNotes: null,
       departConditions,
       highlight: fill(template.highlight),
@@ -5987,7 +5987,7 @@ function generateReport(expedition) {
           roleNoteFor: () => "昼の確認に"
         }),
         logs,
-        // ★ 昼は灯りが出ないので観察対象がいない。ここが null なのは**意図**（2026-09-15・EX-106 で確認）。
+        // ★ 昼は灯りが出ないので観察対象がいない。ここが null なのは**意図**（2026-09-15・EX-105 で確認）。
         observationNotes: null,
         departConditions,
         highlight: generateHighlight(quest, party, itemIds, departConditions, dayInfo.result, rng),
@@ -6242,7 +6242,7 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-105）。null を直書きすると、
       //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
@@ -6302,7 +6302,7 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-105）。null を直書きすると、
       //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
@@ -6367,7 +6367,7 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-105）。null を直書きすると、
       //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
@@ -6566,7 +6566,7 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-105）。null を直書きすると、
       //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
@@ -6625,7 +6625,7 @@ function generateReport(expedition) {
       historyLine: outcomeInfo.history,
       adventurerHistoryLines,
       logs,
-      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-106）。null を直書きすると、
+      // ★ 専用分岐でも観察記録の生成を呼ぶ（2026-09-15・EX-105）。null を直書きすると、
       //   この分岐を使う依頼に観察対象を付けた瞬間、**記録が1行も出ないまま黙って通る**。
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,

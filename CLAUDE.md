@@ -341,7 +341,7 @@ Notion 追記先
 - `masterQuests`：依頼の定義（id, title, category, danger, area, recommended, tags, observationTarget, **observationKind**, tensionBase/tensionRange, summary）
 - `masterItems`：支給品の定義
 - `masterAdventurers`（相当データ）：冒険者データ。weapon / accessory / obsession / traits / stats を持つ
-- ★ **観察記録は `generateAdventurerObservationNote`（`app.js`）が書く**。選び方は3段階（2026-09-15・EX-106）：
+- ★ **観察記録は `generateAdventurerObservationNote`（`app.js`）が書く**。選び方は3段階（2026-09-15・EX-105）：
   **①対象ごとの専用分岐**（森喰い兎／「なにか」／残る灯り）→ **②種別ごとの既定**（依頼データの `observationKind`。
   図鑑の分類語と同じ語）→ **③受け皿**（種別が無いか、表に無い語のとき）。
   ⚠️ **旧実装は②③が無く、専用分岐の無い対象を「短い観察だったため、詳細な記録はできなかった。」に落としていた**
@@ -377,7 +377,7 @@ Notion 追記先
 3. `canUseItemInQuest` の `allowedByQuest` に許可アイテムを追加（★ **必須**。既定が全禁止なので、書かないと支給品の行が一切出ない）
 4. `generateReport()` に `quest.id` 分岐を追加し、上記関数を呼ぶ。エルシーのログ方針（インライン or withElsieLog）を決めて統一する
 5. 必要なら `generateHighlight()` に専用分岐を追加（なくても汎用フォールバックで動く）
-6. ★ **観察対象（`observationTarget`）を持たせるなら、報告書の組み立てで `generateObservationNotes` を必ず呼ぶ**（2026-09-15・EX-106）。
+6. ★ **観察対象（`observationTarget`）を持たせるなら、報告書の組み立てで `generateObservationNotes` を必ず呼ぶ**（2026-09-15・EX-105）。
    ⚠️ **専用分岐で `observationNotes: null` を直書きすると、観察記録が1行も出ないまま黙って通る。**
    意図して出さないとき（定型報告書・対象を見ていないルート）は、**直前の行に理由を書く**。
    あわせて **`observationKind`**（図鑑の分類語。獣／植物 など）を付ける。★ 付けないと受け皿の文になり、対象に合わない記録が出る。
