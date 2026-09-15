@@ -374,6 +374,12 @@ Notion 追記先
 3. `canUseItemInQuest` の `allowedByQuest` に許可アイテムを追加（★ **必須**。既定が全禁止なので、書かないと支給品の行が一切出ない）
 4. `generateReport()` に `quest.id` 分岐を追加し、上記関数を呼ぶ。エルシーのログ方針（インライン or withElsieLog）を決めて統一する
 5. 必要なら `generateHighlight()` に専用分岐を追加（なくても汎用フォールバックで動く）
+6. ★ **観察対象（`observationTarget`）を持たせるなら、報告書の組み立てで `generateObservationNotes` を必ず呼ぶ**（2026-09-15・EX-106）。
+   ⚠️ **専用分岐で `observationNotes: null` を直書きすると、観察記録が1行も出ないまま黙って通る。**
+   意図して出さないとき（定型報告書・対象を見ていないルート）は、**直前の行に理由を書く**。
+   あわせて **`observationKind`**（図鑑の分類語。獣／植物 など）を付ける。★ 付けないと受け皿の文になり、対象に合わない記録が出る。
+   - 確認：`node scripts/check-observation-targets.js`（外部依存ゼロ）が**0件**であること。
+     この2つの穴は**どちらも沈黙して通る**ので、検査でしか気づけない。
 
 ## 今はやらない前提の大きな変更（指示がない限り着手しない）
 
