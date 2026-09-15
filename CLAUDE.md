@@ -338,11 +338,14 @@ Notion 追記先
 ## app.js の構造（現状）
 
 ### データ定義
-- `masterQuests`：依頼の定義（id, title, category, danger, area, recommended, tags, observationTarget, tensionBase/tensionRange, summary）
+- `masterQuests`：依頼の定義（id, title, category, danger, area, recommended, tags, observationTarget, **observationKind**, tensionBase/tensionRange, summary）
 - `masterItems`：支給品の定義
 - `masterAdventurers`（相当データ）：冒険者データ。weapon / accessory / obsession / traits / stats を持つ
-- ★ **観察記録は `generateAdventurerObservationNote`（`app.js`）の分岐が書く**。依頼データの `observationTarget` で引き、
-  **専用の分岐が無い対象は「短い観察だったため、詳細な記録はできなかった。」という総称の1文に落ちる**（＝観察が主眼の依頼を足すときは分岐を1本足す）。
+- ★ **観察記録は `generateAdventurerObservationNote`（`app.js`）が書く**。選び方は3段階（2026-09-15・EX-106）：
+  **①対象ごとの専用分岐**（森喰い兎／「なにか」／残る灯り）→ **②種別ごとの既定**（依頼データの `observationKind`。
+  図鑑の分類語と同じ語）→ **③受け皿**（種別が無いか、表に無い語のとき）。
+  ⚠️ **旧実装は②③が無く、専用分岐の無い対象を「短い観察だったため、詳細な記録はできなかった。」に落としていた**
+  （＝**観察記録票を持たせた回ほど嘘になる**形。納屋が実際にこれに落ちていた）。
   図鑑は**記入型**で、`state.beastLog` にプレイヤーが書く。
   ⚠️ **`masterObservations` は存在しない**（2026-07-26 の体験版①で observations 系統を一式削除。ここの旧記述を 2026-09-15・EX-104 に訂正した）
 
