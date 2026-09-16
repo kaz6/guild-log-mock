@@ -3573,21 +3573,24 @@ function generateRabbitNote(adv, rng) {
   ], rng);
 }
 
+// ★ 段の順は「好奇心 → 記憶 → 既定」（2026-09-16・EX-109 の裁定2＝案a）。
+//   ⚠️ 元は記憶が先で、**記憶と好奇心の両方が高い者（ミナ）が好奇心の段に永久に入らなかった**。
+//   ★ 乱数の消費は変わらない（どちらの段も `pickOne` を1回引く）ので、変わるのは選ばれる文だけ。
 function generateMysteryFieldNote(adv, rng) {
   const memory = adv.tendencies?.memory ?? 3;
   const curiosity = adv.tendencies?.curiosity ?? 3;
   const name = getDisplayName(adv);
 
-  if (memory >= 4) {
-    return pickOne([
-      `${name}は、耳の先が黒く、泥の跳ね方が左右で違っていたと記録している。足跡は畝の間から外側へ続いていた。`,
-      `${name}の記録には、背丈は膝ほど、畑の柔らかい土を避けるように跳ねた、とある。正体は未確定。`
-    ], rng);
-  }
   if (curiosity >= 4) {
     return pickOne([
       `${name}は「なにか」が逃げた後の草の倒れ方を気にしていた。巣穴か通り道が近くにあるかもしれない。`,
       `${name}は姿よりも痕跡を気にしていた。畑の外で同じ足跡を探したが、途中で途切れている。`
+    ], rng);
+  }
+  if (memory >= 4) {
+    return pickOne([
+      `${name}は、耳の先が黒く、泥の跳ね方が左右で違っていたと記録している。足跡は畝の間から外側へ続いていた。`,
+      `${name}の記録には、背丈は膝ほど、畑の柔らかい土を避けるように跳ねた、とある。正体は未確定。`
     ], rng);
   }
   return pickOne([
@@ -3596,22 +3599,25 @@ function generateMysteryFieldNote(adv, rng) {
   ], rng);
 }
 
+// ★ 段の順は「好奇心 → 記憶 → 慎重 → 既定」（2026-09-16・EX-109 の裁定2＝案a）。
+//   ★ 好奇心と記憶はどちらも `pickOne` を1回引くので、入れ替えても乱数の消費は変わらない
+//     （慎重・既定は固定文で0回。**この2段には誰も移動しない**ので、そこも変わらない）。
 function generateLingeringLightNote(adv, rng) {
   const memory = adv.tendencies?.memory ?? 3;
   const curiosity = adv.tendencies?.curiosity ?? 3;
   const caution = adv.tendencies?.caution ?? 3;
   const name = getDisplayName(adv);
 
-  if (memory >= 4) {
-    return pickOne([
-      `${name}は、灯りが道の右手、古い曲がり角の先で二度揺れてから消えたと記録している。足跡は増えていなかった。`,
-      `${name}の記録では、灯りは人の腰ほどの高さに見え、近づくほど遠ざかったように見えた。位置の記録は次回調査に使える。`
-    ], rng);
-  }
   if (curiosity >= 4) {
     return pickOne([
       `${name}は灯りそのものより、消えた後の暗さを気にしていた。道の先に反射するものがあるのかもしれない。`,
       `${name}は灯りが揺れる間隔を気にしていた。風や人の手とは違う動きだった、と報告している。`
+    ], rng);
+  }
+  if (memory >= 4) {
+    return pickOne([
+      `${name}は、灯りが道の右手、古い曲がり角の先で二度揺れてから消えたと記録している。足跡は増えていなかった。`,
+      `${name}の記録では、灯りは人の腰ほどの高さに見え、近づくほど遠ざかったように見えた。位置の記録は次回調査に使える。`
     ], rng);
   }
   if (caution >= 4) {
@@ -3625,27 +3631,29 @@ function generateLingeringLightNote(adv, rng) {
 //     既定文は他の植物依頼にも効くので**固有名（灰かぶり）を出せない**。名が文に出ないと
 //     命名の対象として立たない。
 //   ★ 段の分け方は既存の専用分岐に合わせた（memory / curiosity / それ以外）。
-//   ★ 名前は文に入れない地の文（報告書側が「{名前}の記録」として囲うため）。
+//   ★ 書き手の名前を文に入れる（2026-09-16・EX-109 の裁定4）。既存の専用分岐3本と種別既定が
+//     すべて「{名前}は…」の形なので、ここだけ地の文にすると報告メモに文体の違う記録が並ぶ。
 //   ★ どの段でも `pickOne` を必ず1回だけ引く（種別既定と同じ不変条件）。
 function generateAshGrassNote(adv, rng) {
   const memory = adv.tendencies?.memory ?? 3;
   const curiosity = adv.tendencies?.curiosity ?? 3;
+  const name = getDisplayName(adv);
 
-  if (memory >= 4) {
-    return pickOne([
-      `葉の裏に細かい粉。触れると指に残り、払っても薄く白い。`,
-      `茎は中が空で、折ると音がしない。切り口はすぐに灰色になった。`
-    ], rng);
-  }
   if (curiosity >= 4) {
     return pickOne([
-      `日の当たる側と当たらない側で、葉の色が違う。同じ株なのに。`,
-      `根を少し掘ると、土の中で横に長く繋がっていた。株ではなくひとつづきかもしれない。`
+      `${name}は、日の当たる側と当たらない側で葉の色が違うことを気にしていた。同じ株なのに。`,
+      `${name}は根を少し掘り、土の中で横に長く繋がっているのを確かめた。株ではなくひとつづきかもしれない。`
+    ], rng);
+  }
+  if (memory >= 4) {
+    return pickOne([
+      `${name}は、葉の裏の細かい粉を書き留めた。触れると指に残り、払っても薄く白い。`,
+      `${name}の記録では、茎は中が空で、折っても音がしない。切り口はすぐに灰色になった。`
     ], rng);
   }
   return pickOne([
-    `全体に灰をかぶったような色。背丈は膝より低い。`,
-    `窪地の湿った土にだけ生え、乾いた場所には一本も無かった。`
+    `${name}は、全体に灰をかぶったような色だと書いた。背丈は膝より低い。`,
+    `${name}は、窪地の湿った土にだけ生えていたと書き留めた。乾いた場所には一本も無かった。`
   ], rng);
 }
 
@@ -3700,7 +3708,9 @@ function generateKindObservationNote(target, adv, rng, kind) {
   const table = OBSERVATION_KIND_NOTES[kind] ?? OBSERVATION_KIND_NOTES["既定"];
   const memory = adv.tendencies?.memory ?? 3;
   const curiosity = adv.tendencies?.curiosity ?? 3;
-  const pool = memory >= 4 ? table.memory : curiosity >= 4 ? table.curiosity : table.base;
+  // ★ 「好奇心 → 記憶 → 既定」の順（2026-09-16・EX-109 の裁定2＝案a）。
+  //   ⚠️ 元は記憶が先で、**両方が高い者（ミナ）が好奇心の段に永久に入らなかった**。
+  const pool = curiosity >= 4 ? table.curiosity : memory >= 4 ? table.memory : table.base;
   // ★ プールの長さに関わらず `pickOne` を必ず1回だけ引く（不変条件）。
   //   これが「種別を足しても既存の乱数列が動かない」根拠なので、崩さないこと。
   // ★ 差し込みは `{名前}` のプレースホルダ（行方不明の段階文言＝`masterMissingClock.stages` と同じ型）。
@@ -5692,12 +5702,24 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   //   ★ 汎用の調査文が「書面の情報より少し違っていた」＝**前情報がある前提**で、
   //     **前情報のない任務**というこの依頼の主眼と噛み合わないため、専用に分けた。
   //   ⚠️ 夜に出した回は上の「夜の戦闘・調査依頼」が先に返す（他の調査依頼と同じ扱い）。
-  //   ⚠️ アクセサリー・執着の行は足していない（指示どおり2文）。
+  //   ★ 未達（引き返し）の回は別の2文にする（2026-09-16・EX-109 の裁定1）。**未達でも「書く」ことは
+  //     起きている**ので、書けなかったことを書けなかったと書く側へ振る。判定は依頼データ由来の段
+  //     （`GROWTH_TIER_BY_RESULT`）で、夜の分岐・戦闘の分岐と同じ形。新しい表は増やさない。
+  //   ★ アクセサリー・執着の行は他の分岐と同じ形で足す（2026-09-16・EX-109 の裁定3）。
   if (quest.id === "quest_unknown_grass") {
-    return pickOne([
-      `${subject}は見たままを書いた。知っている草に似せて書かない、と決めていた。`,
-      `報告書には名前が書かれていない。書けなかったのではなく、まだ無い。`
-    ], rng);
+    const failed = (GROWTH_TIER_BY_RESULT[result] ?? "full") === "fail";
+    const lines = failed
+      ? [
+          `${subject}は草に触れないまま引き返した。見た形だけが手元に残っている。`,
+          `確かめられなかったことを、確かめられなかったと書いた。`
+        ]
+      : [
+          `${subject}は見たままを書いた。知っている草に似せて書かない、と決めていた。`,
+          `報告書には名前が書かれていない。書けなかったのではなく、まだ無い。`
+        ];
+    if (acc) lines.push(`${accName}の${acc.name}が、調査の間ずっとそこにあった。小さなものが判断を支えることがある。`);
+    if (obs) lines.push(`${obsName}【${obs.label}】— ${rng() < 0.5 ? obs.positiveLine : obs.idleLine}`);
+    return pickOne(lines, rng);
   }
 
   // 調査依頼（夜以外）
