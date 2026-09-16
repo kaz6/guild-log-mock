@@ -1063,6 +1063,22 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// onclick の中の文字列リテラルに値を埋めるときに使う（2026-09-17・EX-116）。
+// ⚠️ `escapeHtml` だけでは足りない。属性の中身はブラウザが先に実体参照を戻すので、
+//    `&#039;` は `'` に戻り、**JS の文字列がそこで閉じてしまう**（実例：名前に `'` を入れると
+//    図鑑カードの「編集」が `missing ) after argument list` で死に、その記録は二度と開けなくなった）。
+// ★ 順序が肝心：**先に JS のエスケープ、そのあと HTML のエスケープ**。
+//    逆にすると `&#039;` の `&` が二重に変換される。
+function escapeJsArg(value) {
+  return escapeHtml(
+    String(value ?? "")
+      .replaceAll("\\", "\\\\")
+      .replaceAll("'", "\\'")
+      .replaceAll("\r", "\\r")
+      .replaceAll("\n", "\\n")
+  );
+}
+
 // 依頼が見つからない遠征を畳む（2026-09-14・EX-097）。**中断であって失敗ではない。**
 // ★ 起きるのは**依頼を入れ替えたとき**——v2 へ作り直す／実験的な依頼を足して消す。
 //   2026-09-14 の夜道 v1 の退避（EX-096）で実際に踏める形が残った。
@@ -1444,7 +1460,7 @@ function reportCardHtml(report) {
       <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
       <p>${escapeHtml(report.summary)}</p>
       <div class="button-row" style="margin-top: 14px;">
-        <button class="small-button" onclick="openReport('${report.id}')">${report.opened ? "読み返す" : "開封する"}</button>
+        <button class="small-button" onclick="openReport('${escapeJsArg(report.id)}')">${report.opened ? "読み返す" : "開封する"}</button>
       </div>
     </article>
   `;
@@ -1746,7 +1762,7 @@ function questCardHtml(quest, isUrgent = false) {
   const tags = quest.tags ?? quest.recommended ?? [];
   const isLifeQuest = quest.category === "生活";
   return `
-    <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${quest.id}')">
+    <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${escapeJsArg(quest.id)}')">
       <div class="card-title">
         <h3>${isUrgent ? "🚨 " : ""}${escapeHtml(quest.title)}</h3>
         ${isUrgent ? `<span class="status-pill away">緊急</span>` : ""}
@@ -1771,7 +1787,7 @@ function selectableAdventurerHtml(adventurer) {
     ? `${escapeHtml(adventurer.job)} / ${escapeHtml(traitsDisplayText(adventurer))}${adventurer.species === "dog" ? " / 犬" : ""}`
     : `${escapeHtml(adventurer.job)} / ${escapeHtml(adventurer.personality)} / 前職：${escapeHtml(adventurer.background)}`;
   return `
-    <article class="adventurer-card ${selected ? "selected" : ""}" onclick="toggleAdventurer('${adventurer.id}')">
+    <article class="adventurer-card ${selected ? "selected" : ""}" onclick="toggleAdventurer('${escapeJsArg(adventurer.id)}')">
       <div class="card-title">
         <div>
           <h3>${adventurer.favorite ? "★ " : ""}${escapeHtml(getDisplayName(adventurer))}</h3>
@@ -1818,7 +1834,7 @@ function adventurerItemAssignHtml(advId) {
                   const isAssigned = currentItem === item.id;
                   const sameAdvOtherSlot = otherSlotItem === item.id;
                   return `<button class="item-assign-btn${isAssigned ? " selected" : ""}${sameAdvOtherSlot ? " taken" : ""}"
-                    onclick="${sameAdvOtherSlot ? "" : `assignItem('${advId}', ${slot}, '${item.id}')`}"
+                    onclick="${sameAdvOtherSlot ? "" : `assignItem('${escapeJsArg(advId)}', ${slot}, '${escapeJsArg(item.id)}')`}"
                     ${sameAdvOtherSlot ? "disabled" : ""}
                     title="${escapeHtml(item.note)}">${escapeHtml(item.name)}</button>`;
                 }).join("")}
@@ -1882,7 +1898,7 @@ function renderAdventurers() {
 function adventurerListCardHtml(adventurer) {
   const selected = editingAdventurerId === adventurer.id;
   return `
-    <article class="adventurer-card ${selected ? "selected" : ""}" onclick="editAdventurer('${adventurer.id}')">
+    <article class="adventurer-card ${selected ? "selected" : ""}" onclick="editAdventurer('${escapeJsArg(adventurer.id)}')">
       <div class="card-title">
         <div>
           <h3>${adventurer.favorite ? "★ " : "☆ "}${escapeHtml(getDisplayName(adventurer))}</h3>
@@ -2042,7 +2058,7 @@ function adventurerEditorHtml(adventurer) {
         <h3>${escapeHtml(getDisplayName(adventurer))}</h3>
         <p class="muted">本名：${escapeHtml(adventurer.name)}</p>
       </div>
-      <button class="small-button" onclick="toggleFavorite('${adventurer.id}')">${adventurer.favorite ? "★ お気に入り" : "☆ お気に入り"}</button>
+      <button class="small-button" onclick="toggleFavorite('${escapeJsArg(adventurer.id)}')">${adventurer.favorite ? "★ お気に入り" : "☆ お気に入り"}</button>
     </div>
 
     <section class="adventurer-detail-section">
@@ -2097,7 +2113,7 @@ function adventurerEditorHtml(adventurer) {
       <textarea id="memoInput" placeholder="この冒険者について覚えておきたいこと">${escapeHtml(adventurer.memo ?? "")}</textarea>
     </div>
     <div class="button-row">
-      <button class="primary-button" onclick="saveAdventurerMemo('${adventurer.id}')">記録を保存</button>
+      <button class="primary-button" onclick="saveAdventurerMemo('${escapeJsArg(adventurer.id)}')">記録を保存</button>
     </div>
   `;
 }
@@ -2142,7 +2158,7 @@ function reportMemoCardHtml(memo) {
           <span class="memo-quest muted">${escapeHtml(memo.questTitle ?? "")}</span>
         </div>
         <div class="memo-card-actions">
-          <button class="small-button" onclick="openBeastLogFromMemo('${memo.reportId}', '${escapeHtml(memo.targetName ?? "")}')">図鑑を編集</button>
+          <button class="small-button" onclick="openBeastLogFromMemo('${escapeJsArg(memo.reportId)}', '${escapeJsArg(memo.targetName ?? "")}')">図鑑を編集</button>
         </div>
       </div>
       <p class="memo-author muted">${escapeHtml(memo.adventurerName ?? "")} ／ ${dateStr}</p>
@@ -2210,7 +2226,7 @@ function beastLogCardHtml(entry) {
           <h3>${eName}</h3>
           <p class="muted">${eCat} &middot; ${eArea}</p>
         </div>
-        <button class="small-button" onclick="openBeastLogEditor('${eName}', '${eArea}', null)">編集</button>
+        <button class="small-button" onclick="openBeastLogEditor('${escapeJsArg(entry.target)}', '${escapeJsArg(entry.area || "地域未記入")}', null)">編集</button>
       </div>
       ${entry.appearance ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
       ${entry.notes     ? `<p class="meta-label">備考</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.notes)}</p>` : ""}
@@ -2391,14 +2407,14 @@ function renderReportDetail(reportId) {
           <span class="muted">${escapeHtml(readStampDateText(report))}</span>
         </div>` : `
         <div class="read-stamp-row">
-          <button class="secondary-button" onclick="stampReport('${report.id}')">読了のハンコを押す</button>
+          <button class="secondary-button" onclick="stampReport('${escapeJsArg(report.id)}')">読了のハンコを押す</button>
         </div>`}
         <div class="button-row" style="margin-top: 18px;">
           <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
           <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
           <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
           ${quest?.observationTarget && quest.observationTarget !== "なし"
-            ? `<button class="secondary-button" onclick="openBeastLogFromReport('${report.id}')">図鑑を編集</button>`
+            ? `<button class="secondary-button" onclick="openBeastLogFromReport('${escapeJsArg(report.id)}')">図鑑を編集</button>`
             : ""}
         </div>
       </div>
@@ -2444,7 +2460,7 @@ function renderResult(reportId) {
           <p class="highlight-text">「${escapeHtml(report.highlight)}」</p>
         </div>` : ""}
         <div class="button-row" style="margin-top: 18px;">
-          <button class="primary-button" onclick="openReport('${report.id}')">報告書を読む</button>
+          <button class="primary-button" onclick="openReport('${escapeJsArg(report.id)}')">報告書を読む</button>
           <button class="secondary-button" onclick="returnFromResult()">ギルドへ戻る</button>
         </div>
       </div>
