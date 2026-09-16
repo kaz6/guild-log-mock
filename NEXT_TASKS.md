@@ -1221,6 +1221,6 @@ Obsidian移行・Codexレビュー体制の検証が落ち着いたら着手す�
 - ~~★ `scripts/gen-rejected-index.js` の変換が2系統のまま~~ → ★ **2026-09-16・EX-111 で共用に寄せた**
 
 ## EX-111（2026-09-16 完了）
-- Notion 向けの変換を1本に（`gen-rejected-index.js` が `gen-notion-spec.js` の `convertInline` を require。生成3本が同じ変換を通る。commit `b5a7014`）
+- Notion 向けの**インライン**変換を1本に（`gen-rejected-index.js` が `gen-notion-spec.js` の `convertInline` を require。commit `b5a7014`）。★ ブロックの変換（表・見出し）は索引だけ自前のまま＝**次にやった方がよさそうなこと**
 - ★ 一本化しても生成3本の出力は**差分0行**（今の内容に落ちていた記号が無かっただけで、これから書く文には効く）
 - `CLAUDE.md` 3.6 を現行UIに合わせて書き直し（**標準は60倍／不具合は等倍でも確認**。旧「5秒固定・10秒固定」は画面に無い）
