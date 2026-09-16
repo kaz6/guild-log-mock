@@ -11,7 +11,10 @@
 //   node scripts/gen-rejected-index.js --notion   → Notion へ貼る本文を stdout に出す
 //
 // ※ Notion 用の変換は gen-notion-spec.js と同じ規約（表はタグへ／日本語のバッククォートは
-//   「」へ／見出しの階層を1つ上げる）。共通化はしていない（1本にまとめる指示が出ていないため）。
+//   「」へ／見出しの階層を1つ上げる）。
+//   ★ 2026-09-16・EX-111：**インラインの変換（convertInline）は gen-notion-spec.js から取る**。
+//   ⚠️ **ブロックの変換（表のタグ化・見出しの繰り上げ）は、まだこのファイルの toNotion が自前で持っている。**
+//     索引がコードブロックを出すようになったら、そこだけ片方に無い状態になる（今は出さない）。
 
 const fs = require("fs");
 const path = require("path");
