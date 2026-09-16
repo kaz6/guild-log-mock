@@ -240,10 +240,12 @@ const markdown = doc.join("\n");
 //   （2026-08-12・EX-069。それまでは Notion 側だけ 50行ずつに割っていた）。
 //   1つの表にまとめない理由は変わらず、1回の書き込みが 4万字を超えると当たり確認ができないため。
 //   ⚠️ 1か月の却下案が増えすぎて1節が 4万字に近づいたら、その月だけ割ることを検討する。
-function isAscii(text) { return !/[^\x00-\x7F]/.test(text); }
-function convertInline(line) {
-  return line.replace(/`([^`]+)`/g, (m, inner) => (isAscii(inner) ? m : `「${inner}」`));
-}
+// ★ 2026-09-16・EX-111：**変換は共用の `convertInline` を使う**（`gen-notion-spec.js`）。
+//   ★ ここに独自の変換を持っていたため、**EX-098 で spec 側に入れた `dropsInNotion`**
+//     （記号だけ・1文字だけのコードスパンは Notion でスパンごと消える）を**こちらだけ持っていなかった**。
+//   ⚠️ **変換が2系統だと、片方だけ直す事故が起きる**。生成3本（spec／session-state／rejected-index）は
+//     **同じ変換を通す**こと。
+const { convertInline } = require("./gen-notion-spec.js");
 
 function toNotion(md) {
   const lines = md.split("\n");

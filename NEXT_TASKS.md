@@ -1218,4 +1218,9 @@ Obsidian移行・Codexレビュー体制の検証が落ち着いたら着手す�
 - SESSION_STATE の写しを生成物に（`scripts/gen-notion-session-state.js` を新設。変換は `gen-notion-spec.js` の `convert` を共用。commit `74f9865`）。★ 差分更新で溜まった言い換え53箇所は、生成して置き換えると一度に消える
 - ★ ブラウザ動線8項目を実機で通した（**8項目とも PASS**。交戦ログの「Nダメージ」と成長・リロード保持も現物で確認）。⚠️ 3600倍だと即帰還ボタンが目視できないので **60倍**で見ること
 - 種別「植物」「受け皿」の9文は未使用のまま残す（裁定2。到達不能とは理由が違うことを CURRENT_SPEC に明記）
-- ★ 次にやった方がよさそうなこと：`scripts/gen-rejected-index.js` の `convertInline` が EX-098 の `dropsInNotion`（記号だけ・1文字のスパンが Notion で消える対策）を持っていない（変換が2系統のまま。現状の実害は `--notion` 出力で1件）
+- ~~★ `scripts/gen-rejected-index.js` の変換が2系統のまま~~ → ★ **2026-09-16・EX-111 で共用に寄せた**
+
+## EX-111（2026-09-16 完了）
+- Notion 向けの変換を1本に（`gen-rejected-index.js` が `gen-notion-spec.js` の `convertInline` を require。生成3本が同じ変換を通る。commit `b5a7014`）
+- ★ 一本化しても生成3本の出力は**差分0行**（今の内容に落ちていた記号が無かっただけで、これから書く文には効く）
+- `CLAUDE.md` 3.6 を現行UIに合わせて書き直し（**標準は60倍／不具合は等倍でも確認**。旧「5秒固定・10秒固定」は画面に無い）
