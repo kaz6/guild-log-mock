@@ -892,7 +892,7 @@ hr.soft {
 }
 
 /* ── 生態目録のカード ─────────────────────────────────────── */
-.beast-log-card {
+.ecology-record-card {
   padding: 18px 20px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -902,12 +902,12 @@ hr.soft {
   gap: 2px;
 }
 
-.beast-log-card .card-title {
+.ecology-record-card .card-title {
   margin-bottom: 4px;
 }
 
 /* ── 生態目録の編集ドロワー（右寄せ） ──────────────────────────────── */
-.beast-log-overlay {
+.ecology-record-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -915,11 +915,11 @@ hr.soft {
   z-index: 9999;
 }
 
-.beast-log-overlay.open {
+.ecology-record-overlay.open {
   display: block;
 }
 
-.bl-modal-box {
+.er-modal-box {
   position: fixed;
   top: 0;
   right: 0;
@@ -934,7 +934,7 @@ hr.soft {
   overflow: hidden;
 }
 
-.bl-modal-header {
+.er-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -943,19 +943,19 @@ hr.soft {
   flex-shrink: 0;
 }
 
-.bl-modal-header h3 {
+.er-modal-header h3 {
   margin: 0;
   font-size: 17px;
   color: var(--text);
 }
 
-.bl-modal-body {
+.er-modal-body {
   padding: 22px 24px 28px;
   flex: 1;
   overflow-y: auto;
 }
 
-.bl-ref-section {
+.er-ref-section {
   margin-bottom: 20px;
   padding: 14px 16px;
   border: 1px solid var(--line);
@@ -963,19 +963,19 @@ hr.soft {
   background: rgba(255, 238, 205, 0.04);
 }
 
-.bl-form {
+.er-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.bl-form-row {
+.er-form-row {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
 
-.bl-form-row label {
+.er-form-row label {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -983,9 +983,9 @@ hr.soft {
   text-transform: uppercase;
 }
 
-.bl-form-row select,
-.bl-form-row input,
-.bl-form-row textarea {
+.er-form-row select,
+.er-form-row input,
+.er-form-row textarea {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -997,20 +997,20 @@ hr.soft {
   line-height: 1.7;
 }
 
-.bl-form-row select:focus,
-.bl-form-row input:focus,
-.bl-form-row textarea:focus {
+.er-form-row select:focus,
+.er-form-row input:focus,
+.er-form-row textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-.bl-form-row textarea {
+.er-form-row textarea {
   min-height: 72px;
 }
 
 /* ── SOAP 構造の生態目録（2026-09-17・EX-117） ───────────────────── */
 /* 標本ラベルの自動欄（名前・遭遇地域）は入力にしない。書けるのは分類と SOAP だけ。 */
-.bl-static {
+.er-static {
   margin: 0;
   padding: 8px 12px;
   border: 1px dashed var(--line);
@@ -1019,7 +1019,7 @@ hr.soft {
   font-size: 14px;
 }
 
-.bl-tag {
+.er-tag {
   margin-left: 8px;
   padding: 1px 7px;
   border: 1px solid var(--line);
@@ -1029,21 +1029,21 @@ hr.soft {
   vertical-align: middle;
 }
 
-.bl-obs-list {
+.er-obs-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.bl-obs-row {
+.er-obs-row {
   display: grid;
   grid-template-columns: 110px 1fr auto;
   gap: 8px;
   align-items: start;
 }
 
-.bl-obs-row select,
-.bl-obs-row textarea {
+.er-obs-row select,
+.er-obs-row textarea {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1055,17 +1055,17 @@ hr.soft {
   line-height: 1.7;
 }
 
-.bl-obs-row textarea {
+.er-obs-row textarea {
   min-height: 48px;
 }
 
-.bl-obs-remove {
+.er-obs-remove {
   padding: 6px 10px;
   font-size: 12px;
 }
 
 /* 命名の確定印（2026-09-17・EX-118）。★ 読了ハンコと同じ朱の角印だが、押す判子は別物。 */
-.bl-name-stamp {
+.er-name-stamp {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1084,31 +1084,31 @@ hr.soft {
   vertical-align: middle;
 }
 
-.bl-name-stamp.small {
+.er-name-stamp.small {
   width: 30px;
   height: 30px;
   font-size: 9px;
   margin-left: 8px;
 }
 
-.bl-static.bl-named {
+.er-static.er-named {
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-style: solid;
 }
 
-.bl-hint {
+.er-hint {
   margin: 2px 0 0;
   font-size: 12px;
 }
 
-.bl-card-counts {
+.er-card-counts {
   font-size: 12px;
   margin: 2px 0 0;
 }
 
-.bl-axis-list {
+.er-axis-list {
   margin: 4px 0 6px;
   padding-left: 0;
   list-style: none;
@@ -1119,7 +1119,7 @@ hr.soft {
   font-size: 13px;
 }
 
-.bl-axis-tag {
+.er-axis-tag {
   display: inline-block;
   min-width: 64px;
   margin-right: 8px;

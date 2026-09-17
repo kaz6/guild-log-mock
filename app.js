@@ -90,7 +90,7 @@ let state = loadState();
 // 既存セーブの手当て（2026-09-17・EX-117）：**すでに読了ハンコを押してある報告書**の分の枠を、
 // 読み込み時に立てる。★ 枠が立つ規則を後から入れたので、これが無いと**古いセーブだけ
 // 「読んだのにページが無い」**まま残る。何度走らせても増えない（仮称で引いて既存を返す）。
-backfillBeastLogFrames();
+backfillEcologyRecordFrames();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
@@ -135,7 +135,7 @@ function createInitialState() {
     selectedQuestId: null,
     selectedAdventurerIds: [],
     selectedAdventurerItems: {},
-    beastLog: {},
+    ecologyRecord: {},
     reportMemos: [],
     searchChain: null,
     demoSpeed: 1, // 体験版モードの時間加速倍率（1=等倍＝本番の見え方）
@@ -187,7 +187,10 @@ function loadState() {
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
     merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
     // 生態目録：名前キー → id キーへ移し替える（2026-09-17・EX-117。`schemaVersion` は上げない）
-    merged.beastLog = migrateBeastLog(parsed.beastLog);
+    // ★ 旧キー `beastLog` からも拾う（2026-09-17・EX-125 で内部名を改めたため）。
+    //   ⚠️ **新旧のどちらか一方しか無い**のが普通なので、新を優先して片方だけ読む。
+    merged.ecologyRecord = migrateEcologyRecord(parsed.ecologyRecord ?? parsed.beastLog);
+    delete merged.beastLog; // 旧キーは残さない（残すと次の保存で二重に書かれる）
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
     delete merged.lastObservationUpdate;
@@ -1252,7 +1255,7 @@ function render() {
     quests: "依頼掲示板",
     adventurers: "冒険者名簿",
     observations: "報告メモ",
-    beastlog: "生態目録",
+    ecology: "生態目録",
     report: "報告書",
     result: "帰還報告"
   };
@@ -1262,7 +1265,7 @@ function render() {
   if (route === "quests") renderQuests();
   if (route === "adventurers") renderAdventurers();
   if (route === "observations") renderObservations();
-  if (route === "beastlog") renderBeastLog();
+  if (route === "ecology") renderEcologyRecord();
   if (route === "report") renderReportDetail(state.activeReportId);
   if (route === "result") renderResult(state.activeResultReportId);
 }
@@ -1469,7 +1472,7 @@ function stampReport(id) {
   const report = state.reports.find((item) => item.id === id);
   if (!report || report.readStampAt) return; // 一度押したら押し直さない（消す操作は用意しない）
   report.readStampAt = Date.now();
-  ensureBeastLogFrame(report); // ★ 初遭遇＝読んだ時点。生態目録の枠はここで現れる（2026-09-17 の裁定3）
+  ensureEcologyRecordFrame(report); // ★ 初遭遇＝読んだ時点。生態目録の枠はここで現れる（2026-09-17 の裁定3）
   saveState();
   render();
 }
@@ -2179,7 +2182,7 @@ function reportMemoCardHtml(memo) {
           <span class="memo-quest muted">${escapeHtml(memo.questTitle ?? "")}</span>
         </div>
         <div class="memo-card-actions">
-          ${findBeastLogByTarget(memo.targetName) ? `<button class="small-button" onclick="openBeastLogByTarget('${escapeJsArg(memo.targetName ?? "")}')">生態目録を編集</button>` : ""}
+          ${findEcologyRecordByTarget(memo.targetName) ? `<button class="small-button" onclick="openEcologyRecordByTarget('${escapeJsArg(memo.targetName ?? "")}')">生態目録を編集</button>` : ""}
         </div>
       </div>
       <p class="memo-author muted">${escapeHtml(memo.adventurerName ?? "")} ／ ${dateStr}</p>
@@ -2208,14 +2211,19 @@ function observationNotesHtml(obsNotes) {
 // ★ 2026-09-17・EX-123：**画面と文面の呼び名を「生態目録」に改めた。**
 //   理由：**図がほとんど無い**のに図鑑と名のるのは、「報告書に嘘を書かない」という主題に反する。
 //   「生態目録」は**作中に既にある言葉**（魔導図書館が求めてくる呼び名／タイトル案にも入っている）。
-//   ⚠️ **内部名（`beastLog` ／ `bl_*` ／ `BEAST_LOG_*`）は据え置き**。`state.beastLog` は
-//   **セーブのキー**なので、変えるなら移行が要る（裁定待ち）。
+//
+// ★ 2026-09-17・EX-125：**内部名も揃えた**（`beastLog` → `ecologyRecord` ／ `bl_*` → `er_*` ／
+//   `BEAST_LOG_*` → `ECOLOGY_RECORD_*` ／ ルート名 `beastlog` → `ecology` ／ eyebrow も `Ecology Record`）。
+//   ⚠️ **`beastLog` は「獣の記録」の意味で、植物も怪異も入る実態と合っていなかった。**
+//   ★ **セーブのキーも移した**（`state.beastLog` → `state.ecologyRecord`。`schemaVersion` は上げない。
+//   エントリの id 接頭辞 `bl_` も `er_` へ振り替える。`migrateEcologyRecord` が両方を吸収する）。
+//   ※ EX-123 時点では据え置きにしていた。**作者1人でやり直しが効くうちが一番安い**という判断で改めた。
 //
 // ★ 2026-09-17・EX-117：**キーを id にし、SOAP 構造に作り直した。**
-//   - 旧：`state.beastLog[名前]`。**名前がキーだったので、改名すると別ページが生えた**。
+//   - 旧：`state.ecologyRecord[名前]`。**名前がキーだったので、改名すると別ページが生えた**。
 //     ※ EX-116 で塞いだのは**属性への埋め込みのエスケープ**で、別の穴。こちらは
 //       **名前を識別子に使っていたこと**そのものを直している。
-//   - 新：`state.beastLog[id]`。名前は**表示用の値**として持つ（冒険者のあだ名と同じ形）。
+//   - 新：`state.ecologyRecord[id]`。名前は**表示用の値**として持つ（冒険者のあだ名と同じ形）。
 //     `target` は仮称で、依頼データの `observationTarget` と対応する**不変の値**。
 //     命名で入るのは `name` の側（★命名そのものは次段。ここではまだ入口を作らない）。
 //   - `schemaVersion` は上げない（内容で吸収できる。上げると報告書も名前も全部消える）。
@@ -2230,11 +2238,11 @@ function observationNotesHtml(obsNotes) {
 //   ★ 備考は廃止し、外見・特徴は O に吸収した。
 
 // O の軸（2026-09-17 の裁定2）。★ 12個。増減させるときは docs/CURRENT_SPEC.md も直すこと。
-const BEAST_LOG_AXES = ["形", "色", "大きさ", "数", "動き", "痕跡", "匂い", "音", "環境", "時間", "食べるもの", "人への影響"];
+const ECOLOGY_RECORD_AXES = ["形", "色", "大きさ", "数", "動き", "痕跡", "匂い", "音", "環境", "時間", "食べるもの", "人への影響"];
 
 // 分類の選択肢。★ `observationKind` からは自動で入れない——**分類はプレイヤーの仕事**
 //   （2026-09-17 の裁定2）。空＝未分類で始まる。
-const BEAST_LOG_CATEGORIES = ["獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
+const ECOLOGY_RECORD_CATEGORIES = ["獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
 
 // ── 命名（2026-09-17・EX-118） ────────────────────────────────────────────
 // ★ 解禁条件＝O が **12軸中7軸以上**埋まっていること（2026-09-17 の裁定1）。
@@ -2244,48 +2252,48 @@ const BEAST_LOG_CATEGORIES = ["獣", "鳥", "虫", "植物", "菌類", "水棲",
 // ★ 命名は**確定印**を押して確定し、以後は編集できない（裁定2）。読了ハンコとは**別の判子**。
 //   確定前は何度でも書き直せる（下書きは `nameDraft` に残る）。確定で `name` に移る。
 // ★ 答え合わせ（隠した語との照合）は**実装しない**（裁定3）。命名は自由入力のまま通す。
-const BEAST_LOG_NAMING_AXES_REQUIRED = 7;
+const ECOLOGY_RECORD_NAMING_AXES_REQUIRED = 7;
 
 // 本文の入っている軸の**種類**を数える（同じ軸の複数件は1つに畳まれる）
-function beastLogFilledAxes(entry) {
+function ecologyRecordFilledAxes(entry) {
   return new Set((entry.confirmed ?? []).filter((obs) => obs.text).map((obs) => obs.axis));
 }
 
-function canNameBeastLogEntry(entry) {
-  return beastLogFilledAxes(entry).size >= BEAST_LOG_NAMING_AXES_REQUIRED;
+function canNameEcologyRecordEntry(entry) {
+  return ecologyRecordFilledAxes(entry).size >= ECOLOGY_RECORD_NAMING_AXES_REQUIRED;
 }
 
-function isBeastLogNameConfirmed(entry) {
+function isEcologyRecordNameConfirmed(entry) {
   return Boolean(entry.nameConfirmedAt);
 }
 
-function beastLogEntries() {
-  return Object.values(state.beastLog ?? {});
+function ecologyRecordEntries() {
+  return Object.values(state.ecologyRecord ?? {});
 }
 
-function getBeastLogEntry(id) {
-  return (state.beastLog ?? {})[id] ?? null;
+function getEcologyRecordEntry(id) {
+  return (state.ecologyRecord ?? {})[id] ?? null;
 }
 
 // ★ 引くのは**仮称**（`target`）が基本。改名しても同じページを指すため。
 // ⚠️ **確定名でも引けるようにしてある**（2026-09-17・EX-121）。第二段で、命名後に生成された
 //   報告書の観察記録票は**確定名**で書かれるので、そこから来る報告メモも確定名を持つ。
 //   ここを仮称だけにすると、**命名後の証言が生態目録に載らなくなる**。
-function findBeastLogByTarget(target) {
+function findEcologyRecordByTarget(target) {
   if (!target) return null;
-  return beastLogEntries().find((entry) => entry.target === target || (entry.name && entry.name === target)) ?? null;
+  return ecologyRecordEntries().find((entry) => entry.target === target || (entry.name && entry.name === target)) ?? null;
 }
 
 // 表示名＝命名済みならその名前、まだなら仮称（冒険者の `nickname` と同じ形）
-function beastLogDisplayName(entry) {
+function ecologyRecordDisplayName(entry) {
   return entry.name || entry.target;
 }
 
-function nextBeastLogId() {
-  const used = state.beastLog ?? {};
+function nextEcologyRecordId() {
+  const used = state.ecologyRecord ?? {};
   let n = Object.keys(used).length + 1;
-  while (used[`bl_${n}`]) n++;
-  return `bl_${n}`;
+  while (used[`er_${n}`]) n++;
+  return `er_${n}`;
 }
 
 // 旧セーブ（名前がキー）を id キーへ移し替える。★ `schemaVersion` は上げない。
@@ -2293,16 +2301,24 @@ function nextBeastLogId() {
 //   どの軸のことかはプレイヤーが決める（分類を自動で入れないのと同じ理由）。
 // ※ 仮称がどの依頼の `observationTarget` にも一致しないエントリ（旧実装で名前を書き換えて
 //   できた残骸）も**落とさずに移す**。独立したページとして残り、S（証言）が空になるだけ。
-function migrateBeastLog(raw) {
+function migrateEcologyRecord(raw) {
   if (!raw || typeof raw !== "object") return {};
   const out = {};
   let seq = 0;
+  // ★ 旧 id 接頭辞 `bl_` を `er_` へ振り替える（2026-09-17・EX-125）。番号は変えない。
+  //   ⚠️ id は**このオブジェクトの中でしか使われない**（報告書は仮称で引く）ので、振り替えても
+  //   他とのつながりは切れない。
+  const renameId = (id) => (typeof id === "string" && id.startsWith("bl_") ? `er_${id.slice(3)}` : id);
   Object.entries(raw).forEach(([key, val]) => {
     if (!val || typeof val !== "object") return;
-    if (val.id && Array.isArray(val.confirmed)) { out[val.id] = val; return; } // 移行済み
+    if (val.id && Array.isArray(val.confirmed)) {      // 移行済み（EX-117 の形）
+      const moved = renameId(val.id);
+      out[moved] = moved === val.id ? val : { ...val, id: moved };
+      return;
+    }
     seq += 1;
-    let id = val.id || `bl_${seq}`;
-    while (out[id]) { seq += 1; id = `bl_${seq}`; }
+    let id = renameId(val.id) || `er_${seq}`;
+    while (out[id]) { seq += 1; id = `er_${seq}`; }
     const legacy = [
       val.appearance          ? `【外見・特徴】${val.appearance}` : "",
       val.notes               ? `【備考】${val.notes}` : "",
@@ -2331,17 +2347,17 @@ function migrateBeastLog(raw) {
 // ★ 生態目録の枠は**初遭遇で現れる**（2026-09-17 の裁定3）。初遭遇＝**読了ハンコを押した時点**。
 //   帰還と同時にすると、読む前に見知らぬページが増える。
 //   枠に入っているのは**仮称と遭遇地域だけ**——分類も観察も空で始まる（埋めるのはプレイヤー）。
-function ensureBeastLogFrame(report) {
+function ensureEcologyRecordFrame(report) {
   const quest = getQuest(report.questId);
   if (!quest || !quest.observationTarget || quest.observationTarget === "なし") return null;
   // ⚠️ `observationNotes` が **null** なのは「**対象がいなかった**」回（定型報告書・昼の灯り・
   //    挑まずに引き返した回）。**記録票を持たせなかっただけの回は `notes` が空の配列**で、
   //    そちらは出会っている＝枠を立てる（2026-09-17・EX-117 で2つの null を分けた）。
   if (!report.observationNotes) return null;
-  const existing = findBeastLogByTarget(quest.observationTarget);
+  const existing = findEcologyRecordByTarget(quest.observationTarget);
   if (existing) return existing;
-  const id = nextBeastLogId();
-  state.beastLog[id] = {
+  const id = nextEcologyRecordId();
+  state.ecologyRecord[id] = {
     id,
     target: quest.observationTarget,
     name: null,
@@ -2354,29 +2370,29 @@ function ensureBeastLogFrame(report) {
     nextCheck: "",
     legacy: ""
   };
-  return state.beastLog[id];
+  return state.ecologyRecord[id];
 }
 
-function backfillBeastLogFrames() {
-  (state.reports ?? []).forEach((report) => { if (report.readStampAt) ensureBeastLogFrame(report); });
+function backfillEcologyRecordFrames() {
+  (state.reports ?? []).forEach((report) => { if (report.readStampAt) ensureEcologyRecordFrame(report); });
 }
 
 // S（冒険者の証言）＝自動。観察記録票で溜まった文をそのまま並べる。★ ここは書き換えられない。
 // ⚠️ **仮称と確定名の両方で拾う**（2026-09-17・EX-121）。命名前の証言は仮称で、
 //   命名後に届いた証言は確定名で保存されているため。
-function beastLogTestimonies(entry) {
+function ecologyRecordTestimonies(entry) {
   return (state.reportMemos ?? []).filter((memo) =>
     memo.targetName === entry.target || (entry.name && memo.targetName === entry.name));
 }
 
-function renderBeastLog() {
-  const entries = beastLogEntries();
+function renderEcologyRecord() {
+  const entries = ecologyRecordEntries();
   app.innerHTML = `
     <section class="card">
       <div class="card-body">
         <div class="card-title">
           <div>
-            <p class="eyebrow">Beast Log</p>
+            <p class="eyebrow">Ecology Record</p>
             <h3>生態目録</h3>
           </div>
           <span class="status-pill">${entries.length}件</span>
@@ -2384,31 +2400,31 @@ function renderBeastLog() {
         <p class="muted" style="margin-bottom: 12px;">報告書を読むと、出会ったものの枠が仮称のまま現れます。分類と観察はあなたが書きます。</p>
         ${entries.length === 0
           ? `<div class="empty">まだ記録はありません。<br>観察対象のいる依頼の報告書に読了のハンコを押すと、枠が現れます。</div>`
-          : `<div class="grid-2" style="margin-top: 4px;">${entries.map(beastLogCardHtml).join("")}</div>`}
+          : `<div class="grid-2" style="margin-top: 4px;">${entries.map(ecologyRecordCardHtml).join("")}</div>`}
       </div>
     </section>
   `;
 }
 
-function beastLogCardHtml(entry) {
+function ecologyRecordCardHtml(entry) {
   const confirmed = (entry.confirmed ?? []).filter((obs) => obs.text);
-  const testimonies = beastLogTestimonies(entry);
+  const testimonies = ecologyRecordTestimonies(entry);
   return `
-    <article class="beast-log-card">
+    <article class="ecology-record-card">
       <div class="card-title">
         <div>
-          <h3>${escapeHtml(beastLogDisplayName(entry))}${isBeastLogNameConfirmed(entry)
-            ? `<span class="bl-name-stamp small" aria-label="確定" title="${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定">確<br />定</span>`
-            : `<span class="bl-tag">仮称</span>`}</h3>
+          <h3>${escapeHtml(ecologyRecordDisplayName(entry))}${isEcologyRecordNameConfirmed(entry)
+            ? `<span class="er-name-stamp small" aria-label="確定" title="${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定">確<br />定</span>`
+            : `<span class="er-tag">仮称</span>`}</h3>
           <p class="muted">${escapeHtml(entry.category || "分類未記入")} &middot; ${escapeHtml(entry.area || "地域未記入")}</p>
         </div>
-        <button class="small-button" onclick="openBeastLogEditor('${escapeJsArg(entry.id)}')">編集</button>
+        <button class="small-button" onclick="openEcologyRecordEditor('${escapeJsArg(entry.id)}')">編集</button>
       </div>
-      <p class="muted bl-card-counts">証言 ${testimonies.length}件 ／ 確かめられたこと ${confirmed.length}件</p>
+      <p class="muted er-card-counts">証言 ${testimonies.length}件 ／ 確かめられたこと ${confirmed.length}件</p>
       ${confirmed.length > 0 ? `
       <p class="meta-label">確かめられたこと</p>
-      <ul class="bl-axis-list">
-        ${confirmed.map((obs) => `<li><span class="bl-axis-tag">${escapeHtml(obs.axis)}</span>${escapeHtml(obs.text)}</li>`).join("")}
+      <ul class="er-axis-list">
+        ${confirmed.map((obs) => `<li><span class="er-axis-tag">${escapeHtml(obs.axis)}</span>${escapeHtml(obs.text)}</li>`).join("")}
       </ul>` : ""}
       ${entry.guess     ? `<p class="meta-label">推測</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.guess)}</p>` : ""}
       ${entry.nextCheck ? `<p class="meta-label">次に確かめたいこと</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.nextCheck)}</p>` : ""}
@@ -2419,101 +2435,101 @@ function beastLogCardHtml(entry) {
 
 // 仮称から開く（報告書・報告メモの「生態目録を編集」用）。★ 枠が無ければ何もしない——
 //   枠を作るのは読了ハンコだけ（ここで作ると「初遭遇＝読了」が崩れる）。
-function openBeastLogByTarget(targetName) {
-  const entry = findBeastLogByTarget(targetName);
-  if (entry) openBeastLogEditor(entry.id);
+function openEcologyRecordByTarget(targetName) {
+  const entry = findEcologyRecordByTarget(targetName);
+  if (entry) openEcologyRecordEditor(entry.id);
 }
 
-function openBeastLogEditor(id) {
-  const entry = getBeastLogEntry(id);
+function openEcologyRecordEditor(id) {
+  const entry = getEcologyRecordEntry(id);
   if (!entry) return;
-  let overlay = document.getElementById("beastLogOverlay");
+  let overlay = document.getElementById("ecologyRecordOverlay");
   if (!overlay) {
     overlay = document.createElement("div");
-    overlay.id = "beastLogOverlay";
-    overlay.className = "beast-log-overlay";
+    overlay.id = "ecologyRecordOverlay";
+    overlay.className = "ecology-record-overlay";
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = beastLogEditorHtml(entry);
+  overlay.innerHTML = ecologyRecordEditorHtml(entry);
   overlay.classList.add("open");
 }
 
-function closeBeastLogEditor() {
-  const overlay = document.getElementById("beastLogOverlay");
+function closeEcologyRecordEditor() {
+  const overlay = document.getElementById("ecologyRecordOverlay");
   if (overlay) overlay.classList.remove("open");
 }
 
 // ★ 画面の入力をエントリへ写す。書けるのはプレイヤーの欄だけ（分類・O・A・P・移行前の記述・
 //   名前の下書き）。遭遇地域と確定済みの名前は自動欄なので、ここでは触らない。
-function applyBeastLogForm(entry) {
+function applyEcologyRecordForm(entry) {
   const val = (elId) => document.getElementById(elId)?.value ?? "";
-  entry.category = val("bl_category");
-  entry.confirmed = Array.from(document.querySelectorAll("#bl_obs_list .bl-obs-row"))
+  entry.category = val("er_category");
+  entry.confirmed = Array.from(document.querySelectorAll("#er_obs_list .er-obs-row"))
     .map((row) => ({
       axis: row.querySelector("select").value,
       text: row.querySelector("textarea").value.trim()
     }))
     .filter((obs) => obs.text); // 空行は保存しない
-  entry.guess = val("bl_guess").trim();
-  entry.nextCheck = val("bl_next").trim();
-  if (document.getElementById("bl_legacy")) entry.legacy = val("bl_legacy").trim();
+  entry.guess = val("er_guess").trim();
+  entry.nextCheck = val("er_next").trim();
+  if (document.getElementById("er_legacy")) entry.legacy = val("er_legacy").trim();
   // 下書きの名前は確定前だけ拾う（確定後は入力そのものを出さない）
-  if (!isBeastLogNameConfirmed(entry) && document.getElementById("bl_name_draft")) {
-    entry.nameDraft = val("bl_name_draft").trim();
+  if (!isEcologyRecordNameConfirmed(entry) && document.getElementById("er_name_draft")) {
+    entry.nameDraft = val("er_name_draft").trim();
   }
 }
 
-function saveBeastLogEntry(id) {
-  const entry = getBeastLogEntry(id);
+function saveEcologyRecordEntry(id) {
+  const entry = getEcologyRecordEntry(id);
   if (!entry) return;
-  applyBeastLogForm(entry);
+  applyEcologyRecordForm(entry);
   saveState();
-  closeBeastLogEditor();
+  closeEcologyRecordEditor();
   render();
 }
 
 // 確定印。★ 押すと名前が確定し、**二度と変えられない**（2026-09-17 の裁定2）。
 // ★ 取り返しがつかないので、押す前に一度だけ確認を出す（実装側の判断。EX-118）。
 //   ⚠️ 画面側の守り（解禁前はボタンを出さない）だけにしない——**ここでも条件を見る**。
-function confirmBeastLogName(id) {
-  const entry = getBeastLogEntry(id);
-  if (!entry || isBeastLogNameConfirmed(entry)) return;
-  if (!canNameBeastLogEntry(entry)) return;
-  const draft = (document.getElementById("bl_name_draft")?.value ?? "").trim();
+function confirmEcologyRecordName(id) {
+  const entry = getEcologyRecordEntry(id);
+  if (!entry || isEcologyRecordNameConfirmed(entry)) return;
+  if (!canNameEcologyRecordEntry(entry)) return;
+  const draft = (document.getElementById("er_name_draft")?.value ?? "").trim();
   if (!draft) return;
   if (!confirm(`「${draft}」で確定します。\n確定した名前は二度と変えられません。よろしいですか？`)) return;
   // ★ 先に書きかけの欄も保存する（確定だけ通って観察が消えるのを防ぐ）
-  applyBeastLogForm(entry);
+  applyEcologyRecordForm(entry);
   entry.name = draft;
   entry.nameDraft = "";
   entry.nameConfirmedAt = Date.now();
   saveState();
   render();
-  openBeastLogEditor(entry.id); // 確定した姿をそのまま見せる
+  openEcologyRecordEditor(entry.id); // 確定した姿をそのまま見せる
 }
 
 // O の1行（軸＋自由記述）。★ 行を足せば**同じ軸を何度でも選べる**——
 //   観察は回を重ねるもので、別の遠征で見た「動き」を前の記述に上書きさせないため。
-function beastLogObservationRowHtml(obs) {
-  const axis = obs?.axis || BEAST_LOG_AXES[0];
+function ecologyRecordObservationRowHtml(obs) {
+  const axis = obs?.axis || ECOLOGY_RECORD_AXES[0];
   return `
-    <div class="bl-obs-row">
+    <div class="er-obs-row">
       <select aria-label="軸">
-        ${BEAST_LOG_AXES.map((a) => `<option value="${a}"${a === axis ? " selected" : ""}>${a}</option>`).join("")}
+        ${ECOLOGY_RECORD_AXES.map((a) => `<option value="${a}"${a === axis ? " selected" : ""}>${a}</option>`).join("")}
       </select>
       <textarea placeholder="確かめられたことを書く">${escapeHtml(obs?.text || "")}</textarea>
-      <button class="ghost-button bl-obs-remove" onclick="removeBeastLogObservationRow(this)">削除</button>
+      <button class="ghost-button er-obs-remove" onclick="removeEcologyRecordObservationRow(this)">削除</button>
     </div>
   `;
 }
 
-function addBeastLogObservationRow() {
-  const list = document.getElementById("bl_obs_list");
-  if (list) list.insertAdjacentHTML("beforeend", beastLogObservationRowHtml(null));
+function addEcologyRecordObservationRow() {
+  const list = document.getElementById("er_obs_list");
+  if (list) list.insertAdjacentHTML("beforeend", ecologyRecordObservationRowHtml(null));
 }
 
-function removeBeastLogObservationRow(button) {
-  const row = button.closest(".bl-obs-row");
+function removeEcologyRecordObservationRow(button) {
+  const row = button.closest(".er-obs-row");
   if (row) row.remove();
 }
 
@@ -2554,8 +2570,8 @@ function questNameAliases(quest) {
 function namedTargetFor(quest) {
   const target = quest?.observationTarget;
   if (!target || target === "なし") return null;
-  const entry = findBeastLogByTarget(target);
-  return entry && isBeastLogNameConfirmed(entry) ? entry.name : null;
+  const entry = findEcologyRecordByTarget(target);
+  return entry && isEcologyRecordNameConfirmed(entry) ? entry.name : null;
 }
 
 // 題名の表示（掲示板・報告書の見出し・遠征中・帰還カード）。確定前は仮称のまま。
@@ -2614,39 +2630,39 @@ function enemyDisplayShortName(enemyRow, fallback) {
 }
 
 // 標本ラベルの名前欄。★ 3つの姿を持つ：確定済み（編集不可）／解禁済み（下書き＋確定印）／未解禁（軸の数だけ出す）。
-function beastLogNameSectionHtml(entry) {
-  if (isBeastLogNameConfirmed(entry)) {
+function ecologyRecordNameSectionHtml(entry) {
+  if (isEcologyRecordNameConfirmed(entry)) {
     return `
-      <div class="bl-form-row">
+      <div class="er-form-row">
         <label>名前（確定済み）</label>
-        <p class="bl-static bl-named">
-          <span>${escapeHtml(beastLogDisplayName(entry))}</span>
-          <span class="bl-name-stamp" aria-label="確定">確<br />定</span>
+        <p class="er-static er-named">
+          <span>${escapeHtml(ecologyRecordDisplayName(entry))}</span>
+          <span class="er-name-stamp" aria-label="確定">確<br />定</span>
         </p>
-        <p class="muted bl-hint">${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定しました。名前はもう変えられません。</p>
+        <p class="muted er-hint">${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定しました。名前はもう変えられません。</p>
       </div>`;
   }
-  const filled = beastLogFilledAxes(entry).size;
-  const ready = canNameBeastLogEntry(entry);
+  const filled = ecologyRecordFilledAxes(entry).size;
+  const ready = canNameEcologyRecordEntry(entry);
   const gate = ready
     ? "名前を付けられます。"
-    : `あと ${BEAST_LOG_NAMING_AXES_REQUIRED - filled} 軸で名前を付けられます。軸を書き足したら、いったん保存して開き直してください。`;
+    : `あと ${ECOLOGY_RECORD_NAMING_AXES_REQUIRED - filled} 軸で名前を付けられます。軸を書き足したら、いったん保存して開き直してください。`;
   return `
-    <div class="bl-form-row">
-      <label for="bl_name_draft">名前</label>
-      <p class="bl-static"><span>${escapeHtml(entry.target)}</span><span class="bl-tag">仮称</span></p>
-      <p class="muted bl-hint">確かめられたことが ${filled} / ${BEAST_LOG_NAMING_AXES_REQUIRED} 軸（全12軸のうち）。${gate}</p>
+    <div class="er-form-row">
+      <label for="er_name_draft">名前</label>
+      <p class="er-static"><span>${escapeHtml(entry.target)}</span><span class="er-tag">仮称</span></p>
+      <p class="muted er-hint">確かめられたことが ${filled} / ${ECOLOGY_RECORD_NAMING_AXES_REQUIRED} 軸（全12軸のうち）。${gate}</p>
       ${ready ? `
-      <input id="bl_name_draft" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
+      <input id="er_name_draft" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
       <div class="button-row" style="margin-top: 8px;">
-        <button class="secondary-button" onclick="confirmBeastLogName('${escapeJsArg(entry.id)}')">確定印を押す</button>
+        <button class="secondary-button" onclick="confirmEcologyRecordName('${escapeJsArg(entry.id)}')">確定印を押す</button>
       </div>
-      <p class="muted bl-hint">⚠️ 確定印を押すと名前が確定し、二度と変えられません。押すまでは何度でも書き直せます（「生態目録に保存」で下書きが残ります）。</p>` : ""}
+      <p class="muted er-hint">⚠️ 確定印を押すと名前が確定し、二度と変えられません。押すまでは何度でも書き直せます（「生態目録に保存」で下書きが残ります）。</p>` : ""}
     </div>`;
 }
 
-function beastLogEditorHtml(entry) {
-  const testimonies = beastLogTestimonies(entry);
+function ecologyRecordEditorHtml(entry) {
+  const testimonies = ecologyRecordTestimonies(entry);
   const sHtml = testimonies.length > 0 ? `
     <div class="obs-notes-grid">
       ${testimonies.map((memo) => `
@@ -2659,51 +2675,51 @@ function beastLogEditorHtml(entry) {
     : `<p class="muted">まだ証言はありません。観察記録票を持たせた遠征から届きます。</p>`;
 
   const currentCat = entry.category || "";
-  const categorySelect = `<div class="bl-form-row">
-    <label for="bl_category">分類</label>
-    <select id="bl_category">
+  const categorySelect = `<div class="er-form-row">
+    <label for="er_category">分類</label>
+    <select id="er_category">
       <option value=""${currentCat === "" ? " selected" : ""}>未分類</option>
-      ${BEAST_LOG_CATEGORIES.map((c) => `<option value="${c}"${currentCat === c ? " selected" : ""}>${c}</option>`).join("")}
+      ${ECOLOGY_RECORD_CATEGORIES.map((c) => `<option value="${c}"${currentCat === c ? " selected" : ""}>${c}</option>`).join("")}
     </select>
   </div>`;
 
   const rows = (entry.confirmed ?? []).filter((obs) => obs.text);
   const txt = (id, label, value, placeholder) =>
-    `<div class="bl-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${placeholder}">${escapeHtml(value || "")}</textarea></div>`;
+    `<div class="er-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${placeholder}">${escapeHtml(value || "")}</textarea></div>`;
 
   return `
-    <div class="bl-modal-box">
-      <div class="bl-modal-header">
+    <div class="er-modal-box">
+      <div class="er-modal-header">
         <h3>生態目録を編集</h3>
-        <button class="ghost-button" onclick="closeBeastLogEditor()">✕ 閉じる</button>
+        <button class="ghost-button" onclick="closeEcologyRecordEditor()">✕ 閉じる</button>
       </div>
-      <div class="bl-modal-body">
-        <div class="bl-form">
-          ${beastLogNameSectionHtml(entry)}
+      <div class="er-modal-body">
+        <div class="er-form">
+          ${ecologyRecordNameSectionHtml(entry)}
           ${categorySelect}
-          <div class="bl-form-row">
+          <div class="er-form-row">
             <label>遭遇地域</label>
-            <p class="bl-static">${escapeHtml(entry.area || "地域未記入")}</p>
+            <p class="er-static">${escapeHtml(entry.area || "地域未記入")}</p>
           </div>
 
-          <div class="bl-form-row">
+          <div class="er-form-row">
             <label>S 冒険者の証言（自動）</label>
             ${sHtml}
           </div>
 
-          <div class="bl-form-row">
+          <div class="er-form-row">
             <label>O 確かめられたこと</label>
-            <div id="bl_obs_list" class="bl-obs-list">${rows.map(beastLogObservationRowHtml).join("")}</div>
-            <button class="small-button" onclick="addBeastLogObservationRow()">＋ 軸を選んで書き足す</button>
+            <div id="er_obs_list" class="er-obs-list">${rows.map(ecologyRecordObservationRowHtml).join("")}</div>
+            <button class="small-button" onclick="addEcologyRecordObservationRow()">＋ 軸を選んで書き足す</button>
           </div>
 
-          ${txt("bl_guess", "A 推測", entry.guess, "確かめられてはいないが、こう思う")}
-          ${txt("bl_next", "P 次に確かめたいこと", entry.nextCheck, "次の遠征で見てきてほしいこと")}
-          ${entry.legacy ? txt("bl_legacy", "移行前の記述（軸へ振り分けてください）", entry.legacy, "") : ""}
+          ${txt("er_guess", "A 推測", entry.guess, "確かめられてはいないが、こう思う")}
+          ${txt("er_next", "P 次に確かめたいこと", entry.nextCheck, "次の遠征で見てきてほしいこと")}
+          ${entry.legacy ? txt("er_legacy", "移行前の記述（軸へ振り分けてください）", entry.legacy, "") : ""}
 
           <div class="button-row" style="margin-top: 18px;">
-            <button class="primary-button" onclick="saveBeastLogEntry('${escapeJsArg(entry.id)}')">生態目録に保存</button>
-            <button class="ghost-button" onclick="closeBeastLogEditor()">キャンセル</button>
+            <button class="primary-button" onclick="saveEcologyRecordEntry('${escapeJsArg(entry.id)}')">生態目録に保存</button>
+            <button class="ghost-button" onclick="closeEcologyRecordEditor()">キャンセル</button>
           </div>
         </div>
       </div>
@@ -2770,8 +2786,8 @@ function renderReportDetail(reportId) {
           <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
           <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
           <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
-          ${quest?.observationTarget && quest.observationTarget !== "なし" && findBeastLogByTarget(quest.observationTarget)
-            ? `<button class="secondary-button" onclick="openBeastLogByTarget('${escapeJsArg(quest.observationTarget)}')">生態目録を編集</button>`
+          ${quest?.observationTarget && quest.observationTarget !== "なし" && findEcologyRecordByTarget(quest.observationTarget)
+            ? `<button class="secondary-button" onclick="openEcologyRecordByTarget('${escapeJsArg(quest.observationTarget)}')">生態目録を編集</button>`
             : ""}
         </div>
       </div>
