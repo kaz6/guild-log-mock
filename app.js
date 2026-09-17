@@ -186,7 +186,7 @@ function loadState() {
     merged.adventurers = mergeAdventurerList(masterAdventurers, parsed.adventurers);
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
     merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
-    // 図鑑：名前キー → id キーへ移し替える（2026-09-17・EX-117。`schemaVersion` は上げない）
+    // 生態目録：名前キー → id キーへ移し替える（2026-09-17・EX-117。`schemaVersion` は上げない）
     merged.beastLog = migrateBeastLog(parsed.beastLog);
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
@@ -1072,7 +1072,7 @@ function escapeHtml(value) {
 // onclick の中の文字列リテラルに値を埋めるときに使う（2026-09-17・EX-116）。
 // ⚠️ `escapeHtml` だけでは足りない。属性の中身はブラウザが先に実体参照を戻すので、
 //    `&#039;` は `'` に戻り、**JS の文字列がそこで閉じてしまう**（実例：名前に `'` を入れると
-//    図鑑カードの「編集」が `missing ) after argument list` で死に、その記録は二度と開けなくなった）。
+//    生態目録のカードの「編集」が `missing ) after argument list` で死に、その記録は二度と開けなくなった）。
 // ★ 順序が肝心：**先に JS のエスケープ、そのあと HTML のエスケープ**。
 //    ⚠️ 逆にすると、HTML のエスケープで `'` が `&#039;` に化けたあとなので、
 //    **JS のエスケープが `'` を見つけられない**（実測：`O'B & C` は
@@ -1252,7 +1252,7 @@ function render() {
     quests: "依頼掲示板",
     adventurers: "冒険者名簿",
     observations: "報告メモ",
-    beastlog: "いきもの図鑑",
+    beastlog: "生態目録",
     report: "報告書",
     result: "帰還報告"
   };
@@ -1469,7 +1469,7 @@ function stampReport(id) {
   const report = state.reports.find((item) => item.id === id);
   if (!report || report.readStampAt) return; // 一度押したら押し直さない（消す操作は用意しない）
   report.readStampAt = Date.now();
-  ensureBeastLogFrame(report); // ★ 初遭遇＝読んだ時点。図鑑の枠はここで現れる（2026-09-17 の裁定3）
+  ensureBeastLogFrame(report); // ★ 初遭遇＝読んだ時点。生態目録の枠はここで現れる（2026-09-17 の裁定3）
   saveState();
   render();
 }
@@ -2151,7 +2151,7 @@ function renderObservations() {
           </div>
           <span class="status-pill">${memos.length}件</span>
         </div>
-        <p class="muted" style="margin-bottom: 16px;">観察記録票を持った冒険者が依頼から持ち帰った一次記録です。いきもの図鑑を書くための素材置き場として使ってください。</p>
+        <p class="muted" style="margin-bottom: 16px;">観察記録票を持った冒険者が依頼から持ち帰った一次記録です。生態目録を書くための素材置き場として使ってください。</p>
         ${memos.length === 0
           ? `<div class="empty">観察対象のある依頼に観察記録票を持たせて完了すると、冒険者ごとの記録がここに蓄積されます。</div>`
           : `<div class="memo-list">${memos.map(reportMemoCardHtml).join("")}</div>`}
@@ -2179,7 +2179,7 @@ function reportMemoCardHtml(memo) {
           <span class="memo-quest muted">${escapeHtml(memo.questTitle ?? "")}</span>
         </div>
         <div class="memo-card-actions">
-          ${findBeastLogByTarget(memo.targetName) ? `<button class="small-button" onclick="openBeastLogByTarget('${escapeJsArg(memo.targetName ?? "")}')">図鑑を編集</button>` : ""}
+          ${findBeastLogByTarget(memo.targetName) ? `<button class="small-button" onclick="openBeastLogByTarget('${escapeJsArg(memo.targetName ?? "")}')">生態目録を編集</button>` : ""}
         </div>
       </div>
       <p class="memo-author muted">${escapeHtml(memo.adventurerName ?? "")} ／ ${dateStr}</p>
@@ -2203,7 +2203,13 @@ function observationNotesHtml(obsNotes) {
   `;
 }
 
-// ── いきもの図鑑 ──────────────────────────────────────────────────────────────
+// ── 生態目録（旧「いきもの図鑑」）────────────────────────────────────────────
+//
+// ★ 2026-09-17・EX-123：**画面と文面の呼び名を「生態目録」に改めた。**
+//   理由：**図がほとんど無い**のに図鑑と名のるのは、「報告書に嘘を書かない」という主題に反する。
+//   「生態目録」は**作中に既にある言葉**（魔導図書館が求めてくる呼び名／タイトル案にも入っている）。
+//   ⚠️ **内部名（`beastLog` ／ `bl_*` ／ `BEAST_LOG_*`）は据え置き**。`state.beastLog` は
+//   **セーブのキー**なので、変えるなら移行が要る（裁定待ち）。
 //
 // ★ 2026-09-17・EX-117：**キーを id にし、SOAP 構造に作り直した。**
 //   - 旧：`state.beastLog[名前]`。**名前がキーだったので、改名すると別ページが生えた**。
@@ -2213,7 +2219,7 @@ function observationNotesHtml(obsNotes) {
 //     `target` は仮称で、依頼データの `observationTarget` と対応する**不変の値**。
 //     命名で入るのは `name` の側（★命名そのものは次段。ここではまだ入口を作らない）。
 //   - `schemaVersion` は上げない（内容で吸収できる。上げると報告書も名前も全部消える）。
-//     前例3つ：`normalizeItemMap` ／ 図鑑の旧フィールド統合 ／ `readStampAt`。
+//     前例3つ：`normalizeItemMap` ／ 生態目録の旧フィールド統合 ／ `readStampAt`。
 //   - ★ 削除UIは作らない。改名で別ページが生えなくなったので、消す操作が要らなくなった。
 //
 // SOAP（2026-09-17 の裁定2）：
@@ -2264,7 +2270,7 @@ function getBeastLogEntry(id) {
 // ★ 引くのは**仮称**（`target`）が基本。改名しても同じページを指すため。
 // ⚠️ **確定名でも引けるようにしてある**（2026-09-17・EX-121）。第二段で、命名後に生成された
 //   報告書の観察記録票は**確定名**で書かれるので、そこから来る報告メモも確定名を持つ。
-//   ここを仮称だけにすると、**命名後の証言が図鑑に載らなくなる**。
+//   ここを仮称だけにすると、**命名後の証言が生態目録に載らなくなる**。
 function findBeastLogByTarget(target) {
   if (!target) return null;
   return beastLogEntries().find((entry) => entry.target === target || (entry.name && entry.name === target)) ?? null;
@@ -2322,7 +2328,7 @@ function migrateBeastLog(raw) {
   return out;
 }
 
-// ★ 図鑑の枠は**初遭遇で現れる**（2026-09-17 の裁定3）。初遭遇＝**読了ハンコを押した時点**。
+// ★ 生態目録の枠は**初遭遇で現れる**（2026-09-17 の裁定3）。初遭遇＝**読了ハンコを押した時点**。
 //   帰還と同時にすると、読む前に見知らぬページが増える。
 //   枠に入っているのは**仮称と遭遇地域だけ**——分類も観察も空で始まる（埋めるのはプレイヤー）。
 function ensureBeastLogFrame(report) {
@@ -2371,7 +2377,7 @@ function renderBeastLog() {
         <div class="card-title">
           <div>
             <p class="eyebrow">Beast Log</p>
-            <h3>いきもの図鑑</h3>
+            <h3>生態目録</h3>
           </div>
           <span class="status-pill">${entries.length}件</span>
         </div>
@@ -2411,7 +2417,7 @@ function beastLogCardHtml(entry) {
   `;
 }
 
-// 仮称から開く（報告書・報告メモの「図鑑を編集」用）。★ 枠が無ければ何もしない——
+// 仮称から開く（報告書・報告メモの「生態目録を編集」用）。★ 枠が無ければ何もしない——
 //   枠を作るのは読了ハンコだけ（ここで作ると「初遭遇＝読了」が崩れる）。
 function openBeastLogByTarget(targetName) {
   const entry = findBeastLogByTarget(targetName);
@@ -2511,9 +2517,9 @@ function removeBeastLogObservationRow(button) {
   if (row) row.remove();
 }
 
-// ── 名前の参照化（第一段：題名・掲示板・図鑑。2026-09-17・EX-119／EX-120） ──
+// ── 名前の参照化（第一段：題名・掲示板・生態目録。2026-09-17・EX-119／EX-120） ──
 // ★ 確定した名前が及ぶのは**「今の状態」を出す画面だけ**——掲示板（カードの題名・観察対象欄・
-//   待機中の帯）・遠征中・編成画面、そして図鑑。
+//   待機中の帯）・遠征中・編成画面、そして生態目録。
 // ⚠️ ★ **報告書には及ばせない**（2026-09-17・EX-120 の裁定。見出しも本文も当時の呼び方で閉じる）。
 //   理由：命名より前の報告書で**見出しだけ確定名**にすると、**同じ紙の上で呼び名が割れる**。
 //   ★ **第二段（本文・観察文・交戦ログ・敵の短縮名）でも揃わない**——第二段が及ぶのは
@@ -2635,7 +2641,7 @@ function beastLogNameSectionHtml(entry) {
       <div class="button-row" style="margin-top: 8px;">
         <button class="secondary-button" onclick="confirmBeastLogName('${escapeJsArg(entry.id)}')">確定印を押す</button>
       </div>
-      <p class="muted bl-hint">⚠️ 確定印を押すと名前が確定し、二度と変えられません。押すまでは何度でも書き直せます（「図鑑に保存」で下書きが残ります）。</p>` : ""}
+      <p class="muted bl-hint">⚠️ 確定印を押すと名前が確定し、二度と変えられません。押すまでは何度でも書き直せます（「生態目録に保存」で下書きが残ります）。</p>` : ""}
     </div>`;
 }
 
@@ -2668,7 +2674,7 @@ function beastLogEditorHtml(entry) {
   return `
     <div class="bl-modal-box">
       <div class="bl-modal-header">
-        <h3>いきもの図鑑を編集</h3>
+        <h3>生態目録を編集</h3>
         <button class="ghost-button" onclick="closeBeastLogEditor()">✕ 閉じる</button>
       </div>
       <div class="bl-modal-body">
@@ -2696,7 +2702,7 @@ function beastLogEditorHtml(entry) {
           ${entry.legacy ? txt("bl_legacy", "移行前の記述（軸へ振り分けてください）", entry.legacy, "") : ""}
 
           <div class="button-row" style="margin-top: 18px;">
-            <button class="primary-button" onclick="saveBeastLogEntry('${escapeJsArg(entry.id)}')">図鑑に保存</button>
+            <button class="primary-button" onclick="saveBeastLogEntry('${escapeJsArg(entry.id)}')">生態目録に保存</button>
             <button class="ghost-button" onclick="closeBeastLogEditor()">キャンセル</button>
           </div>
         </div>
@@ -2765,7 +2771,7 @@ function renderReportDetail(reportId) {
           <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
           <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
           ${quest?.observationTarget && quest.observationTarget !== "なし" && findBeastLogByTarget(quest.observationTarget)
-            ? `<button class="secondary-button" onclick="openBeastLogByTarget('${escapeJsArg(quest.observationTarget)}')">図鑑を編集</button>`
+            ? `<button class="secondary-button" onclick="openBeastLogByTarget('${escapeJsArg(quest.observationTarget)}')">生態目録を編集</button>`
             : ""}
         </div>
       </div>
@@ -4028,7 +4034,7 @@ function generateAshGrassNote(adv, rng) {
 // ★ 種別ごとの既定の観察文（2026-09-15・EX-105）。
 //   ⚠️ **既定は「書けなかった」ではない。** 観察記録票を持って行った者が書いた紙なので、
 //     「詳細な記録はできなかった」を既定にすると**票を持たせた回ほど嘘になる**（旧実装がそうだった）。
-//   ★ 引くのは**対象の種別**（依頼データの `observationKind`）。図鑑の分類語と同じ語を使う。
+//   ★ 引くのは**対象の種別**（依頼データの `observationKind`）。生態目録の分類語と同じ語を使う。
 //     1語だけなので**条件式をデータへ持ち出したことにはならない**
 //     （2026-08-01 に却下された「依頼固有の34行を全部データに出す」とは別物）。
 //   ★ 段の順は「好奇心 → 記憶 → 既定」（2026-09-16・EX-109 の裁定2＝案a）。
@@ -4101,7 +4107,7 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
   );
   // ★ 記録票を持たせなかった回は**空の配列**を返す（null にしない。2026-09-17・EX-117）。
   //   ⚠️ null は「**対象がいなかった**」の印で、報告書の組み立てが理由を添えて直書きするもの。
-  //   両方を null にしていたので、**出会ったのに図鑑の枠が立たない**のと
+  //   両方を null にしていたので、**出会ったのに生態目録の枠が立たない**のと
   //   **いないのに枠が立つ**のを区別できなかった。文面は増えない（notes が空なら1行も出ない）。
   if (holders.length === 0) return { target: quest.observationTarget, notes: [] };
   const notes = holders.map((adv) => ({
@@ -6463,7 +6469,7 @@ function generateReport(expedition) {
       add("afterglow", outcomeInfo.after);
     }
 
-    // ★ 夜は必ず観察記録が残る。**これが v2 の主眼**——v1 は「確認のみ」で図鑑に残っていたのに、
+    // ★ 夜は必ず観察記録が残る。**これが v2 の主眼**——v1 は「確認のみ」で生態目録に残っていたのに、
     //   段階1で引き返す形にすると残らなくなる（`withdraw_first` は観察記録を落とす）。
     //   battleAmbush で段階1を経ないので、押し戻された回でも灯りは見ている。
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
@@ -7599,7 +7605,7 @@ function simulateBattle(quest, party, itemIds, rng) {
   //   ⚠️ decisions / logVoteMilestone / events の3行ごと囲うこと。`first` を null にして if だけ
   //     書き替えると `logVoteMilestone(null)` と `first.ratio` で落ちる。
   //   ★ 副作用として `withdraw_first` が出なくなる＝観察記録の抑制（この下の報告書側）も外れる。
-  //     夜道 v2 で図鑑が残るのはこれが理由。
+  //     夜道 v2 で生態目録が残るのはこれが理由。
   context.medicalLeft = medicalLeft;
   const ambush = quest.battleAmbush === true;
   let first = null;
