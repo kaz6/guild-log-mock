@@ -1,6 +1,6 @@
 # 却下案索引
 
-> 生成日時: 2026-09-16 16:13 UTC
+> 生成日時: 2026-09-17 00:05 UTC
 > **この文書は生成物です。正本は `docs/DECISION_LOG.md` 本体。** ここを手で直しても次の再生成で消えます。
 > 生成コマンド: `node scripts/gen-rejected-index.js`（session-end で毎回作り直す）
 
