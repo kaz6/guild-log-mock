@@ -1395,7 +1395,7 @@ function renderHome() {
           </div>
           <span class="status-pill good">帰還</span>
         </div>
-        <p class="muted">「${escapeHtml(questDisplayTitle(returnedQuest) || "遠征")}」の報告が届いています。</p>
+        <p class="muted">「${escapeHtml(returnedQuest?.title ?? "遠征")}」の報告が届いています。</p>
         <div class="button-row" style="margin-top: 12px;">
           <button class="primary-button" onclick="setRoute('result')">帰還を確認する</button>
         </div>
@@ -1475,7 +1475,7 @@ function reportCardHtml(report) {
   const quest = getQuest(report.questId);
   return `
     <article class="report-card ${report.opened ? "" : "unopened"} ${report.readStampAt ? "stamped" : ""}">
-      <h3>${escapeHtml(questDisplayTitle(quest) || "報告書")}</h3>
+      <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
       <p>${escapeHtml(report.summary)}</p>
       <div class="button-row" style="margin-top: 14px;">
         <button class="small-button" onclick="openReport('${escapeJsArg(report.id)}')">${report.opened ? "読み返す" : "開封する"}</button>
@@ -2502,11 +2502,16 @@ function removeBeastLogObservationRow(button) {
   if (row) row.remove();
 }
 
-// ── 名前の参照化（第一段：題名・掲示板・図鑑。2026-09-17・EX-119） ──────────
-// ★ 確定した名前は**これから表示されるもの**に及ぶ（2026-09-17 の裁定）。
-//   ⚠️ **生成済みの文字列は書き換えない**——報告書の本文・報告メモ・冒険者の履歴は
-//   当時の呼び方のまま残る。ここは**描画のたびに引く**形なので、保存済みの文字列に触れない。
-// ★ 第二段（本文・観察文・交戦ログ・敵の短縮名）は今回やらない。
+// ── 名前の参照化（第一段：題名・掲示板・図鑑。2026-09-17・EX-119／EX-120） ──
+// ★ 確定した名前が及ぶのは**「今の状態」を出す画面だけ**——掲示板（カードの題名・観察対象欄・
+//   待機中の帯）・遠征中・編成画面、そして図鑑。
+// ⚠️ ★ **報告書には及ばせない**（2026-09-17・EX-120 の裁定。見出しも本文も当時の呼び方で閉じる）。
+//   理由：命名より前の報告書で**見出しだけ確定名**にすると、**同じ紙の上で呼び名が割れる**。
+//   ★ **第二段（本文・観察文・交戦ログ・敵の短縮名）でも揃わない**——第二段が及ぶのは
+//   **これから生成される報告書**で、**過去の報告書は当時のまま**という裁定だから。
+//   割れたままにするくらいなら、**報告書は一枚の記録として当時の呼び方で閉じる**。
+// ⚠️ 生成済みの文字列（報告書の本文・報告メモ・冒険者の履歴）は元から書き換えていない。
+//   ここは**描画のたびに引く**形なので、保存済みの文字列に触れない。
 //
 // ⚠️ 納屋だけ、題名の「噛」と観察対象の「嚙」で**字が違う**（U+565B ／ U+5699。EX-113 で判明した表記ゆれ）。
 //   ★ データを揃えると**生成される本文まで変わる**（題名は出発の行と履歴に入る）ので、
@@ -2656,7 +2661,7 @@ function renderReportDetail(reportId) {
         <div class="card-title">
           <div>
             <p class="eyebrow">Opened Report</p>
-            <h3>${escapeHtml(questDisplayTitle(quest) || "報告書")}</h3>
+            <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
           </div>
           <span class="status-pill good">開封済み</span>
         </div>
@@ -2722,7 +2727,7 @@ function renderResult(reportId) {
         <div class="card-title">
           <div>
             <p class="eyebrow">Homecoming</p>
-            <h3>${escapeHtml(questDisplayTitle(quest) || "帰還報告")}</h3>
+            <h3>${escapeHtml(quest?.title ?? "帰還報告")}</h3>
           </div>
           <span class="status-pill good">帰還</span>
         </div>
