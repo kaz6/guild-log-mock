@@ -1395,7 +1395,7 @@ function renderHome() {
           </div>
           <span class="status-pill good">帰還</span>
         </div>
-        <p class="muted">「${escapeHtml(returnedQuest?.title ?? "遠征")}」の報告が届いています。</p>
+        <p class="muted">「${escapeHtml(questDisplayTitle(returnedQuest) || "遠征")}」の報告が届いています。</p>
         <div class="button-row" style="margin-top: 12px;">
           <button class="primary-button" onclick="setRoute('result')">帰還を確認する</button>
         </div>
@@ -1475,7 +1475,7 @@ function reportCardHtml(report) {
   const quest = getQuest(report.questId);
   return `
     <article class="report-card ${report.opened ? "" : "unopened"} ${report.readStampAt ? "stamped" : ""}">
-      <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
+      <h3>${escapeHtml(questDisplayTitle(quest) || "報告書")}</h3>
       <p>${escapeHtml(report.summary)}</p>
       <div class="button-row" style="margin-top: 14px;">
         <button class="small-button" onclick="openReport('${escapeJsArg(report.id)}')">${report.opened ? "読み返す" : "開封する"}</button>
@@ -1496,7 +1496,7 @@ function expeditionProgressHtml(expedition) {
         <div class="card-title">
           <div>
             <p class="eyebrow">Expedition in Progress</p>
-            <h3>遠征中：${escapeHtml(quest?.title)}</h3>
+            <h3>遠征中：${escapeHtml(questDisplayTitle(quest))}</h3>
           </div>
           <span class="status-pill away">遠征中</span>
         </div>
@@ -1694,7 +1694,7 @@ function renderQuests() {
     ${waitingQuests.map((quest) => `
     <div class="weather-bar">
       <span class="weather-bar-icon">🕗</span>
-      <span class="weather-bar-text">${quest.title}の件は、まだ次の話が来ていない。</span>
+      <span class="weather-bar-text">${escapeHtml(questDisplayTitle(quest))}の件は、まだ次の話が来ていない。</span>
     </div>`).join("")}
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間帯：</span>
@@ -1782,7 +1782,7 @@ function questCardHtml(quest, isUrgent = false) {
   return `
     <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${escapeJsArg(quest.id)}')">
       <div class="card-title">
-        <h3>${isUrgent ? "🚨 " : ""}${escapeHtml(quest.title)}</h3>
+        <h3>${isUrgent ? "🚨 " : ""}${escapeHtml(questDisplayTitle(quest))}</h3>
         ${isUrgent ? `<span class="status-pill away">緊急</span>` : ""}
       </div>
       <p class="muted">${escapeHtml(quest.summary)}</p>
@@ -1791,7 +1791,7 @@ function questCardHtml(quest, isUrgent = false) {
         <span>${isLifeQuest ? "作業負荷" : "危険度"}</span><strong class="${isLifeQuest ? "subtle-danger" : ""}">${escapeHtml(quest.danger)}</strong>
         <span>地域</span><strong>${escapeHtml(quest.area)}</strong>
         <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
-        <span>観察対象</span><strong>${escapeHtml(quest.observationTarget)}</strong>
+        <span>観察対象</span><strong>${escapeHtml(questDisplayTarget(quest))}</strong>
       </div>
       <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
     </article>
@@ -1872,7 +1872,7 @@ function dispatchSummaryHtml(quest, expeditionBlock = null) {
   }).filter(Boolean).join(" / ") || "なし";
   return `
     <div class="kv">
-      <span>依頼</span><strong>${escapeHtml(quest.title)}</strong>
+      <span>依頼</span><strong>${escapeHtml(questDisplayTitle(quest))}</strong>
       <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
       <span>編成</span><strong>${party.length ? party.map(getDisplayName).map(escapeHtml).join(" / ") : "未選択"}</strong>
       <span>支給品</span><strong>${itemsText}</strong>
@@ -2502,6 +2502,39 @@ function removeBeastLogObservationRow(button) {
   if (row) row.remove();
 }
 
+// ── 名前の参照化（第一段：題名・掲示板・図鑑。2026-09-17・EX-119） ──────────
+// ★ 確定した名前は**これから表示されるもの**に及ぶ（2026-09-17 の裁定）。
+//   ⚠️ **生成済みの文字列は書き換えない**——報告書の本文・報告メモ・冒険者の履歴は
+//   当時の呼び方のまま残る。ここは**描画のたびに引く**形なので、保存済みの文字列に触れない。
+// ★ 第二段（本文・観察文・交戦ログ・敵の短縮名）は今回やらない。
+//
+// ⚠️ 納屋だけ、題名の「噛」と観察対象の「嚙」で**字が違う**（U+565B ／ U+5699。EX-113 で判明した表記ゆれ）。
+//   ★ データを揃えると**生成される本文まで変わる**（題名は出発の行と履歴に入る）ので、
+//   ここは**表示だけの別名**で吸収する。字を揃えるのは、生成の比較ができるときに別途。
+const QUEST_TITLE_ALIASES = { quest_barn_bite: "噛みつく「なにか」" };
+
+// その依頼の観察対象に**確定した名前**があれば返す（無ければ null＝仮称のまま）
+function namedTargetFor(quest) {
+  const target = quest?.observationTarget;
+  if (!target || target === "なし") return null;
+  const entry = findBeastLogByTarget(target);
+  return entry && isBeastLogNameConfirmed(entry) ? entry.name : null;
+}
+
+// 題名の表示（掲示板・報告書の見出し・遠征中・帰還カード）。確定前は仮称のまま。
+function questDisplayTitle(quest) {
+  if (!quest) return "";
+  const name = namedTargetFor(quest);
+  if (!name) return quest.title;
+  const alias = QUEST_TITLE_ALIASES[quest.id] ?? quest.observationTarget;
+  return quest.title.split(alias).join(name);
+}
+
+// 掲示板の観察対象欄。確定したら名前、まだなら仮称。
+function questDisplayTarget(quest) {
+  return namedTargetFor(quest) ?? quest?.observationTarget ?? "";
+}
+
 // 標本ラベルの名前欄。★ 3つの姿を持つ：確定済み（編集不可）／解禁済み（下書き＋確定印）／未解禁（軸の数だけ出す）。
 function beastLogNameSectionHtml(entry) {
   if (isBeastLogNameConfirmed(entry)) {
@@ -2623,7 +2656,7 @@ function renderReportDetail(reportId) {
         <div class="card-title">
           <div>
             <p class="eyebrow">Opened Report</p>
-            <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
+            <h3>${escapeHtml(questDisplayTitle(quest) || "報告書")}</h3>
           </div>
           <span class="status-pill good">開封済み</span>
         </div>
@@ -2689,7 +2722,7 @@ function renderResult(reportId) {
         <div class="card-title">
           <div>
             <p class="eyebrow">Homecoming</p>
-            <h3>${escapeHtml(quest?.title ?? "帰還報告")}</h3>
+            <h3>${escapeHtml(questDisplayTitle(quest) || "帰還報告")}</h3>
           </div>
           <span class="status-pill good">帰還</span>
         </div>
