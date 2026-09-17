@@ -1008,6 +1008,129 @@ hr.soft {
   min-height: 72px;
 }
 
+/* ── SOAP 構造の図鑑（2026-09-17・EX-117） ───────────────────── */
+/* 標本ラベルの自動欄（名前・遭遇地域）は入力にしない。書けるのは分類と SOAP だけ。 */
+.bl-static {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.bl-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.bl-obs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bl-obs-row {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.bl-obs-row select,
+.bl-obs-row textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.bl-obs-row textarea {
+  min-height: 48px;
+}
+
+.bl-obs-remove {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* 命名の確定印（2026-09-17・EX-118）。★ 読了ハンコと同じ朱の角印だが、押す判子は別物。 */
+.bl-name-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: 10px;
+  border: 2px solid #d05a41;
+  border-radius: 6px;
+  color: #d05a41;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  opacity: 0.92;
+  transform: rotate(-8deg);
+  vertical-align: middle;
+}
+
+.bl-name-stamp.small {
+  width: 30px;
+  height: 30px;
+  font-size: 9px;
+  margin-left: 8px;
+}
+
+.bl-static.bl-named {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-style: solid;
+}
+
+.bl-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.bl-card-counts {
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.bl-axis-list {
+  margin: 4px 0 6px;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bl-axis-tag {
+  display: inline-block;
+  min-width: 64px;
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  text-align: center;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
