@@ -1447,9 +1447,14 @@ function renderHome() {
 //   `readStampAt` に押した時刻を持つだけ（`schemaVersion` 据え置き）。
 //   ★ 未読件数のバッジは出さない。急かす表示にしないため、押した側だけが見える形にする。
 function readStampDateText(report) {
-  if (!report.readStampAt) return "";
+  return stampDateText(report.readStampAt);
+}
+
+// 判子を押した日時の表示（読了ハンコと命名の確定印で同じ形にする）
+function stampDateText(timestamp) {
+  if (!timestamp) return "";
   try {
-    return new Date(report.readStampAt).toLocaleString("ja-JP", {
+    return new Date(timestamp).toLocaleString("ja-JP", {
       timeZone: "Asia/Tokyo",
       year: "numeric", month: "2-digit", day: "2-digit",
       hour: "2-digit", minute: "2-digit"
@@ -2222,6 +2227,29 @@ const BEAST_LOG_AXES = ["形", "色", "大きさ", "数", "動き", "痕跡", "�
 //   （2026-09-17 の裁定2）。空＝未分類で始まる。
 const BEAST_LOG_CATEGORIES = ["獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
 
+// ── 命名（2026-09-17・EX-118） ────────────────────────────────────────────
+// ★ 解禁条件＝O が **12軸中7軸以上**埋まっていること（2026-09-17 の裁定1）。
+//   ⚠️ **7は暫定。** 反ミームに必要な項目数が確定したら見直すこと。
+//   ★ 数えるのは**軸の種類**であって件数ではない（同じ軸に3件書いても1軸）。
+//   ★ 「移行前の記述」（`legacy`）は数えない——**旧セーブの逃がし先**で、軸に振っていないため。
+// ★ 命名は**確定印**を押して確定し、以後は編集できない（裁定2）。読了ハンコとは**別の判子**。
+//   確定前は何度でも書き直せる（下書きは `nameDraft` に残る）。確定で `name` に移る。
+// ★ 答え合わせ（隠した語との照合）は**実装しない**（裁定3）。命名は自由入力のまま通す。
+const BEAST_LOG_NAMING_AXES_REQUIRED = 7;
+
+// 本文の入っている軸の**種類**を数える（同じ軸の複数件は1つに畳まれる）
+function beastLogFilledAxes(entry) {
+  return new Set((entry.confirmed ?? []).filter((obs) => obs.text).map((obs) => obs.axis));
+}
+
+function canNameBeastLogEntry(entry) {
+  return beastLogFilledAxes(entry).size >= BEAST_LOG_NAMING_AXES_REQUIRED;
+}
+
+function isBeastLogNameConfirmed(entry) {
+  return Boolean(entry.nameConfirmedAt);
+}
+
 function beastLogEntries() {
   return Object.values(state.beastLog ?? {});
 }
@@ -2274,7 +2302,9 @@ function migrateBeastLog(raw) {
     out[id] = {
       id,
       target: val.target || key,
-      name: null,
+      name: null,           // 命名で入る表示名（確定印を押すまで null）
+      nameDraft: "",        // 確定前の下書き（何度でも書き直せる）
+      nameConfirmedAt: null,
       area: val.area || "",
       category: val.category === "未分類" ? "" : (val.category || ""),
       confirmed: [],                  // O
@@ -2303,6 +2333,8 @@ function ensureBeastLogFrame(report) {
     id,
     target: quest.observationTarget,
     name: null,
+    nameDraft: "",
+    nameConfirmedAt: null,
     area: quest.area || "",
     category: "",
     confirmed: [],
@@ -2350,7 +2382,9 @@ function beastLogCardHtml(entry) {
     <article class="beast-log-card">
       <div class="card-title">
         <div>
-          <h3>${escapeHtml(beastLogDisplayName(entry))}${entry.name ? "" : `<span class="bl-tag">仮称</span>`}</h3>
+          <h3>${escapeHtml(beastLogDisplayName(entry))}${isBeastLogNameConfirmed(entry)
+            ? `<span class="bl-name-stamp small" aria-label="確定" title="${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定">確<br />定</span>`
+            : `<span class="bl-tag">仮称</span>`}</h3>
           <p class="muted">${escapeHtml(entry.category || "分類未記入")} &middot; ${escapeHtml(entry.area || "地域未記入")}</p>
         </div>
         <button class="small-button" onclick="openBeastLogEditor('${escapeJsArg(entry.id)}')">編集</button>
@@ -2394,11 +2428,9 @@ function closeBeastLogEditor() {
   if (overlay) overlay.classList.remove("open");
 }
 
-// ★ 保存するのはプレイヤーが書く欄だけ（分類・O・A・P・移行前の記述）。
-//   名前と遭遇地域は標本ラベルの自動欄なので、ここでは触らない。
-function saveBeastLogEntry(id) {
-  const entry = getBeastLogEntry(id);
-  if (!entry) return;
+// ★ 画面の入力をエントリへ写す。書けるのはプレイヤーの欄だけ（分類・O・A・P・移行前の記述・
+//   名前の下書き）。遭遇地域と確定済みの名前は自動欄なので、ここでは触らない。
+function applyBeastLogForm(entry) {
   const val = (elId) => document.getElementById(elId)?.value ?? "";
   entry.category = val("bl_category");
   entry.confirmed = Array.from(document.querySelectorAll("#bl_obs_list .bl-obs-row"))
@@ -2410,9 +2442,39 @@ function saveBeastLogEntry(id) {
   entry.guess = val("bl_guess").trim();
   entry.nextCheck = val("bl_next").trim();
   if (document.getElementById("bl_legacy")) entry.legacy = val("bl_legacy").trim();
+  // 下書きの名前は確定前だけ拾う（確定後は入力そのものを出さない）
+  if (!isBeastLogNameConfirmed(entry) && document.getElementById("bl_name_draft")) {
+    entry.nameDraft = val("bl_name_draft").trim();
+  }
+}
+
+function saveBeastLogEntry(id) {
+  const entry = getBeastLogEntry(id);
+  if (!entry) return;
+  applyBeastLogForm(entry);
   saveState();
   closeBeastLogEditor();
   render();
+}
+
+// 確定印。★ 押すと名前が確定し、**二度と変えられない**（2026-09-17 の裁定2）。
+// ★ 取り返しがつかないので、押す前に一度だけ確認を出す（実装側の判断。EX-118）。
+//   ⚠️ 画面側の守り（解禁前はボタンを出さない）だけにしない——**ここでも条件を見る**。
+function confirmBeastLogName(id) {
+  const entry = getBeastLogEntry(id);
+  if (!entry || isBeastLogNameConfirmed(entry)) return;
+  if (!canNameBeastLogEntry(entry)) return;
+  const draft = (document.getElementById("bl_name_draft")?.value ?? "").trim();
+  if (!draft) return;
+  if (!confirm(`「${draft}」で確定します。\n確定した名前は二度と変えられません。よろしいですか？`)) return;
+  // ★ 先に書きかけの欄も保存する（確定だけ通って観察が消えるのを防ぐ）
+  applyBeastLogForm(entry);
+  entry.name = draft;
+  entry.nameDraft = "";
+  entry.nameConfirmedAt = Date.now();
+  saveState();
+  render();
+  openBeastLogEditor(entry.id); // 確定した姿をそのまま見せる
 }
 
 // O の1行（軸＋自由記述）。★ 行を足せば**同じ軸を何度でも選べる**——
@@ -2438,6 +2500,38 @@ function addBeastLogObservationRow() {
 function removeBeastLogObservationRow(button) {
   const row = button.closest(".bl-obs-row");
   if (row) row.remove();
+}
+
+// 標本ラベルの名前欄。★ 3つの姿を持つ：確定済み（編集不可）／解禁済み（下書き＋確定印）／未解禁（軸の数だけ出す）。
+function beastLogNameSectionHtml(entry) {
+  if (isBeastLogNameConfirmed(entry)) {
+    return `
+      <div class="bl-form-row">
+        <label>名前（確定済み）</label>
+        <p class="bl-static bl-named">
+          <span>${escapeHtml(beastLogDisplayName(entry))}</span>
+          <span class="bl-name-stamp" aria-label="確定">確<br />定</span>
+        </p>
+        <p class="muted bl-hint">${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定しました。名前はもう変えられません。</p>
+      </div>`;
+  }
+  const filled = beastLogFilledAxes(entry).size;
+  const ready = canNameBeastLogEntry(entry);
+  const gate = ready
+    ? "名前を付けられます。"
+    : `あと ${BEAST_LOG_NAMING_AXES_REQUIRED - filled} 軸で名前を付けられます。軸を書き足したら、いったん保存して開き直してください。`;
+  return `
+    <div class="bl-form-row">
+      <label for="bl_name_draft">名前</label>
+      <p class="bl-static"><span>${escapeHtml(entry.target)}</span><span class="bl-tag">仮称</span></p>
+      <p class="muted bl-hint">確かめられたことが ${filled} / ${BEAST_LOG_NAMING_AXES_REQUIRED} 軸（全12軸のうち）。${gate}</p>
+      ${ready ? `
+      <input id="bl_name_draft" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
+      <div class="button-row" style="margin-top: 8px;">
+        <button class="secondary-button" onclick="confirmBeastLogName('${escapeJsArg(entry.id)}')">確定印を押す</button>
+      </div>
+      <p class="muted bl-hint">⚠️ 確定印を押すと名前が確定し、二度と変えられません。押すまでは何度でも書き直せます（「図鑑に保存」で下書きが残ります）。</p>` : ""}
+    </div>`;
 }
 
 function beastLogEditorHtml(entry) {
@@ -2474,10 +2568,7 @@ function beastLogEditorHtml(entry) {
       </div>
       <div class="bl-modal-body">
         <div class="bl-form">
-          <div class="bl-form-row">
-            <label>名前</label>
-            <p class="bl-static">${escapeHtml(beastLogDisplayName(entry))}${entry.name ? "" : `<span class="bl-tag">仮称</span>`}</p>
-          </div>
+          ${beastLogNameSectionHtml(entry)}
           ${categorySelect}
           <div class="bl-form-row">
             <label>遭遇地域</label>
