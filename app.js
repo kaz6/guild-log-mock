@@ -1135,6 +1135,9 @@ function checkExpeditionCompletion() {
   appendPresenceLogToReport(report, state.expedition);
   appendPartyBanterToReport(report, state.expedition);
   appendGrowthLogToReport(report, state.expedition);
+  // ★ 名前の参照化 第二段（2026-09-17・EX-121）。**全部の行が揃ってから**通す。
+  //   在席ログ・掛け合い・成長ログも報告書の本文なので、足し終わったあとに置き換える。
+  applyNamedTargetToReport(report);
   state.reports.unshift(report);
 
   // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
@@ -2258,10 +2261,13 @@ function getBeastLogEntry(id) {
   return (state.beastLog ?? {})[id] ?? null;
 }
 
-// ★ 引くのは表示名ではなく**仮称**（`target`）。改名しても同じページを指すため。
+// ★ 引くのは**仮称**（`target`）が基本。改名しても同じページを指すため。
+// ⚠️ **確定名でも引けるようにしてある**（2026-09-17・EX-121）。第二段で、命名後に生成された
+//   報告書の観察記録票は**確定名**で書かれるので、そこから来る報告メモも確定名を持つ。
+//   ここを仮称だけにすると、**命名後の証言が図鑑に載らなくなる**。
 function findBeastLogByTarget(target) {
   if (!target) return null;
-  return beastLogEntries().find((entry) => entry.target === target) ?? null;
+  return beastLogEntries().find((entry) => entry.target === target || (entry.name && entry.name === target)) ?? null;
 }
 
 // 表示名＝命名済みならその名前、まだなら仮称（冒険者の `nickname` と同じ形）
@@ -2350,8 +2356,11 @@ function backfillBeastLogFrames() {
 }
 
 // S（冒険者の証言）＝自動。観察記録票で溜まった文をそのまま並べる。★ ここは書き換えられない。
+// ⚠️ **仮称と確定名の両方で拾う**（2026-09-17・EX-121）。命名前の証言は仮称で、
+//   命名後に届いた証言は確定名で保存されているため。
 function beastLogTestimonies(entry) {
-  return (state.reportMemos ?? []).filter((memo) => memo.targetName === entry.target);
+  return (state.reportMemos ?? []).filter((memo) =>
+    memo.targetName === entry.target || (entry.name && memo.targetName === entry.name));
 }
 
 function renderBeastLog() {
@@ -2515,8 +2524,25 @@ function removeBeastLogObservationRow(button) {
 //
 // ⚠️ 納屋だけ、題名の「噛」と観察対象の「嚙」で**字が違う**（U+565B ／ U+5699。EX-113 で判明した表記ゆれ）。
 //   ★ データを揃えると**生成される本文まで変わる**（題名は出発の行と履歴に入る）ので、
-//   ここは**表示だけの別名**で吸収する。字を揃えるのは、生成の比較ができるときに別途。
-const QUEST_TITLE_ALIASES = { quest_barn_bite: "噛みつく「なにか」" };
+//   ここは**別名**で吸収する。字を揃えるのは、生成の比較ができるときに別途。
+//
+// ★ **依頼ごとの「相手を指す呼び名」**（2026-09-17・EX-121）。題名と本文の置き換えの両方で使う。
+//   ⚠️ **仮称そのものは本文にほとんど出ない。** 本文が実際に使っているのは短い呼び名のほう
+//   （実測：畑と納屋は 「なにか」、夜道は 「灯り」。仮称「残る灯り」は本文に0回）。
+//   ★ **長いものから順に置き換える**（納屋の「噛みつく「なにか」」が「なにか」で先に潰れないように）。
+//   ⚠️ 夜道の 「灯り」 は**全70行を洗って、すべて相手を指していた**——一行が持つ明かりは
+//   「ランタン」「明かり」「光の輪」と書き分けられている（EX-121 で実測）。
+const QUEST_NAME_ALIASES = {
+  quest_field_mystery: ["「なにか」"],
+  quest_barn_bite: ["嚙みつく「なにか」", "噛みつく「なにか」", "「なにか」"],
+  quest_lingering_light: ["灯り"]
+};
+
+// その依頼の相手を指す呼び名（長い順）。表に無ければ仮称そのものだけ。
+function questNameAliases(quest) {
+  const list = QUEST_NAME_ALIASES[quest?.id] ?? (quest?.observationTarget ? [quest.observationTarget] : []);
+  return [...list].sort((a, b) => b.length - a.length);
+}
 
 // その依頼の観察対象に**確定した名前**があれば返す（無ければ null＝仮称のまま）
 function namedTargetFor(quest) {
@@ -2531,13 +2557,54 @@ function questDisplayTitle(quest) {
   if (!quest) return "";
   const name = namedTargetFor(quest);
   if (!name) return quest.title;
-  const alias = QUEST_TITLE_ALIASES[quest.id] ?? quest.observationTarget;
-  return quest.title.split(alias).join(name);
+  return questNameAliases(quest).reduce((title, alias) => title.split(alias).join(name), quest.title);
 }
 
 // 掲示板の観察対象欄。確定したら名前、まだなら仮称。
 function questDisplayTarget(quest) {
   return namedTargetFor(quest) ?? quest?.observationTarget ?? "";
+}
+
+// ── 名前の参照化 第二段（これから生成される報告書。2026-09-17・EX-121） ──────
+// ★ **命名が確定したあとに生成された報告書だけ**が確定名になる。
+//   - 命名前に生成済みの報告書は**1文字も変わらない**（保存された文字列にここは触れない）
+//   - ★ **生成の出口で置き換えて、そのまま保存する**ので、あとで名前が変わっても過去の報告書は動かない
+//   - こうして**一枚の中では必ず呼び名が揃う**（命名前は全部仮称／命名後は全部確定名）
+// ⚠️ 置き換えるのは**本文が実際に使っている呼び名**（`questNameAliases`）。仮称そのものは本文にほとんど出ない。
+function applyNamedTargetToReport(report) {
+  const quest = getQuest(report?.questId);
+  const name = namedTargetFor(quest);
+  if (!name) return report;
+  const aliases = questNameAliases(quest);
+  const sub = (text) => (typeof text === "string"
+    ? aliases.reduce((acc, alias) => acc.split(alias).join(name), text)
+    : text);
+
+  if (Array.isArray(report.logs)) report.logs = report.logs.map((line) => ({ ...line, text: sub(line.text) }));
+  report.summary = sub(report.summary);
+  report.highlight = sub(report.highlight);
+  report.historyLine = sub(report.historyLine);
+  if (report.adventurerHistoryLines) {
+    report.adventurerHistoryLines = Object.fromEntries(
+      Object.entries(report.adventurerHistoryLines).map(([id, line]) => [id, sub(line)]));
+  }
+  if (report.observationNotes) {
+    report.observationNotes = {
+      ...report.observationNotes,
+      target: sub(report.observationNotes.target),
+      notes: (report.observationNotes.notes ?? []).map((note) => ({ ...note, text: sub(note.text) }))
+    };
+  }
+  return report;
+}
+
+// 交戦記録に出る敵の短縮名。★ その敵を出す依頼の観察対象に確定名があれば、そちらで書く（第二段）。
+// ⚠️ 納屋の敵だけ `shortName` を持たない（交戦記録が「相手」になる既知の穴）。
+//   命名が済んでいれば、そこにも名前が入る。
+function enemyDisplayShortName(enemyRow, fallback) {
+  if (!enemyRow) return fallback;
+  const quest = (state.quests ?? []).find((q) => q.enemyId === enemyRow.id);
+  return (quest && namedTargetFor(quest)) || enemyRow.shortName || fallback;
 }
 
 // 標本ラベルの名前欄。★ 3つの姿を持つ：確定済み（編集不可）／解禁済み（下書き＋確定印）／未解禁（軸の数だけ出す）。
@@ -5351,7 +5418,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   const random = rng ?? Math.random;
   const pick = (list) => list[Math.floor(random() * list.length)];
   const enemyRow = Array.isArray(window.masterEnemies) ? window.masterEnemies.find((e) => e.id === battle.enemyId) : null;
-  const enemyN = enemyRow?.shortName ?? enemyRow?.name ?? battle.enemyName ?? "相手";
+  const enemyN = enemyDisplayShortName(enemyRow, enemyRow?.name ?? battle.enemyName ?? "相手");
   const jobById = {};
   party.forEach((a) => { jobById[a.id] = a.job; });
   const hasElsie = party.some((a) => a.id === "adv_elsie");
@@ -8326,7 +8393,7 @@ function generateSimpleBattleDramaLog(battle, party, rng) {
   if (!battle || !Array.isArray(battle.events) || battle.events.length === 0) return [];
   const random = rng ?? Math.random;
   const enemyRow = Array.isArray(window.masterEnemies) ? window.masterEnemies.find((e) => e.id === battle.enemyId) : null;
-  const enemyN = enemyRow?.shortName ?? "相手";
+  const enemyN = enemyDisplayShortName(enemyRow, "相手");
   const lines = [];
   battle.events.forEach((ev) => {
     if (ev.type === "deal" && ev.crit) {
@@ -8367,7 +8434,7 @@ function battleDefenseHighlights(battle, party, rng) {
   if (hadDeep) return [];
   const random = rng ?? Math.random;
   const enemyRow = Array.isArray(window.masterEnemies) ? window.masterEnemies.find((e) => e.id === battle.enemyId) : null;
-  const enemyN = enemyRow?.shortName ?? "相手";
+  const enemyN = enemyDisplayShortName(enemyRow, "相手");
   const memberById = Object.fromEntries(battle.members.map((m) => [m.id, m]));
   const advById = Object.fromEntries(party.map((a) => [a.id, a]));
 
