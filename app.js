@@ -87,6 +87,10 @@ const recorderBadgeCard = document.getElementById("recorderBadgeCard");
 const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
 
 let state = loadState();
+// 既存セーブの手当て（2026-09-17・EX-117）：**すでに読了ハンコを押してある報告書**の分の枠を、
+// 読み込み時に立てる。★ 枠が立つ規則を後から入れたので、これが無いと**古いセーブだけ
+// 「読んだのにページが無い」**まま残る。何度走らせても増えない（仮称で引いて既存を返す）。
+backfillBeastLogFrames();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
@@ -182,6 +186,8 @@ function loadState() {
     merged.adventurers = mergeAdventurerList(masterAdventurers, parsed.adventurers);
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
     merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
+    // 図鑑：名前キー → id キーへ移し替える（2026-09-17・EX-117。`schemaVersion` は上げない）
+    merged.beastLog = migrateBeastLog(parsed.beastLog);
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
     delete merged.lastObservationUpdate;
@@ -1455,6 +1461,7 @@ function stampReport(id) {
   const report = state.reports.find((item) => item.id === id);
   if (!report || report.readStampAt) return; // 一度押したら押し直さない（消す操作は用意しない）
   report.readStampAt = Date.now();
+  ensureBeastLogFrame(report); // ★ 初遭遇＝読んだ時点。図鑑の枠はここで現れる（2026-09-17 の裁定3）
   saveState();
   render();
 }
@@ -2164,23 +2171,13 @@ function reportMemoCardHtml(memo) {
           <span class="memo-quest muted">${escapeHtml(memo.questTitle ?? "")}</span>
         </div>
         <div class="memo-card-actions">
-          <button class="small-button" onclick="openBeastLogFromMemo('${escapeJsArg(memo.reportId)}', '${escapeJsArg(memo.targetName ?? "")}')">図鑑を編集</button>
+          ${findBeastLogByTarget(memo.targetName) ? `<button class="small-button" onclick="openBeastLogByTarget('${escapeJsArg(memo.targetName ?? "")}')">図鑑を編集</button>` : ""}
         </div>
       </div>
       <p class="memo-author muted">${escapeHtml(memo.adventurerName ?? "")} ／ ${dateStr}</p>
       <p class="memo-text">「${escapeHtml(memo.text ?? "")}」</p>
     </article>
   `;
-}
-
-function openBeastLogFromMemo(reportId, targetName) {
-  const report = state.reports.find((r) => r.id === reportId);
-  if (report && report.observationNotes) {
-    openBeastLogFromReport(reportId);
-  } else {
-    const existing = state.beastLog[targetName];
-    openBeastLogEditor(targetName, existing?.area ?? "", null);
-  }
 }
 
 function observationNotesHtml(obsNotes) {
@@ -2199,9 +2196,134 @@ function observationNotesHtml(obsNotes) {
 }
 
 // ── いきもの図鑑 ──────────────────────────────────────────────────────────────
+//
+// ★ 2026-09-17・EX-117：**キーを id にし、SOAP 構造に作り直した。**
+//   - 旧：`state.beastLog[名前]`。**名前がキーだったので、改名すると別ページが生えた**。
+//     ※ EX-116 で塞いだのは**属性への埋め込みのエスケープ**で、別の穴。こちらは
+//       **名前を識別子に使っていたこと**そのものを直している。
+//   - 新：`state.beastLog[id]`。名前は**表示用の値**として持つ（冒険者のあだ名と同じ形）。
+//     `target` は仮称で、依頼データの `observationTarget` と対応する**不変の値**。
+//     命名で入るのは `name` の側（★命名そのものは次段。ここではまだ入口を作らない）。
+//   - `schemaVersion` は上げない（内容で吸収できる。上げると報告書も名前も全部消える）。
+//     前例3つ：`normalizeItemMap` ／ 図鑑の旧フィールド統合 ／ `readStampAt`。
+//   - ★ 削除UIは作らない。改名で別ページが生えなくなったので、消す操作が要らなくなった。
+//
+// SOAP（2026-09-17 の裁定2）：
+//   S 冒険者の証言       ＝**自動**（観察記録票で溜まった文。`state.reportMemos` から引く）
+//   O 確かめられたこと   ＝**軸を選んで自由記述**（12軸。★同じ軸に複数件を許す）
+//   A 推測               ＝自由記述
+//   P 次に確かめたいこと ＝自由記述
+//   ★ 備考は廃止し、外見・特徴は O に吸収した。
+
+// O の軸（2026-09-17 の裁定2）。★ 12個。増減させるときは docs/CURRENT_SPEC.md も直すこと。
+const BEAST_LOG_AXES = ["形", "色", "大きさ", "数", "動き", "痕跡", "匂い", "音", "環境", "時間", "食べるもの", "人への影響"];
+
+// 分類の選択肢。★ `observationKind` からは自動で入れない——**分類はプレイヤーの仕事**
+//   （2026-09-17 の裁定2）。空＝未分類で始まる。
+const BEAST_LOG_CATEGORIES = ["獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
+
+function beastLogEntries() {
+  return Object.values(state.beastLog ?? {});
+}
+
+function getBeastLogEntry(id) {
+  return (state.beastLog ?? {})[id] ?? null;
+}
+
+// ★ 引くのは表示名ではなく**仮称**（`target`）。改名しても同じページを指すため。
+function findBeastLogByTarget(target) {
+  if (!target) return null;
+  return beastLogEntries().find((entry) => entry.target === target) ?? null;
+}
+
+// 表示名＝命名済みならその名前、まだなら仮称（冒険者の `nickname` と同じ形）
+function beastLogDisplayName(entry) {
+  return entry.name || entry.target;
+}
+
+function nextBeastLogId() {
+  const used = state.beastLog ?? {};
+  let n = Object.keys(used).length + 1;
+  while (used[`bl_${n}`]) n++;
+  return `bl_${n}`;
+}
+
+// 旧セーブ（名前がキー）を id キーへ移し替える。★ `schemaVersion` は上げない。
+// ⚠️ 旧5欄・備考・外見は**軸へ自動で振らない**。「移行前の記述」に丸ごと置いて、
+//   どの軸のことかはプレイヤーが決める（分類を自動で入れないのと同じ理由）。
+// ※ 仮称がどの依頼の `observationTarget` にも一致しないエントリ（旧実装で名前を書き換えて
+//   できた残骸）も**落とさずに移す**。独立したページとして残り、S（証言）が空になるだけ。
+function migrateBeastLog(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  let seq = 0;
+  Object.entries(raw).forEach(([key, val]) => {
+    if (!val || typeof val !== "object") return;
+    if (val.id && Array.isArray(val.confirmed)) { out[val.id] = val; return; } // 移行済み
+    seq += 1;
+    let id = val.id || `bl_${seq}`;
+    while (out[id]) { seq += 1; id = `bl_${seq}`; }
+    const legacy = [
+      val.appearance          ? `【外見・特徴】${val.appearance}` : "",
+      val.notes               ? `【備考】${val.notes}` : "",
+      val.behavior            ? `【行動】${val.behavior}` : "",
+      val.danger              ? `【危険性】${val.danger}` : "",
+      val.effectiveMeasures   ? `【有効な対処】${val.effectiveMeasures}` : "",
+      val.ineffectiveMeasures ? `【効かなかった対処】${val.ineffectiveMeasures}` : ""
+    ].filter(Boolean).join("\n");
+    out[id] = {
+      id,
+      target: val.target || key,
+      name: null,
+      area: val.area || "",
+      category: val.category === "未分類" ? "" : (val.category || ""),
+      confirmed: [],                  // O
+      guess: "",                      // A
+      nextCheck: val.nextCheck || "", // P（旧5欄の「次に確認したいこと」は意味が同じなので移す）
+      legacy
+    };
+  });
+  return out;
+}
+
+// ★ 図鑑の枠は**初遭遇で現れる**（2026-09-17 の裁定3）。初遭遇＝**読了ハンコを押した時点**。
+//   帰還と同時にすると、読む前に見知らぬページが増える。
+//   枠に入っているのは**仮称と遭遇地域だけ**——分類も観察も空で始まる（埋めるのはプレイヤー）。
+function ensureBeastLogFrame(report) {
+  const quest = getQuest(report.questId);
+  if (!quest || !quest.observationTarget || quest.observationTarget === "なし") return null;
+  // ⚠️ `observationNotes` が **null** なのは「**対象がいなかった**」回（定型報告書・昼の灯り・
+  //    挑まずに引き返した回）。**記録票を持たせなかっただけの回は `notes` が空の配列**で、
+  //    そちらは出会っている＝枠を立てる（2026-09-17・EX-117 で2つの null を分けた）。
+  if (!report.observationNotes) return null;
+  const existing = findBeastLogByTarget(quest.observationTarget);
+  if (existing) return existing;
+  const id = nextBeastLogId();
+  state.beastLog[id] = {
+    id,
+    target: quest.observationTarget,
+    name: null,
+    area: quest.area || "",
+    category: "",
+    confirmed: [],
+    guess: "",
+    nextCheck: "",
+    legacy: ""
+  };
+  return state.beastLog[id];
+}
+
+function backfillBeastLogFrames() {
+  (state.reports ?? []).forEach((report) => { if (report.readStampAt) ensureBeastLogFrame(report); });
+}
+
+// S（冒険者の証言）＝自動。観察記録票で溜まった文をそのまま並べる。★ ここは書き換えられない。
+function beastLogTestimonies(entry) {
+  return (state.reportMemos ?? []).filter((memo) => memo.targetName === entry.target);
+}
 
 function renderBeastLog() {
-  const entries = Object.values(state.beastLog ?? {});
+  const entries = beastLogEntries();
   app.innerHTML = `
     <section class="card">
       <div class="card-body">
@@ -2212,9 +2334,9 @@ function renderBeastLog() {
           </div>
           <span class="status-pill">${entries.length}件</span>
         </div>
-        <p class="muted" style="margin-bottom: 12px;">遠征で記録した生物のメモです。報告書の観察記録票を参照しながら自由に転記・編集できます。</p>
+        <p class="muted" style="margin-bottom: 12px;">報告書を読むと、出会ったものの枠が仮称のまま現れます。分類と観察はあなたが書きます。</p>
         ${entries.length === 0
-          ? `<div class="empty">まだ記録はありません。<br>観察記録票を持たせた遠征の報告書から「図鑑を編集」ボタンで転記できます。</div>`
+          ? `<div class="empty">まだ記録はありません。<br>観察対象のいる依頼の報告書に読了のハンコを押すと、枠が現れます。</div>`
           : `<div class="grid-2" style="margin-top: 4px;">${entries.map(beastLogCardHtml).join("")}</div>`}
       </div>
     </section>
@@ -2222,54 +2344,40 @@ function renderBeastLog() {
 }
 
 function beastLogCardHtml(entry) {
-  const eName = escapeHtml(entry.target);
-  const eArea = escapeHtml(entry.area || "地域未記入");
-  const eCat  = escapeHtml(entry.category || "分類未記入");
+  const confirmed = (entry.confirmed ?? []).filter((obs) => obs.text);
+  const testimonies = beastLogTestimonies(entry);
   return `
     <article class="beast-log-card">
       <div class="card-title">
         <div>
-          <h3>${eName}</h3>
-          <p class="muted">${eCat} &middot; ${eArea}</p>
+          <h3>${escapeHtml(beastLogDisplayName(entry))}${entry.name ? "" : `<span class="bl-tag">仮称</span>`}</h3>
+          <p class="muted">${escapeHtml(entry.category || "分類未記入")} &middot; ${escapeHtml(entry.area || "地域未記入")}</p>
         </div>
-        <button class="small-button" onclick="openBeastLogEditor('${escapeJsArg(entry.target)}', '${escapeJsArg(entry.area || "地域未記入")}', null)">編集</button>
+        <button class="small-button" onclick="openBeastLogEditor('${escapeJsArg(entry.id)}')">編集</button>
       </div>
-      ${entry.appearance ? `<p class="meta-label" style="margin-top:8px">外見・特徴</p><p class="muted">${escapeHtml(entry.appearance)}</p>` : ""}
-      ${entry.notes     ? `<p class="meta-label">備考</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.notes)}</p>` : ""}
+      <p class="muted bl-card-counts">証言 ${testimonies.length}件 ／ 確かめられたこと ${confirmed.length}件</p>
+      ${confirmed.length > 0 ? `
+      <p class="meta-label">確かめられたこと</p>
+      <ul class="bl-axis-list">
+        ${confirmed.map((obs) => `<li><span class="bl-axis-tag">${escapeHtml(obs.axis)}</span>${escapeHtml(obs.text)}</li>`).join("")}
+      </ul>` : ""}
+      ${entry.guess     ? `<p class="meta-label">推測</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.guess)}</p>` : ""}
+      ${entry.nextCheck ? `<p class="meta-label">次に確かめたいこと</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.nextCheck)}</p>` : ""}
+      ${entry.legacy    ? `<p class="meta-label">移行前の記述</p><p class="muted" style="white-space:pre-wrap">${escapeHtml(entry.legacy)}</p>` : ""}
     </article>
   `;
 }
 
-function openBeastLogFromReport(reportId) {
-  const report = state.reports.find((r) => r.id === reportId);
-  if (!report) return;
-  const quest = getQuest(report.questId);
-  if (!quest || !quest.observationTarget || quest.observationTarget === "なし") return;
-  const targetName = quest.observationTarget;
-  const existing = state.beastLog[targetName];
-  const area = existing?.area || quest.area || "";
-  openBeastLogEditor(targetName, area, report.observationNotes ?? null);
+// 仮称から開く（報告書・報告メモの「図鑑を編集」用）。★ 枠が無ければ何もしない——
+//   枠を作るのは読了ハンコだけ（ここで作ると「初遭遇＝読了」が崩れる）。
+function openBeastLogByTarget(targetName) {
+  const entry = findBeastLogByTarget(targetName);
+  if (entry) openBeastLogEditor(entry.id);
 }
 
-function openBeastLogEditor(targetName, area, obsNotes) {
-  const entry = state.beastLog[targetName] ?? {
-    target: targetName,
-    area: area || "",
-    category: "未分類",
-    appearance: "",
-    notes: ""
-  };
-  // 旧形式の個別フィールドが残っている場合、備考に統合して表示する
-  const oldParts = [
-    entry.behavior        ? `【行動】${entry.behavior}` : "",
-    entry.danger          ? `【危険性】${entry.danger}` : "",
-    entry.effectiveMeasures   ? `【有効な対処】${entry.effectiveMeasures}` : "",
-    entry.ineffectiveMeasures ? `【効かなかった対処】${entry.ineffectiveMeasures}` : "",
-    entry.nextCheck       ? `【次に確認したいこと】${entry.nextCheck}` : ""
-  ].filter(Boolean);
-  const mergedNotes = [entry.notes, ...oldParts].filter(Boolean).join("\n");
-  const editorEntry = { ...entry, notes: mergedNotes };
-
+function openBeastLogEditor(id) {
+  const entry = getBeastLogEntry(id);
+  if (!entry) return;
   let overlay = document.getElementById("beastLogOverlay");
   if (!overlay) {
     overlay = document.createElement("div");
@@ -2277,7 +2385,7 @@ function openBeastLogEditor(targetName, area, obsNotes) {
     overlay.className = "beast-log-overlay";
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = beastLogEditorHtml(editorEntry, obsNotes);
+  overlay.innerHTML = beastLogEditorHtml(entry);
   overlay.classList.add("open");
 }
 
@@ -2286,54 +2394,77 @@ function closeBeastLogEditor() {
   if (overlay) overlay.classList.remove("open");
 }
 
-function saveBeastLogEntry() {
-  const targetName = document.getElementById("bl_target").value.trim();
-  if (!targetName) return;
-  state.beastLog[targetName] = {
-    target: targetName,
-    area: document.getElementById("bl_area").value.trim(),
-    category: document.getElementById("bl_category").value,
-    appearance: document.getElementById("bl_appearance").value.trim(),
-    notes: document.getElementById("bl_notes").value.trim(),
-    // 旧フィールドをクリア（備考統合済みのため）
-    behavior: "", danger: "", effectiveMeasures: "", ineffectiveMeasures: "", nextCheck: ""
-  };
+// ★ 保存するのはプレイヤーが書く欄だけ（分類・O・A・P・移行前の記述）。
+//   名前と遭遇地域は標本ラベルの自動欄なので、ここでは触らない。
+function saveBeastLogEntry(id) {
+  const entry = getBeastLogEntry(id);
+  if (!entry) return;
+  const val = (elId) => document.getElementById(elId)?.value ?? "";
+  entry.category = val("bl_category");
+  entry.confirmed = Array.from(document.querySelectorAll("#bl_obs_list .bl-obs-row"))
+    .map((row) => ({
+      axis: row.querySelector("select").value,
+      text: row.querySelector("textarea").value.trim()
+    }))
+    .filter((obs) => obs.text); // 空行は保存しない
+  entry.guess = val("bl_guess").trim();
+  entry.nextCheck = val("bl_next").trim();
+  if (document.getElementById("bl_legacy")) entry.legacy = val("bl_legacy").trim();
   saveState();
   closeBeastLogEditor();
   render();
 }
 
-function beastLogEditorHtml(entry, obsNotes) {
-  const refHtml = obsNotes && obsNotes.notes && obsNotes.notes.length > 0 ? `
-    <div class="bl-ref-section">
-      <p class="meta-label">観察記録票（転記の参考）</p>
-      <div class="obs-notes-grid">
-        ${obsNotes.notes.map((n) => `
-          <div class="obs-note-card">
-            <p class="obs-note-author">${escapeHtml(n.name)}の記録</p>
-            <p class="obs-note-text muted">「${escapeHtml(n.text)}」</p>
-          </div>
-        `).join("")}
-      </div>
-    </div>` : "";
+// O の1行（軸＋自由記述）。★ 行を足せば**同じ軸を何度でも選べる**——
+//   観察は回を重ねるもので、別の遠征で見た「動き」を前の記述に上書きさせないため。
+function beastLogObservationRowHtml(obs) {
+  const axis = obs?.axis || BEAST_LOG_AXES[0];
+  return `
+    <div class="bl-obs-row">
+      <select aria-label="軸">
+        ${BEAST_LOG_AXES.map((a) => `<option value="${a}"${a === axis ? " selected" : ""}>${a}</option>`).join("")}
+      </select>
+      <textarea placeholder="確かめられたことを書く">${escapeHtml(obs?.text || "")}</textarea>
+      <button class="ghost-button bl-obs-remove" onclick="removeBeastLogObservationRow(this)">削除</button>
+    </div>
+  `;
+}
 
-  const categories = ["未分類", "獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
-  const currentCat = entry.category || "未分類";
+function addBeastLogObservationRow() {
+  const list = document.getElementById("bl_obs_list");
+  if (list) list.insertAdjacentHTML("beforeend", beastLogObservationRowHtml(null));
+}
+
+function removeBeastLogObservationRow(button) {
+  const row = button.closest(".bl-obs-row");
+  if (row) row.remove();
+}
+
+function beastLogEditorHtml(entry) {
+  const testimonies = beastLogTestimonies(entry);
+  const sHtml = testimonies.length > 0 ? `
+    <div class="obs-notes-grid">
+      ${testimonies.map((memo) => `
+        <div class="obs-note-card">
+          <p class="obs-note-author">${escapeHtml(memo.adventurerName ?? "")}の記録 ／ ${escapeHtml(memo.questTitle ?? "")}</p>
+          <p class="obs-note-text muted">「${escapeHtml(memo.text ?? "")}」</p>
+        </div>
+      `).join("")}
+    </div>`
+    : `<p class="muted">まだ証言はありません。観察記録票を持たせた遠征から届きます。</p>`;
+
+  const currentCat = entry.category || "";
   const categorySelect = `<div class="bl-form-row">
     <label for="bl_category">分類</label>
     <select id="bl_category">
-      ${categories.map((c) => `<option value="${c}"${currentCat === c ? " selected" : ""}>${c}</option>`).join("")}
+      <option value=""${currentCat === "" ? " selected" : ""}>未分類</option>
+      ${BEAST_LOG_CATEGORIES.map((c) => `<option value="${c}"${currentCat === c ? " selected" : ""}>${c}</option>`).join("")}
     </select>
   </div>`;
 
-  const inp = (id, label, val, ph) => {
-    const esc = escapeHtml(val || "");
-    return `<div class="bl-form-row"><label for="${id}">${label}</label><input id="${id}" value="${esc}" placeholder="${ph}" /></div>`;
-  };
-  const txt = (id, label, val, ph) => {
-    const esc = escapeHtml(val || "");
-    return `<div class="bl-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${ph}">${esc}</textarea></div>`;
-  };
+  const rows = (entry.confirmed ?? []).filter((obs) => obs.text);
+  const txt = (id, label, value, placeholder) =>
+    `<div class="bl-form-row"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${placeholder}">${escapeHtml(value || "")}</textarea></div>`;
 
   return `
     <div class="bl-modal-box">
@@ -2342,16 +2473,34 @@ function beastLogEditorHtml(entry, obsNotes) {
         <button class="ghost-button" onclick="closeBeastLogEditor()">✕ 閉じる</button>
       </div>
       <div class="bl-modal-body">
-        ${refHtml}
         <div class="bl-form">
-          ${inp("bl_target",     "名前",       entry.target,     "例：森喰い兎")}
+          <div class="bl-form-row">
+            <label>名前</label>
+            <p class="bl-static">${escapeHtml(beastLogDisplayName(entry))}${entry.name ? "" : `<span class="bl-tag">仮称</span>`}</p>
+          </div>
           ${categorySelect}
-          ${inp("bl_area",       "遭遇地域",   entry.area,       "例：薄明の森")}
-          ${txt("bl_appearance", "外見・特徴", entry.appearance, "体の大きさ、色、特徴的な部位など")}
-          ${txt("bl_notes",      "備考",       entry.notes,
-            "・どんな行動をしたか\n・危険そうな点\n・有効だった対処\n・効かなかった対処\n・次に確認したいこと")}
+          <div class="bl-form-row">
+            <label>遭遇地域</label>
+            <p class="bl-static">${escapeHtml(entry.area || "地域未記入")}</p>
+          </div>
+
+          <div class="bl-form-row">
+            <label>S 冒険者の証言（自動）</label>
+            ${sHtml}
+          </div>
+
+          <div class="bl-form-row">
+            <label>O 確かめられたこと</label>
+            <div id="bl_obs_list" class="bl-obs-list">${rows.map(beastLogObservationRowHtml).join("")}</div>
+            <button class="small-button" onclick="addBeastLogObservationRow()">＋ 軸を選んで書き足す</button>
+          </div>
+
+          ${txt("bl_guess", "A 推測", entry.guess, "確かめられてはいないが、こう思う")}
+          ${txt("bl_next", "P 次に確かめたいこと", entry.nextCheck, "次の遠征で見てきてほしいこと")}
+          ${entry.legacy ? txt("bl_legacy", "移行前の記述（軸へ振り分けてください）", entry.legacy, "") : ""}
+
           <div class="button-row" style="margin-top: 18px;">
-            <button class="primary-button" onclick="saveBeastLogEntry()">図鑑に保存</button>
+            <button class="primary-button" onclick="saveBeastLogEntry('${escapeJsArg(entry.id)}')">図鑑に保存</button>
             <button class="ghost-button" onclick="closeBeastLogEditor()">キャンセル</button>
           </div>
         </div>
@@ -2406,7 +2555,7 @@ function renderReportDetail(reportId) {
         <div class="log-list">
           ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}
         </div>
-        ${report.observationNotes ? observationNotesHtml(report.observationNotes) : ""}
+        ${report.observationNotes?.notes?.length > 0 ? observationNotesHtml(report.observationNotes) : ""}
         ${report.readStampAt ? `
         <div class="read-stamp-row">
           <span class="read-stamp" aria-label="読了">読<br />了</span>
@@ -2419,8 +2568,8 @@ function renderReportDetail(reportId) {
           <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
           <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
           <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
-          ${quest?.observationTarget && quest.observationTarget !== "なし"
-            ? `<button class="secondary-button" onclick="openBeastLogFromReport('${escapeJsArg(report.id)}')">図鑑を編集</button>`
+          ${quest?.observationTarget && quest.observationTarget !== "なし" && findBeastLogByTarget(quest.observationTarget)
+            ? `<button class="secondary-button" onclick="openBeastLogByTarget('${escapeJsArg(quest.observationTarget)}')">図鑑を編集</button>`
             : ""}
         </div>
       </div>
@@ -3754,7 +3903,11 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
   const holders = party.filter((adv) =>
     isHumanAdventurer(adv) && getAdvItemIds(adventurerItemIds, adv.id).includes("item_obs_sheet")
   );
-  if (holders.length === 0) return null;
+  // ★ 記録票を持たせなかった回は**空の配列**を返す（null にしない。2026-09-17・EX-117）。
+  //   ⚠️ null は「**対象がいなかった**」の印で、報告書の組み立てが理由を添えて直書きするもの。
+  //   両方を null にしていたので、**出会ったのに図鑑の枠が立たない**のと
+  //   **いないのに枠が立つ**のを区別できなかった。文面は増えない（notes が空なら1行も出ない）。
+  if (holders.length === 0) return { target: quest.observationTarget, notes: [] };
   const notes = holders.map((adv) => ({
     adventurerId: adv.id,
     name: getDisplayName(adv),
