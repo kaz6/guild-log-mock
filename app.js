@@ -1793,7 +1793,7 @@ function questCardHtml(quest, isUrgent = false) {
         <span>危険度</span><strong>${escapeHtml(quest.danger)}</strong>
         <span>地域</span><strong>${escapeHtml(quest.area)}</strong>
         <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
-        <span>観察対象</span><strong>${escapeHtml(questDisplayTarget(quest))}</strong>
+        ${showsQuestObservationTarget(quest) ? `<span>観察対象</span><strong>${escapeHtml(questDisplayTarget(quest))}</strong>` : ""}
       </div>
       <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
     </article>
@@ -2581,6 +2581,32 @@ function questDisplayTitle(quest) {
 // 掲示板の観察対象欄。確定したら名前、まだなら仮称。
 function questDisplayTarget(quest) {
   return namedTargetFor(quest) ?? quest?.observationTarget ?? "";
+}
+
+// ── 掲示板に観察対象を出すか（2026-09-18・EX-135）──────────────────────────
+// ★ **遭遇したあとだけ出す。** 依頼を受ける前に「観察対象はなし」と書いてあると、
+//   **行く前から何がいるか分かっていること**になる。掲示板は住民が貼った紙で、
+//   **住民は何がいるかを知らない。**
+// ★ 判定は `state.reports` から導く（`state` を増やさない。EX-093／EX-102／EX-131 と同じ形）。
+// ★ **遭遇の印は `observationNotes` が null でないこと**（2026-09-17・EX-117 で分けた区別を使う）。
+//   - `null` ＝ **対象がいなかった**回（定型報告書・昼の灯り・挑まずに引き返した回）
+//   - `{ notes: [] }` ＝ 出会ったが記録票を持たせていなかった回。★ **これは遭遇に数える**
+// ⚠️ 観察対象を持たない依頼（「なし」）は**遭遇そのものが起きない**ので、行はいつまでも出ない。
+//   ★ これは規則をそのまま当てた結果で、例外を足してはいない。
+function hasEncounteredQuestTarget(quest) {
+  if (!quest || !quest.observationTarget || quest.observationTarget === "なし") return false;
+  return (state.reports ?? []).some((report) => report.questId === quest.id && report.observationNotes);
+}
+
+// 掲示板に観察対象の行を出すか。★ **反ミームの対象は遭遇後も出さない**（2026-09-18・EX-135）。
+// ★ 反ミームは**記録されない存在**なので、**掲示板に残らないこと自体が性質の表現**になる。
+//   プレイヤーは**自分が遭遇したことすら掲示板からは読めない**（＝未遭遇と同じ見た目）。
+// ⚠️ 伏せ字（■■■■）で出す案は採らない。**あれは記録の側の印であって掲示板の様式ではない**
+//   （終盤設計と一緒に判断する）。
+// ※ 現時点で `antiMemeticTarget` を持つ依頼は0件。仕組みだけ先に置いてある。
+function showsQuestObservationTarget(quest) {
+  if (quest?.antiMemeticTarget === true) return false;
+  return hasEncounteredQuestTarget(quest);
 }
 
 // ── 名前の参照化 第二段（これから生成される報告書。2026-09-17・EX-121） ──────
