@@ -86,6 +86,14 @@ button {
   font-size: 12px;
 }
 
+/* 配信された app.js の版（2026-09-18・EX-136）。★ 実機で「新しい版が来ているか」を
+   目で確かめるためだけの表示で、file:// では何も出ない（版が取れないため）。
+   中身は index.html の読み込み側が入れる（ETag か Last-Modified の末尾12文字）。 */
+.asset-version {
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
 .main-nav {
   display: grid;
   gap: 10px;

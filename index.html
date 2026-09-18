@@ -6,7 +6,7 @@
   <!-- 本作は文章そのものがゲーム体験の本体。ブラウザの機械翻訳は表示層を書き換えて体験を壊すため全ページで抑止する。 -->
   <meta name="google" content="notranslate" />
   <title>遠征ギルドログ HTML Mock v0.1.2</title>
-  <link rel="stylesheet" href="style.css" />
+  <link id="mainStyle" rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -15,7 +15,7 @@
         <div class="brand-mark">✦</div>
         <div>
           <h1>遠征ギルドログ</h1>
-          <p>HTML Mock v0.1.2</p>
+          <p>HTML Mock v0.1.2 <span id="assetVersion" class="asset-version"></span></p>
         </div>
       </div>
 
@@ -58,16 +58,78 @@
     </button>
   </div>
 
-  <!-- 診断モード（2026-09-18・EX-129）。★ URL に ?diag=1 が無いときは何もしない -->
-  <script src="diag.js"></script>
-  <script src="data-time.js"></script>
-  <script src="data-adventurers.js"></script>
-  <script src="data-items.js"></script>
-  <script src="data-enemies.js"></script>
-  <script src="data-quests.js"></script>
-  <script src="data-outcomes.js"></script>
-  <!-- 判定用語彙（2026-08-06・EX-061）。★ 定義と付与だけで、まだどこからも読んでいない -->
-  <script src="data-vocab.js"></script>
-  <script src="app.js"></script>
+  <!-- ── 読み込み（2026-09-18・EX-136）────────────────────────────────────
+       ★ **配信を更新しても端末が古い app.js を最大10分持つ**（GitHub Pages は
+         Cache-Control: max-age=600 を返す）。実機で確認するたびに待たされるので、
+         スクリプトと style.css に**版のクエリ**を付けて読み込む。
+       ★ **版を手で書き換える形にはしない**（書き忘れが必ず起きる）。配信元が返す
+         検証子（ETag、無ければ Last-Modified）を**そのまま版として使う**ので、
+         ファイルを変えれば版も勝手に変わり、変えなければ変わらない（＝再取得しない）。
+       ★ **順序が依存関係**。`async = false` を付けた挿入は**挿入順に実行される**ので、
+         下の並びがそのまま読み込み順になる。ここを並べ替えないこと。
+       ⚠️ **file:// では fetch が使えない**ので、そのときは版を付けずにそのまま読む
+         （ローカルで直接開く経路は README の案内どおり生かしてある）。
+       ⚠️ **app.js の初回描画はこの挿入のあと**に走る。DOM は解析済みなので問題ないが、
+         DOMContentLoaded を待つコードを足すと**もう発火していない**点に注意。
+       ※ 診断モード（`?diag=1` の diag.js）は役目を終えたので EX-136 で削除した。
+          作り直すときは EX-129／EX-130 の記録を見ること。 -->
+  <script>
+    (function () {
+      var FILES = [
+        "data-time.js",
+        "data-adventurers.js",
+        "data-items.js",
+        "data-enemies.js",
+        "data-quests.js",
+        "data-outcomes.js",
+        // 判定用語彙（2026-08-06・EX-061）。★ 定義と付与だけで、まだどこからも読んでいない
+        "data-vocab.js",
+        "app.js"
+      ];
+      var STYLE = "style.css";
+
+      function inject(list) {
+        list.forEach(function (src) {
+          var el = document.createElement("script");
+          el.src = src;
+          el.async = false;
+          document.body.appendChild(el);
+        });
+      }
+
+      // 検証子を版の文字列にする（引用符や W/ を落として末尾12文字）
+      function tokenOf(res) {
+        var raw = res.headers.get("etag") || res.headers.get("last-modified") || "";
+        return raw.replace(/[^A-Za-z0-9]/g, "").slice(-12);
+      }
+
+      function stamp(src) {
+        return fetch(src, { method: "HEAD", cache: "no-store" }).then(function (res) {
+          var token = res.ok ? tokenOf(res) : "";
+          return token ? src + "?v=" + token : src;
+        }).catch(function () {
+          return src; // 版が取れなくても読み込みは止めない
+        });
+      }
+
+      if (location.protocol === "file:" || typeof window.fetch !== "function") {
+        inject(FILES);
+        return;
+      }
+
+      Promise.all(FILES.concat([STYLE]).map(stamp)).then(function (stamped) {
+        var css = stamped.pop();
+        var style = document.getElementById("mainStyle");
+        if (style && css !== STYLE) style.href = css;
+        // 画面に出す版は app.js のもの（★ 実機で「新しい版が来ているか」を目で確かめるため）
+        var appSrc = stamped[stamped.length - 1];
+        var mark = document.getElementById("assetVersion");
+        if (mark && appSrc.indexOf("?v=") >= 0) mark.textContent = "版 " + appSrc.split("?v=")[1];
+        inject(stamped);
+      }, function () {
+        inject(FILES);
+      });
+    })();
+  </script>
 </body>
 </html>
