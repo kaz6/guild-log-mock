@@ -53,22 +53,15 @@ function formatRealDuration(ms) {
   return minutes < 60 ? `${minutes}分` : `${Math.round((minutes / 60) * 10) / 10}時間`;
 }
 
-// 「1日（実1時間）」の形。ゲーム内の長さと実時間の対応をそのまま見せる。
+// 所要時間の表示（掲示板のカードと出発確認）。★ **実時間だけを出す**（2026-09-18・EX-134）。
+// ★ **一次情報として持つことと、画面に出すことは別。** ゲーム内日数は正本として持ち続けるが
+//   （`getQuestDurationDays` ／ 暦の加算はこれを読む）、**画面には出さない**。
+//   依頼を選ぶときに効くのは実時間だけで、ゲーム内時間は判断の役に立っていない
+//   （2026-07-27 の「今どれくらい時間があるかで依頼を選べる」も実時間の話）。
+// ⚠️ 旧実装は「8分（実20秒）」の形で両方出していた。EX-133 で最初のクエストだけ例外にしたが、
+//   **例外が1件だけ残ると画面から理由が読めない**ので、EX-134 で全依頼を実時間のみに揃えた。
 function formatQuestDuration(quest) {
-  const days = getQuestDurationDays(quest);
-  const gameHours = days * 24;
-  const gameText = days >= 1
-    ? `${Math.round(days * 10) / 10}日`
-    : days >= 0.5
-      ? "半日"
-      : gameHours >= 1
-        ? `${Math.round(gameHours * 10) / 10}時間`
-        : `${Math.max(1, Math.round(gameHours * 60))}分`;
-  // ★ 実時間だけで出す依頼（2026-09-18・EX-133）。依頼データの `realDurationOnly` が立っている回だけ。
-  //   ⚠️ **プレイヤーが体感するのは実時間だけ**で、そこにゲーム内時間を並べても判断の役に立たない。
-  //   ⚠️ **全依頼に及ぼすかは未裁定。** いまは最初のクエスト1件だけの例外。
-  const realText = formatRealDuration(getQuestDurationMs(quest));
-  const base = quest?.realDurationOnly === true ? realText : `${gameText}（実${realText}）`;
+  const base = formatRealDuration(getQuestDurationMs(quest));
   const speed = getDemoSpeed();
   if (speed === 1) return base;
   return `${base} ／ 加速中：約${formatRealDuration(getQuestDurationMs(quest) / speed)}`;
@@ -1788,7 +1781,6 @@ function renderQuests() {
 function questCardHtml(quest, isUrgent = false) {
   const selected = selectedQuestId === quest.id;
   const tags = quest.tags ?? quest.recommended ?? [];
-  const isLifeQuest = quest.category === "生活";
   return `
     <article class="quest-card ${selected ? "selected" : ""}" onclick="selectQuest('${escapeJsArg(quest.id)}')">
       <div class="card-title">
@@ -1798,7 +1790,7 @@ function questCardHtml(quest, isUrgent = false) {
       <p class="muted">${escapeHtml(quest.summary)}</p>
       <div class="kv">
         <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
-        <span>${isLifeQuest ? "作業負荷" : "危険度"}</span><strong class="${isLifeQuest ? "subtle-danger" : ""}">${escapeHtml(quest.danger)}</strong>
+        <span>危険度</span><strong>${escapeHtml(quest.danger)}</strong>
         <span>地域</span><strong>${escapeHtml(quest.area)}</strong>
         <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
         <span>観察対象</span><strong>${escapeHtml(questDisplayTarget(quest))}</strong>
