@@ -8141,8 +8141,13 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   const partialAt = Math.ceil(FIELDWORK_TUNING.setbackRatioPartial * phases);
   const failAt = Math.max(FIELDWORK_TUNING.setbacksForFailMin,
     Math.ceil(FIELDWORK_TUNING.setbackRatioFail * phases));
-  const tier = setbacks >= failAt ? "fail"
+  // ★ 初回だけの例外（2026-08-06 裁定／2026-09-18・EX-131）。呼び出し側が `noFail` を立てた回だけ、
+  //   **未達を完遂へ引き上げる**（部分はそのまま）。立てるかどうかは依頼データの `firstRunNeverFails` と
+  //   その依頼の実施歴で決まり、判断は `resolveFieldwork` が持つ（ここは state を見ない）。
+  // ⚠️ **ここで乱数を引かないこと。** 引くと以降の並びが動いて、関係のない依頼の結果まで変わる。
+  const rawTier = setbacks >= failAt ? "fail"
     : setbacks >= partialAt ? "partial" : "full";
+  const tier = options.noFail && rawTier === "fail" ? "full" : rawTier;
   const mainCause = ["weather", "fatigue", "skill"].reduce((a, b) => (causeCount[b] > causeCount[a] ? b : a), "skill");
   // ★ 効いた瞬間（2026-08-04・EX-050）：一つも滞らなかったとき、誰の力量が支えたかを控える。
   //   戦闘の「防げた瞬間」と同じ考えで、**既にある事実を拾うだけ**。滞りが出た回は
@@ -8363,9 +8368,18 @@ function fieldworkOutcome(quest, fw, outcomes, rng) {
   return { outcome: pickOutcomeByTier(outcomes, fw ? fw.tier : "full", rng), turnBack: false };
 }
 
+// その依頼を一度も行っていないか。★ `state` を増やさず `state.reports` から導く（EX-093／EX-102 と同じ形）。
+//   遠征の完了処理は報告書を棚に載せる**前**に生成を回すので、ここに今回の回は入っていない。
+function isFirstRunOfQuest(quest) {
+  if (!quest) return false;
+  return !(state.reports ?? []).some((report) => report.questId === quest.id);
+}
+
 // 各依頼の分岐から同じ形で呼ぶための入口。工程を回し、結末を格下げし、工程ログを作るまで。
 function resolveFieldwork(quest, party, itemIds, weather, rng) {
-  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather });
+  // ★ 初回だけの例外（2026-08-06 裁定／EX-131）。依頼データが `firstRunNeverFails` を持つ回だけ見る。
+  const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest);
+  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail });
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines: fieldworkLogLines(fw, rng) };
 }
