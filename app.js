@@ -64,7 +64,11 @@ function formatQuestDuration(quest) {
       : gameHours >= 1
         ? `${Math.round(gameHours * 10) / 10}時間`
         : `${Math.max(1, Math.round(gameHours * 60))}分`;
-  const base = `${gameText}（実${formatRealDuration(getQuestDurationMs(quest))}）`;
+  // ★ 実時間だけで出す依頼（2026-09-18・EX-133）。依頼データの `realDurationOnly` が立っている回だけ。
+  //   ⚠️ **プレイヤーが体感するのは実時間だけ**で、そこにゲーム内時間を並べても判断の役に立たない。
+  //   ⚠️ **全依頼に及ぼすかは未裁定。** いまは最初のクエスト1件だけの例外。
+  const realText = formatRealDuration(getQuestDurationMs(quest));
+  const base = quest?.realDurationOnly === true ? realText : `${gameText}（実${realText}）`;
   const speed = getDemoSpeed();
   if (speed === 1) return base;
   return `${base} ／ 加速中：約${formatRealDuration(getQuestDurationMs(quest) / speed)}`;

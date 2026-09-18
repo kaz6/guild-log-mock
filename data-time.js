@@ -24,8 +24,11 @@ function gameDaysFromRealSeconds(realSeconds) {
 // ※ 帯名「近」は旧称「最序盤」。実態は進行段階ではなく距離なので改称した（体験版②裁定）。
 // ※ long_5h / long_7h は定義のみで該当依頼は未実装。北・東の遠方依頼が入ったときに使う。
 window.masterDurationBands = {
-  // ★ 最初のクエスト用（2026-08-05・EX-053）。10〜30秒の指定に対し、帯は1つの値を持つ流儀なので中央の20秒を採る。
-  //   near_5m は未使用だが潰さずに残し、別の帯として新設した。
+  // ★ 最初のクエスト用（2026-09-18・EX-133）。確定事項「最初の依頼は10〜30秒」の**下限**へ寄せた。
+  //   ⚠️ 作者が実機で遊んで20秒は長いと判断した。
+  near_10s: { label: "近", days: gameDaysFromRealSeconds(10) },
+  // ★ 旧・最初のクエスト用（2026-08-05・EX-053。10〜30秒の中央として20秒を採っていた）。
+  //   ⚠️ **潰さずに残す**（未使用でも帯の意味が変わるため。`near_5m` と同じ扱い）。
   near_20s: { label: "近", days: gameDaysFromRealSeconds(20) },
   near_1m: { label: "近", days: gameDaysFromRealMinutes(1) },
   near_5m: { label: "近", days: gameDaysFromRealMinutes(5) },
