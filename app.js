@@ -6283,6 +6283,17 @@ function buildSafeAdventurerHistoryLines(party, quest, context = {}) {
   return lines;
 }
 
+// 報告書の id（2026-09-20・EX-138）。★ **ミリ秒だけでは足りない。**
+// ⚠️ 同じ瞬間に2本の遠征を畳むと**同じ id の報告書が2通できる**。そうなると
+//   `state.reports.find(...)` が先に見つけた方を返すので、**開封・読了ハンコ・報告メモの重複判定・
+//   捜索チェーンの参照元（`sourceReportId`）が別の報告書を指す**。
+// ★ 形は報告メモに前例がある（`memo_<ミリ秒>_<乱数>`）。そちらへ揃えた。
+// ※ id は**引き当てにしか使っていない**（書式を読み解いている箇所は無い）。旧セーブの
+//   接尾辞なしの id もそのまま引ける。
+function newReportId() {
+  return `report_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function finalizeQuestReport(options) {
   const {
     expedition,
@@ -6321,7 +6332,7 @@ function finalizeQuestReport(options) {
     : (rng ? generateObservationNotes(quest, party, adventurerItemIds, rng) : null);
 
   const report = {
-    id: `report_${Date.now()}`,
+    id: newReportId(),
     questId: quest.id,
     adventurerIds: expedition.adventurerIds,
     adventurerItemIds,
@@ -6426,7 +6437,7 @@ function generateReport(expedition) {
     });
 
     return {
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -6459,7 +6470,7 @@ function generateReport(expedition) {
       const dayLogs = generateNightLightDayLogs(quest, party, adventurerItemIds, rng);
       dayLogs.forEach((text, index) => add(index === dayLogs.length - 1 ? "afterglow" : "action", text));
       return withElsieLog({
-        id: `report_${Date.now()}`,
+        id: newReportId(),
         questId: quest.id,
         adventurerIds: expedition.adventurerIds,
         adventurerItemIds,
@@ -6520,7 +6531,7 @@ function generateReport(expedition) {
     //   battleAmbush で段階1を経ないので、押し戻された回でも灯りは見ている。
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
     return withElsieLog({
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -6610,7 +6621,7 @@ function generateReport(expedition) {
     });
 
     return withElsieLog({
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -6718,7 +6729,7 @@ function generateReport(expedition) {
     });
 
     return {
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -6778,7 +6789,7 @@ function generateReport(expedition) {
     });
 
     return {
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -6843,7 +6854,7 @@ function generateReport(expedition) {
     });
 
     return {
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -7042,7 +7053,7 @@ function generateReport(expedition) {
     });
 
     return {
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -7101,7 +7112,7 @@ function generateReport(expedition) {
     });
 
     return {
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -7200,7 +7211,7 @@ function generateReport(expedition) {
     });
 
     return withElsieLog({
-      id: `report_${Date.now()}`,
+      id: newReportId(),
       questId: quest.id,
       adventurerIds: expedition.adventurerIds,
       adventurerItemIds,
@@ -7267,7 +7278,7 @@ function generateReport(expedition) {
   });
 
   return withElsieLog({
-    id: `report_${Date.now()}`,
+    id: newReportId(),
     questId: quest.id,
     adventurerIds: expedition.adventurerIds,
     itemIds: expedition.itemIds,
