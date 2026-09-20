@@ -9,6 +9,10 @@ const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には�
 //   **発動条件：配布ビルドを作る前に必ず個別移行関数方式へ切り替える。** ここを飛ばさない。
 const STATE_SCHEMA_VERSION = 3;
 const MAX_PARTY_SIZE = 4;
+// ★ 同時に出せる遠征の本数（2026-09-20・EX-138）。**上限は「本数」で持つ**——人数で持つと、
+//   工程の疲労（少人数ほど重い）と二重のブレーキになる。
+// ★ まず2本。壊れ方（時計・暦・帰還・id）は2本でも全部出るので、増やすときはこの値を変えるだけ。
+const MAX_CONCURRENT_EXPEDITIONS = 2;
 
 // === 時間スケール（体験版②・2026-07-26／2026-07-28 に定義を data 側へ移設） ===
 // 帯の定義はデータなので `data-time.js` が持つ。ここは参照するだけ（値は向こうが正）。
@@ -119,9 +123,16 @@ function createInitialState() {
     quests: structuredClone(masterQuests),
     items: structuredClone(masterItems),
     reports: [],
-    expedition: null,
+    // ★ 同時遠征（2026-09-20・EX-138）。**単数の `expedition` から配列へ**。
+    //   旧セーブは読み込み時に移し替える（`schemaVersion` は上げない＝EX-125 と同じ形）。
+    expeditions: [],
+    // 帰還の通知は行列で持つ（同時に2本帰っても片方が消えないように）
+    activeResultReportIds: [],
     worldState: {
       daysPassed: 0,
+      // ★ 遠征が1本でも走っている区間の起点（2026-09-20・EX-138）。0本→1本で置き、1本→0本で畳む。
+      //   暦と行方不明の時計は**この区間の合計**で進む（重なった2本を二重に数えないため）。
+      expeditionAnchorStart: null,
       totalReportsOpened: 0,
       totalExpeditions: 0,
       attachmentScore: 0,
@@ -183,6 +194,11 @@ function loadState() {
     merged.adventurers = mergeAdventurerList(masterAdventurers, parsed.adventurers);
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
     merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
+    // 遠征：単数 → 配列へ（2026-09-20・EX-138。`schemaVersion` は上げない＝内容で吸収する）
+    merged.expeditions = normalizeExpeditions(parsed);
+    delete merged.expedition; // 旧キーは残さない（残すと次の保存で二重に書かれる）
+    merged.activeResultReportIds = normalizeResultQueue(parsed);
+    delete merged.activeResultReportId;
     // 生態目録：名前キー → id キーへ移し替える（2026-09-17・EX-117。`schemaVersion` は上げない）
     // ★ 旧キー `beastLog` からも拾う（2026-09-17・EX-125 で内部名を改めたため）。
     //   ⚠️ **新旧のどちらか一方しか無い**のが普通なので、新を優先して片方だけ読む。
@@ -196,6 +212,19 @@ function loadState() {
     console.warn("保存データの読み込みに失敗したため初期化します", error);
     return createInitialState();
   }
+}
+
+// 旧セーブの単数 `expedition` を配列へ移し替える（2026-09-20・EX-138）。
+// ★ 遠征中のまま保存された旧セーブでも、その遠征は**そのまま続きから畳める**。
+function normalizeExpeditions(parsed) {
+  if (Array.isArray(parsed?.expeditions)) return parsed.expeditions.filter(Boolean);
+  return parsed?.expedition ? [parsed.expedition] : [];
+}
+
+// 帰還の通知（1件 → 行列）。★ 同時に2本帰ったとき、片方が黙って消えないようにする。
+function normalizeResultQueue(parsed) {
+  if (Array.isArray(parsed?.activeResultReportIds)) return parsed.activeResultReportIds.filter(Boolean);
+  return parsed?.activeResultReportId ? [parsed.activeResultReportId] : [];
 }
 
 function mergeMasterList(masterList) {
@@ -778,6 +807,76 @@ function applyMissingFromReport(report) {
   });
 }
 
+// ── 遠征の参照（2026-09-20・EX-138）───────────────────────────────────────
+// ★ 遠征は**配列**。単数を前提にした書き方（`state.expedition`）はもう無い。
+function getExpeditions() {
+  return Array.isArray(state.expeditions) ? state.expeditions : [];
+}
+
+function getExpeditionById(id) {
+  return getExpeditions().find((expedition) => expedition.id === id) ?? null;
+}
+
+function hasExpeditions() {
+  return getExpeditions().length > 0;
+}
+
+// ★ いま走っている遠征のうち、**いちばん遅く終わるものの終了時刻**。
+//   行方不明の時計は「遠征が1本でもある間」進むので、上限はここになる。
+function latestExpeditionRealEndMs() {
+  return getExpeditions().reduce((max, expedition) => Math.max(max, expeditionRealEndMs(expedition)), 0);
+}
+
+function expeditionSlotsLeft() {
+  return Math.max(0, MAX_CONCURRENT_EXPEDITIONS - getExpeditions().length);
+}
+
+// その依頼が**いま出ている**か（2026-09-20・EX-138 の裁定2＝同じ依頼の二重出撃は禁止）。
+function isQuestOnExpedition(questId) {
+  return getExpeditions().some((expedition) => expedition.questId === questId);
+}
+
+// 捜索チェーンに関わる依頼（隊商護衛・捜索2件）は**同時に1本まで**（EX-138 の裁定b）。
+// ★ 旗は依頼データが持つ（`chainSlot`）。id の直書きで分岐しない。
+function isChainQuest(quest) {
+  return quest?.chainSlot === true;
+}
+
+function chainSlotBusy() {
+  return getExpeditions().some((expedition) => isChainQuest(getQuest(expedition.questId)));
+}
+
+// ── 遠征が1本でも走っている区間（2026-09-20・EX-138）────────────────────────
+// ★ **0本→1本で起点を置き、1本→0本で畳む。** 暦と行方不明の時計はこの区間の合計で進む。
+// ⚠️ 完了のたびに所要日数を足す形（1本前提）だと、**重なった2本を二重に数える**
+//   （30分＋30分＋60分を並行させると暦は2日進むが、実際に過ぎたのは1日ぶん）。
+function beginExpeditionSpan(startTime) {
+  if (state.worldState.expeditionAnchorStart == null) state.worldState.expeditionAnchorStart = startTime;
+}
+
+// 最後の1本が畳まれたときに区間を確定する。★ まだ走っている遠征があれば何もしない。
+// `advanceCalendar` が false のときは暦だけ進めない（依頼が消えた遠征の中断＝EX-097。
+// あの回は「無かったことにする」ので暦を進めない）。
+function closeExpeditionSpanIfIdle(realEnd, { advanceCalendar = true } = {}) {
+  if (hasExpeditions()) return;
+  const start = state.worldState.expeditionAnchorStart;
+  state.worldState.expeditionAnchorStart = null;
+  if (start == null) return;
+  const span = Math.max(0, realEnd - start);
+  // 暦：区間の実時間を倍率でゲーム内時間へ戻して日数にする。
+  // ★ 1本だけのときは `durationMs / 倍率 × 倍率 ÷ 1日` ＝ その依頼の所要日数で、**旧実装と一致する**。
+  if (advanceCalendar) {
+    state.worldState.daysPassed += (span * getDemoSpeed()) / (REAL_MINUTES_PER_GAME_DAY * MS_PER_REAL_MINUTE);
+  }
+  // 行方不明の時計：同じ区間を積んで止める（2026-08-18・EX-070 の扱いを区間に読み替えたもの）。
+  state.adventurers.forEach((adv) => {
+    const m = adv.missing;
+    if (!m || m.anchorStart == null) return;
+    m.baseMs = (m.baseMs ?? 0) + Math.max(0, realEnd - m.anchorStart);
+    m.anchorStart = null;
+  });
+}
+
 // 時計：★ 進むのは「進行中の遠征が存在する間」だけ。遠征がなければ止まる。
 // baseMs＝確定済みの行動時間、anchorStart＝いま進行中の区間の開始（絶対時刻）。
 // ★ demo 倍率は掛けない。遠征の完了そのものは加速で早まるので、進む量は自然に短くなる。
@@ -789,8 +888,9 @@ function missingElapsedMs(adv, now = Date.now()) {
   const m = adv?.missing;
   if (!m) return 0;
   let ms = m.baseMs ?? 0;
-  if (m.anchorStart != null && state.expedition) {
-    ms += Math.max(0, Math.min(now, expeditionRealEndMs(state.expedition)) - m.anchorStart);
+  // ★ 上限は「いま走っている遠征のうち、いちばん遅く終わるもの」（2026-09-20・EX-138）。
+  if (m.anchorStart != null && hasExpeditions()) {
+    ms += Math.max(0, Math.min(now, latestExpeditionRealEndMs()) - m.anchorStart);
   }
   return ms;
 }
@@ -808,7 +908,7 @@ function revealMissing(adv, now = Date.now()) {
   if (!m || m.revealedAt != null || m.deadAt != null) return false;
   m.revealedAt = now;
   // 判明時に別の遠征が進行中ならそこから数え始める。無ければ次の遠征の開始時から（startExpedition）。
-  if (state.expedition && now < expeditionRealEndMs(state.expedition)) m.anchorStart = now;
+  if (hasExpeditions() && now < latestExpeditionRealEndMs()) m.anchorStart = now;
   return true;
 }
 
@@ -1097,44 +1197,47 @@ function escapeJsArg(value) {
 // ★ 冒険者は失わせない（「プレイヤーを責めない」）。暦も進めない。報告書も作らない——
 //   死んだ `questId` の報告書を残すと、解放条件（`getClearedQuestIds`）と報告メモに
 //   その id が混ざり、**画面が落ちなくなる代わりに記録が汚れる**。
-function abortExpeditionWithoutQuest() {
-  const lost = state.expedition;
+function abortExpeditionWithoutQuest(lost) {
   console.warn(`依頼 "${lost.questId}" が見つかりません。進行中の遠征を中断し、冒険者を待機中に戻しました。`);
-  // ★ 行方不明の時計は、この遠征ぶんを積んでから止める（EX-070 の完了時と同じ扱い）。
-  const realEnd = Math.min(Date.now(), expeditionRealEndMs(lost));
-  state.adventurers.forEach((adv) => {
-    const m = adv.missing;
-    if (!m || m.anchorStart == null) return;
-    m.baseMs = (m.baseMs ?? 0) + Math.max(0, realEnd - m.anchorStart);
-    m.anchorStart = null;
-  });
   lost.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv && !adv.missing) adv.status = "待機中"; // ★ 行方不明者は「待機中」に戻さない
   });
-  state.expedition = null;
+  removeExpedition(lost.id);
+  // ★ 行方不明の時計は、この遠征ぶんを積んでから止める（EX-070 の完了時と同じ扱い）。
+  //   ⚠️ 暦は進めない——この回は**無かったことにする**のが EX-097 の扱い。
+  closeExpeditionSpanIfIdle(Math.min(Date.now(), expeditionRealEndMs(lost)), { advanceCalendar: false });
   saveState();
 }
 
+function removeExpedition(id) {
+  state.expeditions = getExpeditions().filter((expedition) => expedition.id !== id);
+}
+
+// ★ 同時遠征（2026-09-20・EX-138）。**走っている遠征を1本ずつ見て、終わったものから畳む。**
+//   ⚠️ 畳む途中で `state.expeditions` が変わるので、**複製を回す**。
+//   ★ 順序は出発順（配列の順）で決まる。同じ瞬間に2本終わっても入れ替わらない。
 function checkExpeditionCompletion() {
-  if (!state.expedition) return;
+  if (!hasExpeditions()) return;
+  getExpeditions().slice().forEach((expedition) => completeExpeditionIfDue(expedition));
+}
+
+function completeExpeditionIfDue(expedition) {
+  if (!getExpeditionById(expedition.id)) return; // 既に畳まれている
   // ★ 依頼が引けない遠征は、所要時間を待たずにここで畳む（2026-09-14・EX-097）。
   //   放置すると `generateReport` が落ち、`render()` が毎秒失敗して**画面ごと出なくなる**。
-  if (!getQuest(state.expedition.questId)) {
-    abortExpeditionWithoutQuest();
+  if (!getQuest(expedition.questId)) {
+    abortExpeditionWithoutQuest(expedition);
     return;
   }
   // durationMs は素の値を保存し、比較時に倍率を掛ける（出発済みの遠征も加速できる）。
-  const elapsed = (Date.now() - state.expedition.startTime) * getDemoSpeed();
-  if (elapsed < state.expedition.durationMs) return;
+  const elapsed = (Date.now() - expedition.startTime) * getDemoSpeed();
+  if (elapsed < expedition.durationMs) return;
 
-  // 依頼の所要日数だけ暦を進める（体験版②）。表示は②-2。
-  state.worldState.daysPassed += getQuestDurationDays(getQuest(state.expedition.questId));
-
-  const report = generateReport(state.expedition);
-  appendPresenceLogToReport(report, state.expedition);
-  appendPartyBanterToReport(report, state.expedition);
-  appendGrowthLogToReport(report, state.expedition);
+  const report = generateReport(expedition);
+  appendPresenceLogToReport(report, expedition);
+  appendPartyBanterToReport(report, expedition);
+  appendGrowthLogToReport(report, expedition);
   // ★ 名前の参照化 第二段（2026-09-17・EX-121）。**全部の行が揃ってから**通す。
   //   在席ログ・掛け合い・成長ログも報告書の本文なので、足し終わったあとに置き換える。
   applyNamedTargetToReport(report);
@@ -1158,23 +1261,20 @@ function checkExpeditionCompletion() {
     }
   }
 
-  state.activeResultReportId = report.id;
+  // ★ 帰還の通知は行列に積む（2026-09-20・EX-138）。1件しか持たない形だと、
+  //   **同時に2本帰ったときに片方の「帰還を確認する」が黙って消える**。
+  if (!Array.isArray(state.activeResultReportIds)) state.activeResultReportIds = [];
+  state.activeResultReportIds.push(report.id);
   applyInjuriesFromReport(report); // 負傷は依頼をまたいで残る（第3段階）
-  // ★ 行方不明の時計は遠征がある間だけ進む。この遠征の完了時点までの分をここで確定する
-  //   （2026-08-18・EX-070。実際の完了時刻＝realEnd を使う。閉じている間に完了していても正しく積む）。
-  const missingRealEnd = expeditionRealEndMs(state.expedition);
-  state.adventurers.forEach((adv) => {
-    const m = adv.missing;
-    if (!m || m.anchorStart == null) return;
-    m.baseMs = (m.baseMs ?? 0) + Math.max(0, missingRealEnd - m.anchorStart);
-    m.anchorStart = null;
-  });
   applyMissingFromReport(report); // 行方不明は依頼をまたいで残る（EX-070）
-  state.expedition.adventurerIds.forEach((id) => {
+  expedition.adventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv && !adv.missing) adv.status = "待機中"; // ★ 行方不明者は「待機中」に戻さない
   });
-  state.expedition = null;
+  removeExpedition(expedition.id);
+  // ★ 暦と行方不明の時計は**区間の合計**で進む（2026-09-20・EX-138）。
+  //   最後の1本が畳まれたときだけ確定し、まだ走っている遠征があれば区間は続く。
+  closeExpeditionSpanIfIdle(expeditionRealEndMs(expedition));
   settleMissingDeaths();
   saveState();
 }
@@ -1264,7 +1364,7 @@ function render() {
   if (route === "observations") renderObservations();
   if (route === "ecology") renderEcologyRecord();
   if (route === "report") renderReportDetail(state.activeReportId);
-  if (route === "result") renderResult(state.activeResultReportId);
+  if (route === "result") renderResult(nextResultReportId());
 }
 
 function renderInterview() {
@@ -1379,15 +1479,23 @@ function interviewComplete() {
 function renderHome() {
   const unopened = state.reports.filter((report) => !report.opened);
   const latestReports = state.reports.slice(0, 3);
-  const expedition = state.expedition;
+  const expeditions = getExpeditions();
   // 案B（体験版①）：閉じている間に帰還が確定していた場合、全画面リザルトへ飛ばさず
   // ホーム最上部に「今回の帰還」カードを差し込む（開封の主導権をプレイヤーに残す）。
-  const returnedReport = state.activeResultReportId
-    ? state.reports.find((r) => r.id === state.activeResultReportId)
-    : null;
+  // ★ 同時遠征（2026-09-20・EX-138）：**帰った順に1枚ずつ並べる**。1件しか持たない形だと、
+  //   同時に2本帰ったときに片方が黙って消える。
+  const returnedReports = (Array.isArray(state.activeResultReportIds) ? state.activeResultReportIds : [])
+    .map((id) => state.reports.find((r) => r.id === id))
+    .filter(Boolean);
+  const returnedReport = returnedReports[0] ?? null;
   const returnedQuest = returnedReport ? getQuest(returnedReport.questId) : null;
 
   app.innerHTML = `
+    ${returnedReports.length > 1 ? `
+    <div class="weather-bar">
+      <span class="weather-bar-icon">📨</span>
+      <span class="weather-bar-text">${returnedReports.length}件の帰還が届いています。順に確認できます。</span>
+    </div>` : ""}
     ${returnedReport ? `
     <section class="card">
       <div class="card-body">
@@ -1414,7 +1522,9 @@ function renderHome() {
             <div class="speech">
               ${state.player?.name ? `${escapeHtml(state.player.name)}さん、` : ""}${unopened.length > 0
                 ? `おかえりなさい。未開封の報告書が ${unopened.length} 通、届いています。落ち着いて、一通ずつ確認しましょう。`
-                : expedition
+                : expeditions.length > 1
+                  ? `遠征中の一行が${expeditions.length}組あります。扉の音がしたら、私が報告書をお持ちしますね。`
+                  : expeditions.length === 1
                   ? "遠征中の一行があります。扉の音がしたら、私が報告書をお持ちしますね。"
                   : "本日の依頼掲示板を確認できます。出発前の支給品も、忘れずに選んでくださいね。"}
             </div>
@@ -1442,7 +1552,7 @@ function renderHome() {
       </section>
     </div>
 
-    ${expedition ? expeditionProgressHtml(expedition) : ""}
+    ${expeditions.map(expeditionProgressHtml).join("")}
   `;
 }
 
@@ -1509,7 +1619,7 @@ function expeditionProgressHtml(expedition) {
         </div>
         ${getDemoSpeed() > 1 ? `
         <div class="button-row">
-          <button class="secondary-button" onclick="advanceTimeForMock()">Mock用：扉の音を待たず報告書を届ける</button>
+          <button class="secondary-button" onclick="advanceTimeForMock('${escapeJsArg(expedition.id)}')">Mock用：扉の音を待たず報告書を届ける</button>
         </div>` : ""}
       </div>
     </section>
@@ -1637,7 +1747,12 @@ function buildBoardQuests(clearedQuestIds, reports) {
   const slots = window.masterBoardRules?.slots;
   const candidates = state.quests
     .filter((quest) => !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
-      && questBoardVisibility(quest, reports).visible)
+      && questBoardVisibility(quest, reports).visible
+      // ★ いま出ている依頼は並べない（2026-09-20・EX-138 の裁定2＝同じ依頼の二重出撃を禁止）。
+      //   ⚠️ クールタイムは**帰ってきてから**効くので、出ている間はここで下ろさないと選べてしまう。
+      && !isQuestOnExpedition(quest.id)
+      // ★ チェーン系（隊商護衛・捜索2件）は同時1本まで（裁定b）。
+      && !(isChainQuest(quest) && chainSlotBusy()))
     .map((quest, order) => ({ quest, order, cool: questCooldownState(quest, reports) }));
   const byOrder = (a, b) => a.order - b.order;
   const fresh = candidates.filter((c) => c.cool.fresh)
@@ -1652,7 +1767,8 @@ function renderQuests() {
   // ★ 掲示板から消えた依頼を選んだままにしない（2026-09-13・EX-093／2026-09-15・EX-102 で枠あふれへ拡張）。
   //   ※ 通常の操作では `startExpedition` が選択を解除するのでここには来ない。
   //     効くのは**掲示板から消えた依頼が選択されたまま状態が復元されたとき**の掃除
-  //     （消える理由は3つ：再出現の待機中／クールタイムの小休止／枠あふれ）。
+  //     （消える理由は4つ：再出現の待機中／クールタイムの小休止／枠あふれ／
+  //       ★ **いま出ている**＝2026-09-20・EX-138 の裁定2で、出撃中の依頼は掲示板から下ろす）。
   const clearedQuestIds = getClearedQuestIds();
   const boardQuests = buildBoardQuests(clearedQuestIds, state.reports);
   if (selectedQuestId) {
@@ -1663,7 +1779,11 @@ function renderQuests() {
   }
   const selectedQuest = getQuest(selectedQuestId);
   const expeditionBlock = expeditionBlockedMessage(selectedAdventurerIds);
-  const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && !state.expedition && !expeditionBlock;
+  // ★ 同時遠征（2026-09-20・EX-138）：塞ぐのは**本数の上限・同じ依頼・チェーン系の重なり**の3つ。
+  const questOnExpedition = selectedQuestId ? isQuestOnExpedition(selectedQuestId) : false;
+  const chainBlocked = selectedQuest ? isChainQuest(selectedQuest) && chainSlotBusy() : false;
+  const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && expeditionSlotsLeft() > 0
+    && !questOnExpedition && !chainBlocked && !expeditionBlock;
 
   const cond = getCurrentConditions();
   const timeOptions = ["朝", "昼", "夕方", "夜"];
@@ -1682,7 +1802,8 @@ function renderQuests() {
   const waitingQuests = state.quests.filter((quest) =>
     !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
     && questBoardVisibility(quest, state.reports).reason === "待機中");
-  if (urgentQuest) boardQuests.unshift(urgentQuest);
+  // ★ 緊急依頼も同じ規則で下ろす（2026-09-20・EX-138）。出ている間は掲示板に残さない。
+  if (urgentQuest && !isQuestOnExpedition(urgentQuest.id) && !chainSlotBusy()) boardQuests.unshift(urgentQuest);
 
   app.innerHTML = `
     <div class="weather-bar">
@@ -1720,7 +1841,9 @@ function renderQuests() {
             <p class="eyebrow">Quest Board</p>
             <h3>依頼選択</h3>
           </div>
-          ${state.expedition ? `<span class="status-pill away">遠征中のため新規出発不可</span>` : `<span class="status-pill good">出発可能</span>`}
+          ${expeditionSlotsLeft() > 0
+            ? `<span class="status-pill good">出発可能（あと${expeditionSlotsLeft()}組）</span>`
+            : `<span class="status-pill away">遠征は同時に${MAX_CONCURRENT_EXPEDITIONS}組まで</span>`}
         </div>
         <div class="grid-3">
           ${boardQuests.map((quest) => questCardHtml(quest, quest.id === urgentQuestId)).join("")}
@@ -2856,7 +2979,7 @@ function renderResult(reportId) {
         </div>` : ""}
         <div class="button-row" style="margin-top: 18px;">
           <button class="primary-button" onclick="openReport('${escapeJsArg(report.id)}')">報告書を読む</button>
-          <button class="secondary-button" onclick="returnFromResult()">ギルドへ戻る</button>
+          <button class="secondary-button" onclick="returnFromResult('${escapeJsArg(report.id)}')">ギルドへ戻る</button>
         </div>
       </div>
     </section>
@@ -2864,10 +2987,11 @@ function renderResult(reportId) {
 }
 
 // リザルトを見終えたら「今回の帰還」通知を消す（案B・体験版①）。報告書を読んだ場合は openReport 側で消える。
-function returnFromResult() {
-  state.activeResultReportId = null;
+// ★ 同時遠征（2026-09-20・EX-138）：消すのは**その1件だけ**。残っていれば次の帰還をそのまま出す。
+function returnFromResult(reportId) {
+  dismissResultReportId(reportId ?? nextResultReportId());
   saveState();
-  setRoute("home");
+  setRoute(nextResultReportId() ? "result" : "home");
 }
 
 function selectQuest(id) {
@@ -2916,7 +3040,26 @@ function clearSelections() {
 }
 
 function startExpedition() {
-  if (!selectedQuestId || selectedAdventurerIds.length === 0 || state.expedition) return;
+  if (!selectedQuestId || selectedAdventurerIds.length === 0) return;
+  // ★ 同時遠征（2026-09-20・EX-138）。塞ぐ条件を3つに分けた。
+  if (expeditionSlotsLeft() <= 0) return;                      // 本数の上限（2本）
+  const quest = getQuest(selectedQuestId);
+  if (!quest) return;
+  if (isQuestOnExpedition(selectedQuestId)) return;            // 裁定2：同じ依頼の二重出撃は禁止
+  if (isChainQuest(quest) && chainSlotBusy()) return;          // 裁定b：チェーン系は同時1本まで
+  // ★ **出発の直前に status を見直す**（2026-09-20・EX-138）。
+  //   ⚠️ これまでガードは画面側（編成カードの `disabled`）だけで、`startExpedition` は見ていなかった。
+  //     2本目を組む操作が正規の経路になった以上、**選び終えてから状態が変わる**ことがある。
+  const partyNow = selectedAdventurerIds.map(getAdventurer);
+  if (partyNow.some((adv) => !adv || adv.status !== "待機中")) {
+    selectedAdventurerIds = selectedAdventurerIds.filter((id) => getAdventurer(id)?.status === "待機中");
+    selectedAdventurerItems = Object.fromEntries(
+      Object.entries(selectedAdventurerItems).filter(([advId]) => selectedAdventurerIds.includes(advId))
+    );
+    saveState();
+    render();
+    return;
+  }
   if (expeditionBlockedMessage(selectedAdventurerIds)) return;
   // 重症は本人が断る。編成では選べる（バッジで見えている）ので、断られるのは強行したときだけ。
   const refusal = departRefusalMessage(selectedAdventurerIds);
@@ -2932,22 +3075,30 @@ function startExpedition() {
   });
   const departCond = getCurrentConditions();
   state.worldState.totalExpeditions += 1;
-  state.expedition = {
-    id: `exp_${Date.now()}`,
+  const expedition = {
+    id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, // ★ 同じ瞬間の2本で衝突しない
     questId: selectedQuestId,
     adventurerIds: [...selectedAdventurerIds],
     adventurerItemIds: JSON.parse(JSON.stringify(selectedAdventurerItems)),
     itemIds: getAllItemIds(selectedAdventurerItems),
     startTime: Date.now(),
-    durationMs: getQuestDurationMs(getQuest(selectedQuestId)),
+    durationMs: getQuestDurationMs(quest),
     seed: Math.floor(Math.random() * 1000000),
     departTimeOfDay: departCond.timeOfDay,
-    departWeather: departCond.weather
+    departWeather: departCond.weather,
+    // ★ 「初回か」は**出発時に確定してデータへ書く**（2026-09-20・EX-138）。
+    //   ⚠️ 帰還時に `state.reports` を見る形だと、**同じ依頼を2本同時に出したとき両方が初回になる**。
+    //     例外は例外としてデータに書く（`outcomeOverride` と同じ流儀）。
+    firstRunOfQuest: isFirstRunOfQuest(quest)
   };
+  state.expeditions = [...getExpeditions(), expedition];
+  // ★ 遠征が0本→1本になった瞬間が、暦と行方不明の時計の起点（2026-09-20・EX-138）。
+  //   2本目の出発では起点を動かさない（区間は続いている）。
+  beginExpeditionSpan(expedition.startTime);
   // ★ 判明済みの行方不明の時計は、遠征が始まった時から進む（2026-08-18・EX-070）。
   state.adventurers.forEach((adv) => {
     const m = adv.missing;
-    if (m && m.deadAt == null && m.revealedAt != null && m.anchorStart == null) m.anchorStart = state.expedition.startTime;
+    if (m && m.deadAt == null && m.revealedAt != null && m.anchorStart == null) m.anchorStart = expedition.startTime;
   });
   selectedQuestId = null;
   selectedAdventurerIds = [];
@@ -2956,16 +3107,34 @@ function startExpedition() {
   setRoute("home");
 }
 
-function advanceTimeForMock() {
-  if (!state.expedition) return;
-  state.expedition.startTime = Date.now() - state.expedition.durationMs;
+// Mock用：扉の音を待たずに1本だけ畳む（2026-09-20・EX-138 で遠征ごとに受けるようにした）。
+function advanceTimeForMock(expeditionId) {
+  const expedition = expeditionId ? getExpeditionById(expeditionId) : getExpeditions()[0];
+  if (!expedition) return;
+  // ★ 巻き戻すのは**実時間ぶん**（`durationMs / 倍率`）。2026-09-20・EX-138。
+  //   ⚠️ `durationMs` をそのまま引くと、加速中は**完了時刻が過去に飛びすぎて**暦と
+  //     行方不明の時計の区間が0になる（区間で数える形にしたので、ここが効くようになった）。
+  expedition.startTime = Date.now() - expedition.durationMs / getDemoSpeed();
   saveState();
   checkExpeditionCompletion();
-  if (state.activeResultReportId) {
+  if (nextResultReportId()) {
     setRoute("result");
   } else {
     render();
   }
+}
+
+// 帰還の行列の先頭（2026-09-20・EX-138）。★ 棚に無い id は捨てる（報告書が消えた場合の掃除）。
+function nextResultReportId() {
+  const queue = Array.isArray(state.activeResultReportIds) ? state.activeResultReportIds : [];
+  const alive = queue.filter((id) => state.reports.some((report) => report.id === id));
+  if (alive.length !== queue.length) state.activeResultReportIds = alive;
+  return alive[0] ?? null;
+}
+
+function dismissResultReportId(id) {
+  if (!Array.isArray(state.activeResultReportIds)) return;
+  state.activeResultReportIds = state.activeResultReportIds.filter((item) => item !== id);
 }
 
 function openReport(id) {
@@ -2978,7 +3147,7 @@ function openReport(id) {
     applyReport(report);
     report.applied = true;
   }
-  if (state.activeResultReportId === id) state.activeResultReportId = null; // 帰還通知を消化（案B）
+  dismissResultReportId(id); // 帰還通知を消化（案B。行列から1件だけ外す）
   state.activeReportId = id;
   saveState();
   setRoute("report");
@@ -6652,7 +6821,7 @@ function generateReport(expedition) {
 
   // 保全依頼：辺境教会周辺の定期巡回
   if (quest.id === "quest_church_patrol") {
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -6695,7 +6864,7 @@ function generateReport(expedition) {
 
   // 保全依頼：古い小橋の応急修理
   if (quest.id === "quest_old_bridge_repair") {
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -6755,7 +6924,7 @@ function generateReport(expedition) {
   // 輸送依頼：薬草包みの納品
   if (quest.id === "quest_herb_delivery") {
     // 雨と油紙の効きは共通経路（天候の負荷と油紙の軽減）に移した（2026-07-31）
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -6815,7 +6984,7 @@ function generateReport(expedition) {
   // 救助依頼：帰ってこない薬草採りの確認
   if (quest.id === "quest_missing_herbalist") {
     // 笛の効きは共通経路（はぐれかけた工程の立て直し）に移した（2026-07-31）
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -7017,7 +7186,7 @@ function generateReport(expedition) {
 
   if (quest.id === "quest_evening_market_escort") {
     // 古地図の効きは共通経路（道の負荷の軽減）に移した（2026-07-31）
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -7078,7 +7247,7 @@ function generateReport(expedition) {
 
   // 記録依頼：古い石碑の拓本
   if (quest.id === "quest_old_stele_rubbing") {
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const soloAdv = isSoloHumanParty(party);
@@ -7139,7 +7308,7 @@ function generateReport(expedition) {
   if (lifeQuestEventPools[quest.id]) {
     const pool = lifeQuestEventPools[quest.id];
     const workEvents = pickMany(pool.workEvents, 3 + Math.floor(rng() * 2), rng);
-    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng);
+    const field = resolveFieldwork(quest, party, itemIds, expedition.departWeather ?? "晴れ", rng, expedition);
     const outcome = field.outcome;
 
     const outcomeInfo = field.turnBack
@@ -7239,7 +7408,7 @@ function generateReport(expedition) {
   const roadEvents = pickMany(pool.roadEvents, 2 + Math.floor(rng() * 2), rng);
   // 支給品と編成の効きは共通経路へ移した（2026-07-31）。油紙＝天候、古地図＝道の負荷、
   // 薬草師や配達人の腕＝その依頼で使う育成値、として工程の判定に入る。
-  const field = resolveFieldwork(quest, party, itemIds, weather, rng);
+  const field = resolveFieldwork(quest, party, itemIds, weather, rng, expedition);
   const outcome = field.outcome;
 
   const outcomeInfo = field.turnBack
@@ -8411,15 +8580,20 @@ function fieldworkOutcome(quest, fw, outcomes, rng) {
 
 // その依頼を一度も行っていないか。★ `state` を増やさず `state.reports` から導く（EX-093／EX-102 と同じ形）。
 //   遠征の完了処理は報告書を棚に載せる**前**に生成を回すので、ここに今回の回は入っていない。
-function isFirstRunOfQuest(quest) {
+function isFirstRunOfQuest(quest, expedition = null) {
   if (!quest) return false;
+  // ★ 出発時に確定した旗があればそれを見る（2026-09-20・EX-138）。
+  //   ⚠️ 帰還時に `state.reports` を見る形だと、**同じ依頼を2本同時に出したとき両方が初回**になる。
+  //   ※ 旗を持たない遠征（旧セーブ・検証スクリプトが組んだもの）は従来どおり報告書から導く。
+  if (typeof expedition?.firstRunOfQuest === "boolean") return expedition.firstRunOfQuest;
   return !(state.reports ?? []).some((report) => report.questId === quest.id);
 }
 
 // 各依頼の分岐から同じ形で呼ぶための入口。工程を回し、結末を格下げし、工程ログを作るまで。
-function resolveFieldwork(quest, party, itemIds, weather, rng) {
+function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null) {
   // ★ 初回だけの例外（2026-08-06 裁定／EX-131）。依頼データが `firstRunNeverFails` を持つ回だけ見る。
-  const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest);
+  //   ★ 「初回か」は出発時に確定した旗を優先する（2026-09-20・EX-138）。
+  const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest, expedition);
   const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail });
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines: fieldworkLogLines(fw, rng) };
@@ -8633,7 +8807,7 @@ window.debugFieldworkSim = function (questId = "quest_herb", trials = 200, party
 // ★ **だから新しい定数やエンジンを足すときも、この2文より前に置くこと。**
 //   ここを動かすと同じ事故が戻る。
 setInterval(() => {
-  if (state.expedition) render();
+  if (hasExpeditions()) render();
 }, 1000);
 
 render();
