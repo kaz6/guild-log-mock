@@ -6384,7 +6384,15 @@ function generateReport(expedition) {
   // 新形式 [id1, id2] と旧形式 "id" の両方に対応して平坦化
   const itemIds = getAllItemIds(adventurerItemIds);
   const items = itemIds.map(getItem).filter(Boolean);
-  const rng = makeRng(expedition.seed + state.worldState.totalExpeditions * 37 + state.reports.length * 101);
+  // ★ 乱数は**出発時に確定した値だけ**から作る（2026-09-20・EX-138）。
+  // ⚠️ 以前は `state.worldState.totalExpeditions * 37 + state.reports.length * 101` を混ぜていた。
+  //   混ぜると**他の遠征の出発・帰還で本文が変わる**——同じ遠征でも、手元の報告書が1本増えただけ、
+  //   2本目を出発させただけで別の文になる（2026-09-20・EX-137 の実測）。
+  //   ★ **同時遠征を入れると、同じ瞬間に2本畳んだときの処理順でも入れ替わる。**
+  //   ★ これは**検証（同一シードで不一致0）の前提そのもの**なので、同時遠征とは切り離して先に直した。
+  // ★ `expedition.seed` は出発時に引いた乱数（`startExpedition`）。在席ログ・掛け合い・成長ログの3本は
+  //   以前からこの値だけを見ている（`+991` / `+553` / `+317`）。**ここも同じ形に揃えた。**
+  const rng = makeRng(expedition.seed);
   const tensionValue = quest.tensionBase != null ? computeTensionValue(quest, rng) : null;
   const tensionLevel = tensionValue != null ? tensionToLevel(tensionValue) : null;
   const tensionMeta = tensionLevel != null ? { tensionValue, tensionLevel } : {};
