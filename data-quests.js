@@ -338,6 +338,9 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_escort",
+    // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
+    //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
+    chainSlot: true,
     title: "街道の外れを行く隊商の護衛",
     category: "護衛",
     danger: "中",
@@ -358,6 +361,9 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_search",
+    // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
+    //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
+    chainSlot: true,
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "隊商の緊急捜索",
@@ -381,6 +387,9 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_lastchance",
+    // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
+    //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
+    chainSlot: true,
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "最後の手がかり",
