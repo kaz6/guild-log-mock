@@ -9,10 +9,12 @@ const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には�
 //   **発動条件：配布ビルドを作る前に必ず個別移行関数方式へ切り替える。** ここを飛ばさない。
 const STATE_SCHEMA_VERSION = 3;
 const MAX_PARTY_SIZE = 4;
-// ★ 同時に出せる遠征の本数（2026-09-20・EX-138）。**上限は「本数」で持つ**——人数で持つと、
-//   工程の疲労（少人数ほど重い）と二重のブレーキになる。
-// ★ まず2本。壊れ方（時計・暦・帰還・id）は2本でも全部出るので、増やすときはこの値を変えるだけ。
-const MAX_CONCURRENT_EXPEDITIONS = 2;
+// ★ 同時に出せる遠征の**本数に上限は無い**（2026-09-20・EX-139 で EX-138 の「2本まで」を撤回）。
+//   ★ **可能だが推奨しない行動は縛らない**（`00_shared` の「ゲーム設計の根幹」1）。
+//     少人数に割れば**疲労が重くなり失敗率が上がる**ので、不利は既に数値で表れている。
+//   ★ 実質の上限は**人数**（1本につき1人以上・エルシーは単独不可）。
+//   ⚠️ 禁止として残すのは「矛盾が出るもの」だけ——**同じ依頼の二重出撃**（初回の例外が2回効く）と
+//     **捜索チェーンの重なり**（stage が二重に進む）。
 
 // === 時間スケール（体験版②・2026-07-26／2026-07-28 に定義を data 側へ移設） ===
 // 帯の定義はデータなので `data-time.js` が持つ。ここは参照するだけ（値は向こうが正）。
@@ -827,11 +829,13 @@ function latestExpeditionRealEndMs() {
   return getExpeditions().reduce((max, expedition) => Math.max(max, expeditionRealEndMs(expedition)), 0);
 }
 
-function expeditionSlotsLeft() {
-  return Math.max(0, MAX_CONCURRENT_EXPEDITIONS - getExpeditions().length);
+// その依頼が**いま出ている**か（2026-09-20・EX-138 の裁定2＝同じ依頼の二重出撃は禁止）。
+// 待機中の冒険者の人数（2026-09-20・EX-139）。★ 本数の上限を外したので、
+//   出せるかどうかを決めるのは**人数**になった。掲示板の帯はこれを出す。
+function idleAdventurerCount() {
+  return state.adventurers.filter((adv) => adv.status === "待機中").length;
 }
 
-// その依頼が**いま出ている**か（2026-09-20・EX-138 の裁定2＝同じ依頼の二重出撃は禁止）。
 function isQuestOnExpedition(questId) {
   return getExpeditions().some((expedition) => expedition.questId === questId);
 }
@@ -1782,7 +1786,7 @@ function renderQuests() {
   // ★ 同時遠征（2026-09-20・EX-138）：塞ぐのは**本数の上限・同じ依頼・チェーン系の重なり**の3つ。
   const questOnExpedition = selectedQuestId ? isQuestOnExpedition(selectedQuestId) : false;
   const chainBlocked = selectedQuest ? isChainQuest(selectedQuest) && chainSlotBusy() : false;
-  const canStart = selectedQuestId && selectedAdventurerIds.length > 0 && expeditionSlotsLeft() > 0
+  const canStart = selectedQuestId && selectedAdventurerIds.length > 0
     && !questOnExpedition && !chainBlocked && !expeditionBlock;
 
   const cond = getCurrentConditions();
@@ -1841,9 +1845,9 @@ function renderQuests() {
             <p class="eyebrow">Quest Board</p>
             <h3>依頼選択</h3>
           </div>
-          ${expeditionSlotsLeft() > 0
-            ? `<span class="status-pill good">出発可能（あと${expeditionSlotsLeft()}組）</span>`
-            : `<span class="status-pill away">遠征は同時に${MAX_CONCURRENT_EXPEDITIONS}組まで</span>`}
+          ${idleAdventurerCount() > 0
+            ? `<span class="status-pill good">出発可能（待機中 ${idleAdventurerCount()}人）</span>`
+            : `<span class="status-pill away">待機中の冒険者がいません</span>`}
         </div>
         <div class="grid-3">
           ${boardQuests.map((quest) => questCardHtml(quest, quest.id === urgentQuestId)).join("")}
@@ -3041,8 +3045,8 @@ function clearSelections() {
 
 function startExpedition() {
   if (!selectedQuestId || selectedAdventurerIds.length === 0) return;
-  // ★ 同時遠征（2026-09-20・EX-138）。塞ぐ条件を3つに分けた。
-  if (expeditionSlotsLeft() <= 0) return;                      // 本数の上限（2本）
+  // ★ 同時遠征（2026-09-20・EX-138／EX-139 で本数の上限を撤去）。
+  //   ★ 塞ぐのは**矛盾が出る2つだけ**。本数は縛らない（人数が実質の上限）。
   const quest = getQuest(selectedQuestId);
   if (!quest) return;
   if (isQuestOnExpedition(selectedQuestId)) return;            // 裁定2：同じ依頼の二重出撃は禁止
