@@ -25,6 +25,10 @@ window.masterQuests = [
     //   画面外の場所としてログと会話の中にだけ出す。
     id: "quest_tavern_errand",
     title: "隣の酒場に買い出し",
+    // ★ 2026-09-21・EX-140【3】：**一度きり**（一度行ったら二度と掲示板に出ない）。
+    //   ⚠️ これで下の `firstRunNeverFails` の「2回目以降は通常の判定に戻る」は**到達しなくなる**が、
+    //     旗は残す——**例外の理由はデータから読めるべき**で、一度きりを外したときに黙って挙動が変わらないため。
+    oneTime: true,
     category: "生活",
     danger: "低",
     area: "ギルドの隣の酒場",
@@ -72,7 +76,9 @@ window.masterQuests = [
     danger: "低",
     area: "薄明の森",
     durationBand: "short_1h",
-    unlockedBy: "quest_signpost",
+        // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を「古い道標の確認」から掃除へ）。
+    //   ★ 6枠目に1時間の依頼を置くのは裁定1＝A。所要が1分〜1時間に散り、同時遠征が活きる。
+    unlockedBy: "quest_guild_cleanup",
     recommended: ["斥候", "薬草師"],
     tags: ["探索", "採集", "観察"],
     observationTarget: "森喰い兎",
@@ -149,7 +155,8 @@ window.masterQuests = [
     danger: "低",
     area: "町の小さな祝宴会場",
     durationBand: "near_10m",
-    unlockedBy: "quest_tavern_errand",
+        // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
+    unlockedBy: "quest_guild_cleanup",
     recommended: ["世話焼き", "郵便配達人", "豪胆"],
     tags: ["生活", "祝宴", "運搬", "案内", "地域"],
     observationTarget: "なし",
@@ -164,9 +171,12 @@ window.masterQuests = [
     category: "生活",
     danger: "低",
     area: "ギルドの中",
-    durationBand: "near_1m",
-    // 解禁位置（案）：「隣の酒場に買い出し」の次の層（結婚式・夕市・夜道と同層）。
-    // 廃屋（達成数2件）より前に出うる。掃除の達成も廃屋の達成数に数えられる。
+    // ★ 2026-09-21・EX-140【3】：1分 → 20秒（`near_20s` は EX-133 で潰さず残してあった帯）。
+    durationBand: "near_20s",
+    // ★ 2026-09-21・EX-140【3】：序盤の流れは **酒場 → 掃除 → 6件**（外へ出す → ギルドの中を知る → 世界が開く）。
+    //   ★ **この依頼が6件の解禁元**（廃屋・結婚式・夕市・夜道・小橋・森の薬草採集）。
+    //   ★ **一度きり**。酒場と同じく、一度行ったら二度と掲示板に出ない。
+    oneTime: true,
     unlockedBy: "quest_tavern_errand",
     // ★ 本作で唯一、報告書の書き手が受付嬢（アルメナ）になる例外（2026-08-18・EX-064）。
     //   文は定型で、可変部は参加者の名前だけ（記録係＋出した冒険者＋エルシー。記録係も現場にいる）。
@@ -190,9 +200,12 @@ window.masterQuests = [
     danger: "低",
     area: "町外れの古い家屋",
     durationBand: "near_1m",
-    // ★ 解禁は達成数で持つ（2026-08-06）。どのクエストを終えたかは問わず、2件終えたら出る＝3回目に選べる。
-    //   `unlockedBy`（特定の依頼を終えたら開く）とは別の条件で、両方あるときは両方満たしたときだけ開く。
-    unlockedAfterCount: 2,
+    // ★ 2026-09-21・EX-140【3】裁定2：`unlockedAfterCount: 2` をやめ、掃除へ付け替えた。
+    //   ⚠️ 新しい流れでは達成数2件は**酒場＋掃除でしか満たせない**ので、条件としては意味を失っていた。
+    //     さらに**将来ここへ依頼を足すと、廃屋の解禁が黙って前にずれる**（罠になる）。
+    //   ★ 2026-08-06 の「廃屋を別の特定クエストに繋ぎ直す」は当時却下したが、却下理由（順路が塞がる）は
+    //     **掃除が全員必ず通る地点なので今回は成立しない**。理由が無効になったうえでの撤回。
+    unlockedBy: "quest_guild_cleanup",
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
@@ -250,7 +263,8 @@ window.masterQuests = [
     danger: "低",
     area: "村はずれの小川",
     durationBand: "short_30m",
-    unlockedBy: "quest_evening_market_escort",
+        // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を「夕市帰りの親子の付き添い」から掃除へ）。
+    unlockedBy: "quest_guild_cleanup",
     recommended: ["戦士", "慎重", "見習い盾役"],
     tags: ["保全", "修繕", "水辺", "足場", "応急処置", "地域"],
     observationTarget: "なし",
@@ -327,7 +341,8 @@ window.masterQuests = [
     danger: "低",
     area: "夕暮れの街道",
     durationBand: "near_10m",
-    unlockedBy: "quest_tavern_errand",
+        // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
+    unlockedBy: "quest_guild_cleanup",
     recommended: ["見習い盾役", "斥候", "慎重"],
     tags: ["護衛", "付き添い", "夕方", "街道", "親子", "地域", "帰還"],
     observationTarget: "なし",
@@ -450,7 +465,8 @@ window.masterQuests = [
     danger: "高",
     area: "村はずれの道",
     durationBand: "near_10m",
-    unlockedBy: "quest_tavern_errand",
+        // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
+    unlockedBy: "quest_guild_cleanup",
     recommended: ["戦士", "慎重", "観察"],
     tags: ["戦闘", "夜道", "怪異", "記録"],
     observationTarget: "残る灯り",
