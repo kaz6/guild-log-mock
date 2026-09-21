@@ -212,7 +212,11 @@ window.masterAdventurers = [
     stats: { combat: 0, exploration: 32, investigation: 10, negotiation: 0, support: 0, survival: 30 },
     accessory: {
       name: "専用ハーネス",
-      effect: "carry_support_item",
+      // ★ 2026-09-21・EX-140【2】：内部キー 「carry_support_item」 がそのまま名簿の「効果」欄に出ていた。
+      //   ★ ここは表示専用の欄（`adventurerAccessoryDetailHtml` が出すだけで、コードは1行も読んでいない）。
+      //   他の4人と同じ「一文で書く」形に揃えた。⚠️ 下の `capacity` は死蔵なので効果には書かない
+      //   （スロット数は全員2で固定＝書くと嘘になる）。
+      effect: "支給品を背負って運べる。",
       capacity: 1, // ★死蔵（スロット数は全員2で固定）
       tags: ["支給品", "運搬", "救助"]
     },

@@ -1670,6 +1670,18 @@ function isQuestUnlocked(quest, clearedQuestIds) {
   return clearedQuestIds.has(quest.unlockedBy);
 }
 
+// ★ 掃除の定型報告書で、エルシーがギルドにいたか（2026-09-21・EX-140【1】）。
+//   ⚠️ EX-064 は「ギルド犬なので編成しなくても必ず出る」としたが、**当時は遠征が1本だった**。
+//     同時遠征（EX-138）が入った今は、**別の遠征に出ている最中でも「陽だまりで眠った」と書かれる**
+//     ＝報告書が嘘になる。裁定の更新：**掃除の時点で待機中なら出る。遠征中なら出さない。**
+//   ★ 判定は出発時に書いた旗（`elsieAtGuild`）を優先し、無いとき（旧セーブ・直接呼び出し）だけ
+//     現在の状態から導く（2026-09-20・EX-138 の `firstRunOfQuest` と同じ形）。
+function isElsieAtGuild(expedition = null) {
+  if (expedition && typeof expedition.elsieAtGuild === "boolean") return expedition.elsieAtGuild;
+  const elsie = getAdventurer("adv_elsie");
+  return !!elsie && elsie.status === "待機中";
+}
+
 function getClearedQuestIds() {
   return new Set(state.reports.map((report) => report.questId));
 }
@@ -1684,6 +1696,13 @@ function getClearedQuestIds() {
 //   ⚠️ 掲示板は1秒ごとに描き直されるので、**判定は乱数を使わない**（毎秒ちらつくため）。
 //     必要な間隔は最後に行った回の位置から決めるので、同じ状態なら必ず同じ答えになる。
 function questBoardVisibility(quest, reports) {
+  // ★ 一度きり（2026-09-21・EX-140【3】）。**一度行ったら二度と掲示板に出ない**（酒場・掃除）。
+  //   ★ 規則の優先順位は **一度きり → 再出現 → クールタイム**（クールタイムは `buildBoardQuests` 側）。
+  //     一番強い規則なので最初に見る。⚠️ 順序を決めずに足すと、EX-093 と同じ取り違えが起きる。
+  //   ★ 成否は問わない（解放の判定と同じ＝行った事実で数える）。
+  if (quest.oneTime && reports.some((report) => report.questId === quest.id)) {
+    return { visible: false, reason: "一度きり" };
+  }
   const rule = quest.reappearAfterCount;
   if (!rule) return { visible: true };
   // ★ `state.reports` は **unshift**（新しいものが先頭・`app.js` の遠征完了処理）。
@@ -3093,7 +3112,11 @@ function startExpedition() {
     // ★ 「初回か」は**出発時に確定してデータへ書く**（2026-09-20・EX-138）。
     //   ⚠️ 帰還時に `state.reports` を見る形だと、**同じ依頼を2本同時に出したとき両方が初回になる**。
     //     例外は例外としてデータに書く（`outcomeOverride` と同じ流儀）。
-    firstRunOfQuest: isFirstRunOfQuest(quest)
+    firstRunOfQuest: isFirstRunOfQuest(quest),
+    // ★ エルシーがギルドにいるか（2026-09-21・EX-140【1】）。掃除の定型報告書が読む。
+    //   ここは status を「遠征中」に変えた**あと**なので、この遠征に連れ出した回は false になる
+    //   （その回は報告書側が「編成に入っている」で拾う）。
+    elsieAtGuild: isElsieAtGuild()
   };
   state.expeditions = [...getExpeditions(), expedition];
   // ★ 遠征が0本→1本になった瞬間が、暦と行方不明の時計の起点（2026-09-20・EX-138）。
@@ -6535,6 +6558,8 @@ function finalizeQuestReport(options) {
 }
 
 // 定型報告書の文面（2026-08-18・EX-064）。★ 文はチャット側が書いたもので、ここでは変えない。
+//   ★ 2026-09-21・EX-140【4】：⑥の「いつも机で書いてばかりの」を「着任したばかりで机にかじりつきの」へ
+//     （チャット側の指示）。**2件目に出る依頼なので「いつも」が成立しない。**
 //   ★ 抽選をしない（乱数を1つも引かない）。だからシード・天候・時間帯を変えても同じ報告書になる。
 // 可変トークン：{参加者}＝記録係＋出した冒険者＋エルシーの名前列／{記録係}／{エルシー}／
 //   historyPerAdventurer の {名前}＝その冒険者の表示名。
@@ -6544,8 +6569,9 @@ const RECEPTIONIST_REPORT_TEMPLATE = {
     { kind: "", text: "参加してくださったのは、{参加者}のみなさんです。" },
     { kind: "action", text: "窓を開け、床を掃き、掲示板の古い貼り紙を剥がしました。机の下からは、失くしたはずのペン先がふたつ出てきました。" },
     { kind: "action", text: "書棚の埃を払い、依頼書の綴りを年の順に並べ直しました。インク壺はみんなで磨いたので、どれも新品のように光っています。" },
-    { kind: "drama", text: "{エルシー}は雑巾を運ぶお手伝いをしてくれましたが、途中から陽だまりで眠ってしまいました。起こさないように、その一角だけ最後に掃除しました。" },
-    { kind: "drama", text: "{記録係}さんは高いところの拭き掃除を引き受けてくださいました。いつも机で書いてばかりのあなたの、良い気分転換になっていたら嬉しいです。" },
+    // ★ `needsElsie`：エルシーがギルドにいる回だけ出す行（2026-09-21・EX-140【1】）。
+    { kind: "drama", needsElsie: true, text: "{エルシー}は雑巾を運ぶお手伝いをしてくれましたが、途中から陽だまりで眠ってしまいました。起こさないように、その一角だけ最後に掃除しました。" },
+    { kind: "drama", text: "{記録係}さんは高いところの拭き掃除を引き受けてくださいました。着任したばかりで机にかじりつきのあなたの、良い気分転換になっていたら嬉しいです。" },
     { kind: "afterglow", text: "綺麗になったホールは、少しだけ広く見えます。明日からまた、ここで皆さんの帰りをお待ちします。" }
   ],
   // ★ 結末ラベルは依頼データの outcomes.full と同じ語にする（履歴・段階の判定が同じ表を見るため）。
@@ -6588,12 +6614,14 @@ function generateReport(expedition) {
   //   id のハードコードでは分岐しない。語彙の判定・工程エンジン・担い手の選出・緊張度・
   //   presence／掛け合い／成長ログのどれも使わない。文は定型で、可変部は参加者の名前だけ。
   if (quest.fixedReport) {
-    // 参加者＝記録係＋出した冒険者＋エルシー。★ エルシーはギルド犬＝ギルドに常駐しているので、
-    //   編成に入れていなくても名を連ねる（入れていれば重複させない）。
+    // 参加者＝記録係＋出した冒険者＋エルシー。★ エルシーはギルド犬なので編成に入れていなくても名を連ねるが、
+    //   ★ **別の遠征に出ている回は出さない**（2026-09-21・EX-140【1】。EX-064 の常駐をここで更新した）。
     const keeperName = state.player?.name ?? "記録係";
     const elsieName = getDisplayName(getAdventurer("adv_elsie") ?? { name: "エルシー" });
+    const elsieInParty = party.some((adv) => adv.id === "adv_elsie");
+    const elsiePresent = elsieInParty || isElsieAtGuild(expedition);
     const humanNames = party.filter((a) => isHumanAdventurer(a)).map((a) => getDisplayName(a));
-    const participantNames = [keeperName, ...humanNames, elsieName].join("、");
+    const participantNames = [keeperName, ...humanNames, ...(elsiePresent ? [elsieName] : [])].join("、");
 
     // ★★ 文面はチャット側が書く（EX-064・停止中）。下の各行は「差し替え待ちの印」であって仮文ではない。
     //   構造：{ kind, text } の配列。text の中の {参加者}｛記録係}{エルシー} を実名に置き換える。
@@ -6602,7 +6630,11 @@ function generateReport(expedition) {
       .replaceAll("{参加者}", participantNames)
       .replaceAll("{記録係}", keeperName)
       .replaceAll("{エルシー}", elsieName);
-    template.logs.forEach((line) => add(line.kind, fill(line.text)));
+    //   ★ いない回は**行ごと落とす**（名前だけ消すと文が壊れる）。落ちるのは `needsElsie` の1行だけ。
+    template.logs.forEach((line) => {
+      if (line.needsElsie && !elsiePresent) return;
+      add(line.kind, fill(line.text));
+    });
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
