@@ -1,4 +1,14 @@
 const STORAGE_KEY = "expeditionGuildLogMockV011";
+// ★ 手動セーブ＝「記録を綴じる」（2026-09-21・EX-141）。**オートセーブとは別のキー**に置く。
+//   ★ 別にする理由：同じキーに入れると、世代不一致の初期化（`loadState`）と「Mock初期化」が
+//     **綴じた記録ごと巻き添えにする**——戻りたい場面でまさに消える。
+//     （2026-07-27 に `state.unlockedQuestIds` を却下した理由「state が増え、既存セーブの扱いを決める必要が出る」も同じ向き）
+const BOUND_STORAGE_KEY = "expeditionGuildLogMockV011_bound";
+// ★ 綴じた記録は**2冊まで**（裁定＝点1のC）。画面に出るのは常に最新の1冊で、
+//   綴じるたびに前の1冊が裏へ下がる。★ **戻ると最新の1冊を使い切り、裏の1冊が表に出る**
+//   （実装側の判断。そうしないと裏の1冊へ到達する経路が無く、枠が1つの案と同じになる）。
+//   ⚠️ 代償は「綴じ忘れていれば遠くまで戻る」であって「詰む」ではない、という裁定を満たすための形。
+const MAX_BOUND_BOOKS = 2;
 const MOCK_VERSION = "v0.1.2"; // 表示専用（セーブ互換の判定には使わない）
 // セーブデータの世代番号（体験版①・2026-07-26導入）。stateの破壊的変更時に+1する。
 // モック段階の方針：不一致なら初期化（旧セーブは捨てる割り切り）。体験版を配布した後は
@@ -620,6 +630,137 @@ function saveState() {
   state.selectedAdventurerIds = selectedAdventurerIds;
   state.selectedAdventurerItems = selectedAdventurerItems;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// ── 記録を綴じる（手動セーブ・2026-09-21・EX-141）────────────────────────────
+// ★ オートセーブ（`saveState`）はこれまでどおり毎回上書きする。綴じるのは**戻る先**を別に取る操作。
+// ★ **動かすのは「走っている時計」だけ**。就任日・報告書の作成日時・読了ハンコ・命名の確定印は
+//   **記録された事実**なので、綴じても戻しても1ミリ秒も動かさない。
+// ★ 時計は**絶対時刻ではなく残り時間（1倍の ms）で持つ**（裁定＝点6のA）。戻すときに現在時刻から組み直すので、
+//   綴じる→戻す→また綴じる を繰り返してもずれが積まず、途中で加速倍率が変わっても進みぐあいが保たれる。
+//   ⚠️ 絶対時刻をずらす方式にすると、錨を1つ数え漏らしただけで**沈黙して通る**（`missing.occurredAt` は実際に
+//     一覧から漏れていた）。残り時間で持てば、組み直す側に書いた分だけが効く。
+let bindNoticeText = null;        // ③⑦の1行。画面だけの一時状態で保存しない
+let bindRestoreConfirmOpen = false; // 戻す前の確認を開いているか。同じく保存しない
+
+function readBoundBooks() {
+  try {
+    const raw = localStorage.getItem(BOUND_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.books) ? parsed.books : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeBoundBooks(books) {
+  localStorage.setItem(BOUND_STORAGE_KEY, JSON.stringify({ books: books.slice(0, MAX_BOUND_BOOKS) }));
+}
+
+function latestBoundBook() {
+  return readBoundBooks()[0] ?? null;
+}
+
+// 走っている時計を「残り時間」「積み上がった時間」に直して取り出す。
+function captureClocks(now) {
+  const speed = getDemoSpeed();
+  const latestEnd = latestExpeditionRealEndMs();
+  const expeditions = {};
+  getExpeditions().forEach((expedition) => {
+    // 残りを**1倍の ms** で持つ（`durationMs` と同じ単位）。進みぐあいは durationMs との比で決まる。
+    expeditions[expedition.id] = Math.max(0, (expeditionRealEndMs(expedition) - now)) * speed;
+  });
+  const injuries = {};
+  const missing = {};
+  state.adventurers.forEach((adv) => {
+    if (adv.injury?.level) injuries[adv.id] = getInjuryRemainingMs(adv, now);
+    const m = adv.missing;
+    if (m && m.anchorStart != null) missing[adv.id] = Math.max(0, Math.min(now, latestEnd || now) - m.anchorStart);
+  });
+  const anchor = state.worldState.expeditionAnchorStart;
+  return { expeditions, injuries, missing, spanAccruedMs: anchor == null ? null : Math.max(0, now - anchor) };
+}
+
+// 取り出した時計を、いまの時刻から組み直す（戻すときに使う）。
+function rebuildClocks(snapshot, clocks, now) {
+  const speed = getDemoSpeed();
+  (snapshot.expeditions ?? []).forEach((expedition) => {
+    const remainingBase = clocks?.expeditions?.[expedition.id];
+    if (typeof remainingBase !== "number") return;
+    const elapsedBase = Math.max(0, (expedition.durationMs ?? 0) - remainingBase);
+    expedition.startTime = now - elapsedBase / speed;
+  });
+  (snapshot.adventurers ?? []).forEach((adv) => {
+    const remaining = clocks?.injuries?.[adv.id];
+    if (adv.injury?.level && typeof remaining === "number") {
+      const elapsedBase = Math.max(0, (adv.injury.recoverMs ?? 0) - remaining);
+      adv.injury.injuredAt = now - elapsedBase / speed;
+    }
+    const accrued = clocks?.missing?.[adv.id];
+    if (adv.missing && typeof accrued === "number") adv.missing.anchorStart = now - accrued;
+    else if (adv.missing) adv.missing.anchorStart = null;
+  });
+  if (snapshot.worldState) {
+    snapshot.worldState.expeditionAnchorStart =
+      typeof clocks?.spanAccruedMs === "number" ? now - clocks.spanAccruedMs : null;
+  }
+  return snapshot;
+}
+
+// 綴じる。★ 画面に出るのは常に最新の1冊で、前の1冊は裏へ下がる（上書きの確認は出さない＝失われないため）。
+function bindRecord() {
+  const now = Date.now();
+  saveState();
+  const book = {
+    boundAt: now,
+    // 戻す側が世代を見られるようにしておく（読むときは `loadState` と同じ移行を通す）
+    schemaVersion: STATE_SCHEMA_VERSION,
+    meta: {
+      daysPassed: state.worldState.daysPassed,
+      reportCount: state.reports.length,
+      expeditionCount: getExpeditions().length
+    },
+    clocks: captureClocks(now),
+    snapshot: JSON.parse(JSON.stringify(state))
+  };
+  writeBoundBooks([book, ...readBoundBooks()]);
+  bindNoticeText = "ここまでの記録を綴じた。";
+  bindRestoreConfirmOpen = false;
+  render();
+}
+
+// 戻す。★ 生データを代入せず、**オートセーブと同じ入口（`loadState`）を通す**——
+//   内容で移し替える流儀（単数→配列・生態目録のキー移行・アイテム欄の正規化など）を綴じた記録も受け取れるように。
+function restoreBoundRecord() {
+  const books = readBoundBooks();
+  const book = books[0];
+  if (!book) return;
+  const rebuilt = rebuildClocks(JSON.parse(JSON.stringify(book.snapshot)), book.clocks, Date.now());
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(rebuilt));
+  // ★ 使い切りにする（裏の1冊が表に出る）。そうしないと、戻った先でも詰んだときに遡れない。
+  writeBoundBooks(books.slice(1));
+  state = loadState();
+  selectedQuestId = state.selectedQuestId ?? null;
+  selectedAdventurerIds = state.selectedAdventurerIds ?? [];
+  selectedAdventurerItems = state.selectedAdventurerItems ?? {};
+  editingAdventurerId = null;
+  bindRestoreConfirmOpen = false;
+  bindNoticeText = `${stampDateText(book.boundAt)}に綴じた記録まで戻った。`;
+  route = "home";
+  saveState();
+  render();
+}
+
+function openBindRestoreConfirm() {
+  bindRestoreConfirmOpen = true;
+  bindNoticeText = null;
+  render();
+}
+
+function closeBindRestoreConfirm() {
+  bindRestoreConfirmOpen = false;
+  render();
 }
 
 function setRoute(nextRoute) {
@@ -1480,6 +1621,61 @@ function interviewComplete() {
   render();
 }
 
+// 綴じるカード（2026-09-21・EX-141）。★ ホームに置く（出発・帰還と同じ画面なので「出す前に綴じる」が自然）。
+//   ★ 出るのは**報告書を1通でも開いてから**——最初の綴じは「最初の仕事を終えて、初めて綴じる」
+//     （面接直後だと中身がほぼ初期状態で、戻り先としての価値が無い）。
+//   ⚠️ 判定は**開封**で見る。読了ハンコはプレイヤーが任意で押すものなので、
+//     そちらで見ると押さない人には促しが永久に出ない。
+//   ⚠️ 依頼 id では分岐しない（最初の報告書が何になっても成り立つ形にしてある）。
+function bindCardHtml() {
+  const anyOpened = state.reports.some((report) => report.opened);
+  const books = readBoundBooks();
+  if (!anyOpened && books.length === 0) return "";
+  const book = books[0] ?? null;
+  const unbound = book ? Math.max(0, state.reports.length - (book.meta?.reportCount ?? 0)) : 0;
+  // ① 受付嬢の促し。まだ一度も綴じていない間だけ出す。
+  const prompt = books.length === 0 ? `
+        <div class="speech">
+          最初の報告書、お疲れさまでした。記録は、区切りのいいところで綴じておくといいですよ。<br />
+          綴じておけば、あとで何かあっても、そこまでは戻れますから。
+        </div>` : "";
+  // ③⑦ 記録係の行為なので地の文
+  const notice = bindNoticeText ? `<p class="bind-notice">${escapeHtml(bindNoticeText)}</p>` : "";
+  // ⑥ 戻す前の確認。★ 勝手に戻さない（「戻る／やめる」の2択を必ず出す）。
+  const confirmBlock = bindRestoreConfirmOpen && book ? `
+        <div class="bind-confirm">
+          <p>最後に綴じた記録（${escapeHtml(stampDateText(book.boundAt))}）まで戻ります。
+          ここから先の記録 ${unbound}通は、綴じられていません。</p>
+          <div class="button-row">
+            <button class="primary-button" onclick="restoreBoundRecord()">戻る</button>
+            <button class="secondary-button" onclick="closeBindRestoreConfirm()">やめる</button>
+          </div>
+        </div>` : "";
+  // ★ 戻す側の入口は**加速中だけ**に出す Mock 用のボタン（「Mock用：扉の音を待たず…」と同じ流儀）。
+  //   本番の入口は運営不能の判定で、そこは金の実装とセットで繋ぐ（2026-09-21 の裁定）。
+  const mockRestore = getDemoSpeed() > 1 && book && !bindRestoreConfirmOpen
+    ? `<button class="ghost-button" onclick="openBindRestoreConfirm()">Mock用：最後に綴じた記録まで戻る</button>`
+    : "";
+  return `
+      <section class="card">
+        <div class="card-body">
+          <div class="card-title">
+            <div>
+              <p class="eyebrow">Record Binding</p>
+              <h3>記録を綴じる</h3>
+            </div>
+            ${book ? `<span class="status-pill">最後に綴じた記録 ${escapeHtml(stampDateText(book.boundAt))}</span>` : ""}
+          </div>${prompt}
+          ${notice}
+          <p class="muted">区切りのいいところで綴じておけば、そこまで戻れる。</p>
+          <div class="button-row">
+            <button class="primary-button" onclick="bindRecord()">記録を綴じる</button>
+            ${mockRestore}
+          </div>${confirmBlock}
+        </div>
+      </section>`;
+}
+
 function renderHome() {
   const unopened = state.reports.filter((report) => !report.opened);
   const latestReports = state.reports.slice(0, 3);
@@ -1555,6 +1751,7 @@ function renderHome() {
         </div>
       </section>
     </div>
+    ${bindCardHtml()}
 
     ${expeditions.map(expeditionProgressHtml).join("")}
   `;
@@ -7532,6 +7729,10 @@ resetButton.addEventListener("click", () => {
   const ok = confirm("Mockの保存データを初期化しますか？");
   if (!ok) return;
   localStorage.removeItem(STORAGE_KEY);
+  // ★ 綴じた記録も消す（2026-09-21・EX-141）。残すと、面接からやり直した直後に**前の人生の記録へ戻れて**しまう。
+  localStorage.removeItem(BOUND_STORAGE_KEY);
+  bindNoticeText = null;
+  bindRestoreConfirmOpen = false;
   state = createInitialState();
   selectedQuestId = null;
   selectedAdventurerIds = [];
