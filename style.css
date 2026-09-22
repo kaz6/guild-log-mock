@@ -1347,3 +1347,15 @@ hr.soft {
   font-size: 12px;
   font-weight: 500;
 }
+
+/* 記録を綴じる（2026-09-21・EX-141）。★ ③⑦の1行は記録係の行為なので地の文の見え方にする。 */
+.bind-notice {
+  margin: 12px 0 0;
+  color: var(--ink);
+}
+.bind-confirm {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(120, 100, 70, 0.35);
+  border-radius: 8px;
+}
