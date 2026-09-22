@@ -2146,9 +2146,13 @@ function questCardHtml(quest, isUrgent = false) {
 function selectableAdventurerHtml(adventurer) {
   const selected = selectedAdventurerIds.includes(adventurer.id);
   const disabled = adventurer.status !== "待機中";
+  // ★ 2026-09-22・EX-142【3】：**全員 traits 3つ**を出す（2026-08-06 の裁定が未実装だった）。
+  //   ⚠️ これまでは人間だけ気質（慎重・豪胆…）1つで、**気質を持たないエルシーだけ traits に落ちていた**。
+  //   ★ 誰をどこへ出すかを決めるとき、プレイヤーが見たいのは適性。**欠点は文脈で長所になる**（掃除に潔癖症）。
+  //   ★ 気質（`personality`）は**判定には今までどおり効く**（撤退の閾値など）。画面から外しただけで、役割は触っていない。
   const subtitle = adventurer.special
-    ? `${escapeHtml(adventurer.job)} / ${escapeHtml(traitsDisplayText(adventurer))}${adventurer.species === "dog" ? " / 犬" : ""}`
-    : `${escapeHtml(adventurer.job)} / ${escapeHtml(adventurer.personality)} / 前職：${escapeHtml(adventurer.background)}`;
+    ? `${escapeHtml(adventurer.job)}${adventurer.species === "dog" ? " / 犬" : ""}`
+    : `${escapeHtml(adventurer.job)} / 前職：${escapeHtml(adventurer.background)}`;
   return `
     <article class="adventurer-card ${selected ? "selected" : ""}" onclick="toggleAdventurer('${escapeJsArg(adventurer.id)}')">
       <div class="card-title">
@@ -2162,6 +2166,7 @@ function selectableAdventurerHtml(adventurer) {
         </div>
       </div>
       ${missingStageHtml(adventurer)}
+      ${traitsTagsHtml(adventurer)}
       <p class="muted">${escapeHtml(adventurer.memo)}</p>
     </article>
   `;
@@ -2275,12 +2280,26 @@ function adventurerListCardHtml(adventurer) {
       ${missingStageHtml(adventurer)}
       <div class="tags">
         <span class="tag">${escapeHtml(adventurer.job)}</span>
-        <span class="tag">${escapeHtml(adventurer.species === "dog" ? "犬" : adventurer.personality)}</span>
+        ${adventurer.species === "dog" ? `<span class="tag">犬</span>` : ""}
         <span class="tag">${escapeHtml(adventurer.background)}</span>
       </div>
+      ${traitsTagsHtml(adventurer)}
       <p class="muted">${escapeHtml(adventurerRosterStatsLine(adventurer))}</p>
     </article>
   `;
+}
+
+// ★ 性格（traits）のタグ。編成カードと名簿カードで同じ形にする（2026-09-22・EX-142【3】）。
+//   ★ **欠点の印は「点線の枠」と色**——詳細画面が既に使っている `trait-positive` / `trait-flaw` を
+//     そのまま広げた（新しい方式を作らない）。★ **数字も通知の見た目にもしない。**
+//   ★ **欠点は必ず最後**（データの並びがそうなっている）。位置も手がかりになる。
+function traitsTagsHtml(adventurer) {
+  const traits = adventurer.traits ?? [];
+  if (traits.length === 0) return "";
+  return `
+      <div class="tags trait-tags">
+        ${traits.map((trait) => `<span class="tag trait-${escapeHtml(trait.type ?? "neutral")}">${escapeHtml(trait.name)}</span>`).join("")}
+      </div>`;
 }
 
 function traitsDisplayText(adventurer) {
@@ -2329,6 +2348,7 @@ function adventurerTraitsDetailHtml(adventurer) {
         <span class="tag trait-${escapeHtml(trait.type ?? "neutral")}">${escapeHtml(trait.name)}</span>
       `).join("")}
     </div>
+    <p class="muted trait-legend">点線で囲ったひとつが短所。出す先によっては長所にもなる。</p>
   `;
 }
 
