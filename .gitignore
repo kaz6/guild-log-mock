@@ -20,3 +20,6 @@ Thumbs.db
 
 # dependencies
 node_modules/
+# テストの出力（2026-09-22・EX-143）
+test-results/
+playwright-report/

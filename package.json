@@ -1,0 +1,15 @@
+{
+  "name": "guild-log-mock",
+  "version": "0.1.2",
+  "private": true,
+  "description": "遠征ギルドログ Mock のテスト宣言。★ 本体（index.html / app.js / data-*.js / style.css）は素の HTML/CSS/JS のままで、ビルドは一切通らない。ここが宣言しているのは検証に使う playwright だけ（2026-09-22・EX-143）。",
+  "scripts": {
+    "test": "playwright test --project=current",
+    "test:acceptance": "playwright test --project=acceptance",
+    "test:all": "playwright test",
+    "test:update-baseline": "node tools/tests/update-baseline.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
