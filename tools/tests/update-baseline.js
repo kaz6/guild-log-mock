@@ -31,7 +31,12 @@ const { sweepOptions, FIELDS, KEY_FIELDS, BASELINE_PATH } = require("./helpers/a
         console.log(`  ${f}: ${r.diff[f]} 件　(${inner})`);
       }
     });
-    if (FIELDS.every((f) => r.diff[f] === 0) && r.missing === 0) console.log("  ★ 差は0件（基準を書き直す必要はありません）");
+    // ★ 差が0なら**書かない**。生成日時だけが変わったファイルをコミットすると、
+    //   「基準を更新したコミット」が中身の無いものになり、**単独コミットの規則が形骸化する**。
+    if (FIELDS.every((f) => r.diff[f] === 0) && r.missing === 0 && old.rows.length === rows.length) {
+      console.log("  ★ 差は0件。基準は書き直しません（生成日時も据え置き）。");
+      return;
+    }
   } else {
     console.log("前の基準がありません（初回の生成）。");
   }
