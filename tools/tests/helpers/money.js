@@ -7,7 +7,8 @@ const baseline = require(BASELINE_PATH);
 //   出発の支払いは本物の経路（moveMoney）で行い、帰還は checkExpeditionCompletion に任せる。
 async function settleExpedition(page, { questId, tier }) {
   const parties = allParties();
-  const row = baseline.rows.find((r) => r.quest === questId && r.tier === tier);
+  // ★ 支給品の軸の行（`supplies` 列あり）は編成の表が別なので使わない
+  const row = baseline.rows.find((r) => r.quest === questId && r.tier === tier && r.supplies == null);
   if (!row) throw new Error(`基準に ${questId} の ${tier} が無い`);
   return page.evaluate(({ questId, party, seed, tier }) => {
     const quest = getQuest(questId);

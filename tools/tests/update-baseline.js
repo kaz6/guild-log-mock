@@ -9,10 +9,10 @@
 // 使い方： npm run test:update-baseline
 const fs = require("fs");
 const { sweep, compare } = require("../sweep");
-const { sweepOptions, FIELDS, KEY_FIELDS, BASELINE_PATH } = require("./helpers/axes");
+const { sweepAll, FIELDS, KEY_FIELDS, BASELINE_PATH } = require("./helpers/axes");
 
 (async () => {
-  const rows = await sweep(sweepOptions());
+  const rows = await sweepAll(sweep);
   const bad = rows.filter((r) => r.error);
   if (bad.length) {
     console.error(`★ 生成に失敗した組が ${bad.length} 件あります。基準は更新しません。`);
@@ -22,7 +22,7 @@ const { sweepOptions, FIELDS, KEY_FIELDS, BASELINE_PATH } = require("./helpers/a
 
   if (fs.existsSync(BASELINE_PATH)) {
     const old = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
-    const r = compare(old.rows, rows, { fields: FIELDS, keyFields: KEY_FIELDS, by: (row) => row.quest });
+    const r = compare(old.rows, rows, { fields: FIELDS, keyFields: KEY_FIELDS, by: (row) => (row.supplies ? `${row.quest}（支給品）` : row.quest) });
     console.log(`前の基準との差（${old.rows.length} 組 → ${rows.length} 組）`);
     console.log(`  対応が取れなかった行: ${r.missing}`);
     FIELDS.forEach((f) => {

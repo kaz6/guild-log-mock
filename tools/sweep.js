@@ -93,7 +93,15 @@ function pageRunner(cfg) {
     const timeOfDay = c.timeOfDay ?? cfg.timeOfDay;
     const holder = cfg.holder ?? party[0];
     let itemIds = {};
-    if (c.item != null) {
+    // ★ 支給品の軸（2026-09-23・EX-145）：`{ name, shared: [品 id], obs: true|false }`。
+    //   出発と同じ関数（`planExpeditionSupplies`：容量で切る→使い手へ振り分ける）を通して持たせる。
+    //   ★ `item` の軸は持ち主を直に決めるので、使い手の規則や容量の変化を**検出できない**（EX-144 で実際に取りこぼした）。
+    if (c.supplies != null) {
+      const partyAdvs = party.map(getAdventurer).filter(Boolean);
+      const firstHuman = partyAdvs.find((a) => isHumanAdventurer(a));
+      const obs = c.supplies.obs && firstHuman ? [firstHuman.id] : [];
+      itemIds = planExpeditionSupplies(partyAdvs, getQuest(c.quest), c.supplies.shared, obs).itemMap;
+    } else if (c.item != null) {
       if (typeof c.item === "string") itemIds = { [holder]: [c.item] };
       else if (Array.isArray(c.item)) itemIds = { [holder]: c.item };
       else itemIds = c.item;
@@ -108,7 +116,8 @@ function pageRunner(cfg) {
     const row = {};
     // 編成そのものは行に入れず、軸の何番目かを入れる（行が編成の配列で膨らむのを避ける。
     // ★ ただし入れないと2つの編成が同じ鍵に潰れて比較できない）。
-    names.forEach((k) => { if (k !== "party") row[k] = c[k]; });
+    // ★ 支給品の軸は名前だけを行に入れる（中身の配列を鍵に入れない）
+    names.forEach((k) => { if (k !== "party") row[k] = k === "supplies" ? c[k].name : c[k]; });
     if (cfg.axes.party) row.partyIndex = cfg.axes.party.findIndex((p) => p === c.party);
     row.quest = c.quest;
 
