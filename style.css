@@ -1371,3 +1371,34 @@ hr.soft {
   border: 1px solid rgba(120, 100, 70, 0.35);
   border-radius: 8px;
 }
+
+/* ギルドの財布（2026-09-23・EX-144）。所持金と直近の出入りだけ。 */
+.status-pill.danger {
+  background: #ff6b5b;
+}
+
+.wallet-ledger {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.wallet-ledger li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line, rgba(0, 0, 0, 0.12));
+}
+
+.wallet-ledger-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.wallet-ledger li.out .wallet-ledger-amount {
+  color: #c0392b;
+}
