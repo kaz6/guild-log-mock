@@ -504,10 +504,13 @@ test.describe("支給品はパーティ共有", () => {
     const got = await page.evaluate(() => ({
       two: partyItemCapacity(["adv_mina", "adv_gadd"]),
       withDog: partyItemCapacity(["adv_mina", "adv_gadd", "adv_elsie"]),
-      per: ITEM_SLOTS_PER_MEMBER
+      per: ITEM_SLOTS_PER_MEMBER,
+      harness: getAdventurer("adv_elsie").accessory.capacity
     }));
     expect(got.two).toBe(2 * got.per);
-    expect(got.withDog, "エルシーも荷を持つ（パーティの荷が増える）").toBe(3 * got.per);
+    // ★ エルシーは2枠＋ハーネスのぶん（2026-09-23・EX-145。値はデータの `accessory.capacity`）
+    expect(got.withDog, "エルシーを連れるとハーネスのぶん荷が増える").toBe(3 * got.per + got.harness);
+    expect(got.harness, "ハーネスが荷を増やしていない").toBeGreaterThan(0);
     // 容量を越えて積めない
     await setStock(page, { item_bandage: 3, item_smoke: 2 });
     const n = await page.evaluate(() => {

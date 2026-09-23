@@ -183,14 +183,16 @@ function stockDrawnItemIds(expedition) {
 // ★ 支給品は**遠征ごとにパーティへ渡す**（誰に持たせるかは選ばない）。持てる量は**メンバーのスロットの合計**。
 // ★ **観察記録票だけは個人**に持たせる（誰に書かせるかを選ぶ）。持たせた人のスロットを1つ埋めるので、
 //   記録票を持たせるほど共有の荷が減る（「誰に書かせるか」と「何を持っていくか」が同じ枠で天秤にかかる）。
-// ★ スロットは全員2で固定（犬も数える。エルシーのハーネスの `capacity` は死蔵のまま）。
+// ★ スロットは全員2で固定（犬も数える）。★ **装身具の `capacity` のぶん荷が増える**（2026-09-23・EX-145）——
+//   エルシーのハーネス（支給品を背負って運べる）が、設計ページの「パーティの荷が増える」として効く。値は仮置き（データ側）。
 const ITEM_SLOTS_PER_MEMBER = 2;
 const OBS_SHEET_ID = "item_obs_sheet";
 
 function partyItemCapacity(advIds, obsHolderIds = []) {
   const members = (advIds ?? []).filter((id) => getAdventurer(id));
   const sheets = (obsHolderIds ?? []).filter((id) => members.includes(id)).length;
-  return Math.max(0, members.length * ITEM_SLOTS_PER_MEMBER - sheets);
+  const carried = members.reduce((sum, id) => sum + Math.max(0, Number(getAdventurer(id)?.accessory?.capacity) || 0), 0);
+  return Math.max(0, members.length * ITEM_SLOTS_PER_MEMBER + carried - sheets);
 }
 
 // 選んでいる共有の荷のうち、その品の数（棚の残りから引いて見せるため）
@@ -229,6 +231,17 @@ function sharedItemUser(itemId, party, quest) {
   let best = null;
   candidates.forEach((adv) => { if (!best || score(adv) > score(best)) best = adv; });
   return best;
+}
+
+// 出発時の支給品を確定する（2026-09-23・EX-145）。★ **出発（`startExpedition`）と対比較（`tools/sweep.js`）が同じこの関数を通る**。
+//   ① 記録票は人間だけ ② 共有の荷を容量（`partyItemCapacity`）で後ろから切る ③ 使い手へ振り分ける。
+//   ⚠️ 解禁（隊商護衛のあと）と棚の在庫は**選ぶ側**（画面と `startExpedition`）で見る。ここは報告書に渡す形を作るだけ。
+function planExpeditionSupplies(party, quest, sharedItemIds, obsHolderIds) {
+  const advIds = party.map((a) => a.id);
+  const obs = (obsHolderIds ?? []).filter((id) => advIds.includes(id) && isHumanAdventurer(getAdventurer(id)));
+  const shared = (sharedItemIds ?? []).filter((id) => getItem(id) && !getItem(id).personal)
+    .slice(0, partyItemCapacity(advIds, obs));
+  return { shared, obsHolders: obs, itemMap: buildExpeditionItemMap(party, quest, shared, obs) };
 }
 
 // 出発時に、共有の荷を使い手ごとの持ち物（`adventurerItemIds`）へ振り分ける。記録票は持たせた人へ。
@@ -3825,8 +3838,11 @@ function startExpedition() {
   // ★ 共有の荷を使い手ごとに振り分ける（2026-09-23・EX-144 裁定A）。**編成順＝選んだ順**（同点の決め手）。
   //   status を変える前に作る（使い手の規則は人の状態を見ないが、順序を確定させておく）。
   const departingParty = selectedAdventurerIds.map(getAdventurer).filter(Boolean);
-  const obsHolders = shoppingTrip ? [] : selectedObsHolders.filter((id) => canHoldObsSheet(getAdventurer(id)));
-  const itemMap = shoppingTrip ? {} : buildExpeditionItemMap(departingParty, quest, selectedSharedItems, obsHolders);
+  const plan = shoppingTrip ? null : planExpeditionSupplies(departingParty, quest, selectedSharedItems,
+    selectedObsHolders.filter((id) => canHoldObsSheet(getAdventurer(id))));
+  const obsHolders = plan ? plan.obsHolders : [];
+  const itemMap = plan ? plan.itemMap : {};
+  if (plan) selectedSharedItems = plan.shared;
   selectedAdventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv) adv.status = "遠征中";
