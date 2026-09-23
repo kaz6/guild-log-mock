@@ -4,7 +4,7 @@
 //     値は data-money.js／依頼データから読み、「その値どおりに動いているか」だけを見る。
 const { test, expect } = require("@playwright/test");
 const { freshPage, interview, seedClearedQuests, departQuest, waitForReturn } = require("../helpers/app");
-const { settleExpedition, setMoney, spend } = require("../helpers/money");
+const { settleExpedition, setMoney, spend, runShopping, setStock } = require("../helpers/money");
 
 test.describe("所持金", () => {
   test("金ははじめからある（初期所持金が正）", async ({ page }) => {
@@ -256,6 +256,174 @@ test.describe("遠征費で割り込む", () => {
     expect(afterB.borrowed).toBe(1);
     // ★ 借りたのは2本目の遠征費を払った直後
     expect(afterB.ledger).toEqual(["借入", "遠征費"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
+
+test.describe("在庫", () => {
+  test("出撃の画面に金額を出さない（節約は買い物の段階でする）", async ({ page }) => {
+    // ★ 出撃ごとに支給品代を計上すると「削れば安く済む＝裸で送り出すのが最適解」になる（設計ページ）。
+    //   ★ 買う時点と持たせる時点を分けるので、持たせる画面には値段も所持金も出さない。
+    const errors = await freshPage(page);
+    await interview(page);
+    // ★ 棚に品を置いてから見る（空の棚だと支給品のボタンが1つも出ず、検査が素通りする）
+    await setStock(page, { item_bandage: 2, item_map: 1 });
+    await page.evaluate(() => setRoute("quests"));
+    await page.locator(".quest-card").first().click();
+    await page.locator(".adventurer-card").first().click();
+    const got = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll(".item-card, .item-assign-btn, .assign-row .slot-label")];
+      return {
+        count: nodes.length,
+        buttons: document.querySelectorAll(".item-assign-btn").length,
+        // ★ 出してよい数字は「スロットN」と棚の残り「×N」だけ（どちらも金額ではない）
+        withPrice: nodes.map((n) => n.innerText.replace(/スロット\d/g, "").replace(/×\d+/g, "")).filter((t) => /\d/.test(t)),
+        dataPrice: document.querySelectorAll("[data-price]").length,
+        wallet: document.querySelectorAll("#app .wallet-card, #app [data-money]").length
+      };
+    });
+    expect(got.count, "支給品の欄が見つからない（画面の形が変わったなら、ここを直す）").toBeGreaterThan(0);
+    expect(got.buttons, "棚に置いた品が枠に並んでいない").toBeGreaterThan(0);
+    expect(got.withPrice).toEqual([]);
+    expect(got.dataPrice).toBe(0);
+    expect(got.wallet, "出撃の画面に所持金を出さない").toBe(0);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("在庫の上限は5（6個目を買えない）", async ({ page }) => {
+    // ★ 上限は「ギルドの持ち物の総数」（棚＋持ち出している分）。値は data-money.js（仮置き）
+    const errors = await freshPage(page);
+    await interview(page);
+    const limit = await page.evaluate(() => ({ code: STOCK_LIMIT, data: window.masterMoneyRules.stockLimit }));
+    expect(limit.code).toBe(limit.data);
+    expect(limit.code).toBe(5); // 設計ページ「上限は一旦5」
+    await setStock(page, { item_bandage: 2, item_smoke: 2 }); // 4個。あと1つだけ買える
+    const got = await runShopping(page, {
+      party: ["adv_mina", "adv_gadd"],
+      wishes: { adv_mina: ["item_bandage", "item_smoke"], adv_gadd: ["item_bandage", null] }
+    });
+    expect(got.error).toBeUndefined();
+    expect(got.shopping.bought.length).toBe(1);
+    expect(got.shopping.skipped.length).toBe(2);
+    expect(got.owned).toBe(limit.code);
+    // ★ 買えなかった分は払わない
+    expect(got.moneyBefore - got.moneyAfter).toBe(got.fee + got.shopping.unitPrice * 1);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("在庫ははじめ空で、出撃の枠には棚にある物だけが並ぶ（出発で減り、帰れば戻る）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    expect(await page.evaluate(() => stockOwnedTotal())).toBe(0);
+    await page.evaluate(() => setRoute("quests"));
+    await page.locator(".quest-card").first().click();
+    await page.locator(".adventurer-card").first().click();
+    expect(await page.locator(".item-assign-btn").count(), "空の棚から持たせられてはいけない").toBe(0);
+
+    await setStock(page, { item_map: 1 });
+    await page.evaluate(() => setRoute("quests"));
+    const names = await page.evaluate(() => [...document.querySelectorAll(".assign-row")][0]
+      ? [...[...document.querySelectorAll(".assign-row")][0].querySelectorAll(".assign-slot")][0].innerText : "");
+    expect(names).toContain("古地図");
+    expect(names).not.toContain("包帯");
+    // 1つしか無い品は、1枠に入れたらもう並ばない
+    await page.locator(".item-assign-btn").first().click();
+    expect(await page.evaluate(() => stockCount("item_map") - selectedItemCount("item_map"))).toBe(0);
+    // 出発で棚から減り、帰還で戻る（古地図は道具＝使っても戻る）
+    await page.evaluate(() => startExpedition());
+    expect(await page.evaluate(() => ({ shelf: stockCount("item_map"), owned: stockOwnedTotal() }))).toEqual({ shelf: 0, owned: 1 });
+    await page.evaluate(() => { state.expeditions.forEach((e) => { e.startTime = Date.now() - e.durationMs - 1_000; }); checkExpeditionCompletion(); });
+    expect(await page.evaluate(() => stockCount("item_map"))).toBe(1);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("消耗品は使ったら戻らない／使わずに帰れば戻る／道具は戻る", async ({ page }) => {
+    // ★ 設計ページに記述が無い＝実装側の判断（仮）。「使った」は報告書に実際に出た支給品で見る
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const exp = { questId: "quest_herb", adventurerIds: ["adv_mina"], stockDrawn: true,
+        adventurerItemIds: { adv_mina: ["item_bandage", "item_map"], adv_gadd: ["item_smoke", "item_bandage"] } };
+      const report = { money: {}, usedItemIds: ["item_bandage", "item_map"] };
+      state.stock = {};
+      returnItemsToStock(exp, report);
+      return { stock: { ...state.stock }, consumed: report.money.consumed };
+    });
+    // 包帯は2つ持って出て1回使った＝1つ戻る／煙幕は使っていない＝戻る／古地図は道具＝戻る
+    expect(got.stock).toEqual({ item_bandage: 1, item_map: 1, item_smoke: 1 });
+    expect(got.consumed).toEqual(["item_bandage"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
+
+test.describe("買い出しクエスト", () => {
+  test("隊商護衛をクリアすると解禁される", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const q = await page.evaluate(() => window.masterQuests.filter((x) => x.shopping).map((x) => x.unlockedBy));
+    expect(q).toEqual(["quest_caravan_escort"]);
+    expect(await page.evaluate(() => isQuestUnlocked(getQuest("quest_shopping"), getClearedQuestIds()))).toBe(false);
+    await seedClearedQuests(page, ["quest_caravan_escort"]);
+    expect(await page.evaluate(() => isQuestUnlocked(getQuest("quest_shopping"), getClearedQuestIds()))).toBe(true);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("交渉の高い者を送ると安く買える（値引きは最大2割）", async ({ page }) => {
+    // 交渉値だけを変えた2回で、単価が下がること（額そのものは判定しない）
+    const errors = await freshPage(page);
+    await interview(page);
+    const wishes = { adv_mina: ["item_bandage", null] };
+    const low = await runShopping(page, { party: ["adv_mina"], wishes, negotiation: 0 });
+    await setStock(page, {});
+    const high = await runShopping(page, { party: ["adv_mina"], wishes, negotiation: 255 });
+    const rules = await page.evaluate(() => window.masterMoneyRules);
+    expect(low.shopping.unitPrice).toBe(rules.itemPrice);
+    expect(high.shopping.unitPrice).toBeLessThan(low.shopping.unitPrice);
+    // ★ 極端にはならない：最大の値引きでも (1 - shoppingDiscountMax) 倍まで
+    expect(high.shopping.unitPrice).toBe(Math.round(rules.itemPrice * (1 - rules.shoppingDiscountMax)));
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("荷物持ちは人数で決まる（多く連れて行けば多く買える）", async ({ page }) => {
+    // ★ ステータスではなく人数。1人2枠なので、1人と3人で書き付けに書ける量が変わる
+    const errors = await freshPage(page);
+    await interview(page);
+    const one = await runShopping(page, { party: ["adv_mina"], wishes: { adv_mina: ["item_bandage", "item_smoke"] } });
+    await setStock(page, {});
+    const three = await runShopping(page, {
+      party: ["adv_mina", "adv_gadd", "adv_elne"],
+      wishes: { adv_mina: ["item_bandage", "item_smoke"], adv_gadd: ["item_bandage", "item_smoke"], adv_elne: ["item_bandage", null] }
+    });
+    expect(one.shopping.bought.length).toBe(2);
+    expect(three.shopping.bought.length).toBeGreaterThan(one.shopping.bought.length);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("欲しい支給品を「置いておく」枠が使える（在庫に無い物も置ける・半透明）", async ({ page }) => {
+    // ★ 新しい画面を作らない。支給品を持たせる枠に別の意味を持たせる
+    const errors = await freshPage(page);
+    await interview(page);
+    await seedClearedQuests(page, ["quest_caravan_escort"]);
+    await page.evaluate(() => { selectQuest("quest_shopping"); toggleAdventurer("adv_mina"); setRoute("quests"); });
+    expect(await page.evaluate(() => stockOwnedTotal())).toBe(0);
+    const ghosts = page.locator(".item-assign-btn.item-wish.is-ghost");
+    expect(await ghosts.count(), "空の棚でも、買える品は書き付けに置ける").toBeGreaterThan(0);
+    await ghosts.first().click();
+    expect(await page.evaluate(() => getAllItemIds(selectedAdventurerItems).length)).toBe(1);
+    expect(await page.locator(".item-assign-btn.item-wish.is-ghost.selected").count()).toBe(1);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("買える品は段階的に増える（最初から全部並べない）", async ({ page }) => {
+    // ★ 段が開く条件は仮（買い出しを終えた回数）。ここでは「最初は一部だけ」「回を重ねると増える」だけを見る
+    const errors = await freshPage(page);
+    await interview(page);
+    const first = await page.evaluate(() => shopItems().map((i) => i.id));
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.length).toBeLessThan(await page.evaluate(() => state.items.length));
+    await runShopping(page, { party: ["adv_mina"], wishes: { adv_mina: ["item_bandage", null] } });
+    const later = await page.evaluate(() => shopItems().map((i) => i.id));
+    expect(later.length).toBeGreaterThan(first.length);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
