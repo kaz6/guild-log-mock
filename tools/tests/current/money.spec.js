@@ -259,3 +259,29 @@ test.describe("遠征費で割り込む", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
+
+test.describe("在庫", () => {
+  test("出撃の画面に金額を出さない（節約は買い物の段階でする）", async ({ page }) => {
+    // ★ 出撃ごとに支給品代を計上すると「削れば安く済む＝裸で送り出すのが最適解」になる（設計ページ）。
+    //   ★ 買う時点と持たせる時点を分けるので、持たせる画面には値段も所持金も出さない。
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => setRoute("quests"));
+    await page.locator(".quest-card").first().click();
+    await page.locator(".adventurer-card").first().click();
+    const got = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll(".item-card, .item-assign-btn, .assign-row .slot-label")];
+      return {
+        count: nodes.length,
+        withPrice: nodes.map((n) => n.innerText.replace(/スロット\d/g, "")).filter((t) => /\d/.test(t)),
+        dataPrice: document.querySelectorAll("[data-price]").length,
+        wallet: document.querySelectorAll("#app .wallet-card, #app [data-money]").length
+      };
+    });
+    expect(got.count, "支給品の欄が見つからない（画面の形が変わったなら、ここを直す）").toBeGreaterThan(0);
+    expect(got.withPrice).toEqual([]);
+    expect(got.dataPrice).toBe(0);
+    expect(got.wallet, "出撃の画面に所持金を出さない").toBe(0);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});

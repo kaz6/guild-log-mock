@@ -26,10 +26,6 @@ test.describe("在庫", () => {
     expect(await page.evaluate(() => STOCK_LIMIT)).toBe(5);
   });
 
-  test.fixme("出撃の画面に金額を出さない（節約は買い物の段階でする）", async ({ page }) => {
-    // ★ 出撃ごとに支給品代を計上すると「削れば安く済む＝裸で送り出すのが最適解」になる
-    expect(await page.evaluate(() => document.body.innerText)).not.toMatch(/支給品.*\d+\s*(G|金)/);
-  });
 });
 
 test.describe("支給品はパーティ共有", () => {
