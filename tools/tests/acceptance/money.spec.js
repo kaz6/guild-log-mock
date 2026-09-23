@@ -21,13 +21,6 @@ const { freshPage, interview } = require("../helpers/app");
 //   決まったらここに入れる。null のままなら、その1件だけ判定を保留する。
 const RELIEF_INTERVAL_N = null;
 
-test.describe("在庫", () => {
-  test.fixme("在庫の上限は5（6個目を買えない）", async ({ page }) => {
-    expect(await page.evaluate(() => STOCK_LIMIT)).toBe(5);
-  });
-
-});
-
 test.describe("支給品はパーティ共有", () => {
   test.fixme("遠征ごとにパーティへ渡す（誰に持たせるかを選ばない）", async ({ page }) => {
     expect(await page.evaluate(() => document.querySelectorAll(".item-assign-btn").length)).toBe(0);
@@ -40,28 +33,6 @@ test.describe("支給品はパーティ共有", () => {
   test.fixme("使うのは語彙で選ばれた担い手（道具の行に名前が出る）", async ({ page }) => {
     // ★ 所持者と担い手の食い違いが消えるので、無人称にしていた道具の行に名前を出せる
     expect(await page.evaluate(() => document.body.innerText)).toMatch(/[ガミエロ][ッナルウ]/);
-  });
-});
-
-test.describe("買い出しクエスト", () => {
-  test.fixme("隊商護衛をクリアすると解禁される", async ({ page }) => {
-    expect(await page.evaluate(() =>
-      window.masterQuests.some((q) => q.unlockedBy === "quest_caravan_escort" && q.shopping))).toBe(true);
-  });
-
-  test.fixme("交渉の高い者を送ると安く買える", async ({ page }) => {
-    // 交渉値だけを変えた2回で、支払額が下がること（額そのものは判定しない）
-    expect(1).toBe(0);
-  });
-
-  test.fixme("荷物持ちは人数で決まる（多く連れて行けば多く買える）", async ({ page }) => {
-    // ★ ステータスではなく人数。1人と3人で買える量が変わること
-    expect(1).toBe(0);
-  });
-
-  test.fixme("欲しい支給品を「置いておく」枠が使える（在庫に無い物も置ける）", async ({ page }) => {
-    // ★ 新しい画面を作らない。支給品を持たせる枠に別の意味を持たせる
-    expect(await page.evaluate(() => document.querySelectorAll(".item-wish.is-ghost").length)).toBeGreaterThan(0);
   });
 });
 

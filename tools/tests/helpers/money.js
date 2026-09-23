@@ -43,4 +43,37 @@ async function spend(page, amount) {
   }, amount);
 }
 
-module.exports = { settleExpedition, setMoney, spend };
+// 買い出しを1回、帰還まで畳む（2026-09-23・EX-144）。出発は本物の経路（startExpedition）を通す。
+//   party … 冒険者 id の配列／wishes … 冒険者 id → [品 id, 品 id]（書き付けの枠）
+//   negotiation … 指定すると、出発前にその値を全員の交渉に置く（値引きの比較用）
+async function runShopping(page, { party, wishes, negotiation = null }) {
+  return page.evaluate(({ party, wishes, negotiation }) => {
+    if (negotiation != null) party.forEach((id) => { const a = getAdventurer(id); if (a) a.stats.negotiation = negotiation; });
+    const moneyBefore = state.money;
+    selectedQuestId = "quest_shopping";
+    selectedAdventurerIds = [...party];
+    selectedAdventurerItems = JSON.parse(JSON.stringify(wishes));
+    startExpedition();
+    const exp = state.expeditions.find((e) => e.questId === "quest_shopping");
+    if (!exp) return { error: "出発できなかった" };
+    exp.startTime = Date.now() - exp.durationMs - 1_000; // 所要時間を過ぎたことにする
+    checkExpeditionCompletion();
+    const report = state.reports[0];
+    return {
+      result: report.result,
+      shopping: report.money.shopping,
+      fee: report.money.fee,
+      moneyBefore,
+      moneyAfter: state.money,
+      stock: JSON.parse(JSON.stringify(state.stock)),
+      owned: stockOwnedTotal()
+    };
+  }, { party, wishes, negotiation });
+}
+
+// 棚を直接置く（テストの前提づくり。帳簿には書かない）
+async function setStock(page, stock) {
+  await page.evaluate((s) => { state.stock = s; saveState(); render(); }, stock);
+}
+
+module.exports = { settleExpedition, setMoney, spend, runShopping, setStock };

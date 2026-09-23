@@ -140,6 +140,113 @@ function questReward(quest, result, fee) {
   return Math.round(fee * (MONEY_RULES.rewardMultiplierByTier[tier] ?? 0));
 }
 
+// === 在庫と買い出し（2026-09-23・EX-144） ===
+// ★ 支給品は**ギルドの買い物として購入し、在庫を持つ**。出撃時は在庫から持たせるだけ（★ その画面に金額を出さない）。
+//   節約したければ買い物の段階でする（設計ページ）。★ 在庫は最初は空——**隊商護衛をクリアして買い出しが開くまで、
+//   支給品は持たせられない**（CURRENT_SPEC 2026-07-25「隊商護衛達成までは支給品をつけられません」）。
+// ★ 上限は**ギルドの持ち物の総数**で数える（棚にある分＋遠征に持ち出している分）。
+//   持ち出した分で棚が空いたように見えると、買い足して上限を越えられてしまう。
+const STOCK_LIMIT = MONEY_RULES.stockLimit;
+
+function stockCount(itemId) {
+  return Math.max(0, Math.floor(Number(state.stock?.[itemId]) || 0));
+}
+
+function addStock(itemId, n) {
+  if (!state.stock || typeof state.stock !== "object") state.stock = {};
+  const next = stockCount(itemId) + n;
+  if (next > 0) state.stock[itemId] = next; else delete state.stock[itemId];
+}
+
+function stockOwnedTotal() {
+  const shelf = Object.keys(state.stock ?? {}).reduce((sum, id) => sum + stockCount(id), 0);
+  const out = getExpeditions().reduce((sum, e) => sum + (e.stockDrawn ? getAllItemIds(e.adventurerItemIds ?? {}).length : 0), 0);
+  return shelf + out;
+}
+
+function normalizeStock(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(Object.entries(raw)
+    .map(([id, n]) => [id, Math.max(0, Math.floor(Number(n) || 0))])
+    .filter(([id, n]) => n > 0 && getItem(id)));
+}
+
+// 編成の枠に今入れている数（出撃の画面で、棚の残りから引いて見せるため）
+function selectedItemCount(itemId) {
+  return getAllItemIds(selectedAdventurerItems).filter((id) => id === itemId).length;
+}
+
+function isShoppingQuest(quest) {
+  return Boolean(quest?.shopping);
+}
+
+// 買い出しを終えた回数（★ 手ぶらで戻った回は数えない）。買える品の段が開く条件に使う（仮）。
+function shoppingTripCount() {
+  return state.reports.filter((r) => isShoppingQuest(getQuest(r.questId)) && GROWTH_TIER_BY_RESULT[r.result] !== "fail").length;
+}
+
+// 買い出しで並ぶ品（★ 最初から全部並べない。段は data-items.js の `shopTier`、開く条件は data-money.js）
+function shopItems() {
+  const trips = shoppingTripCount();
+  return state.items.filter((item) => {
+    const need = MONEY_RULES.shopTierAfterTrips?.[item.shopTier];
+    return item.shopTier != null && need != null && trips >= need;
+  });
+}
+
+// 値引き：パーティで一番「交渉」の高い者の値に応じて、最大2割引き。★ 犬は交渉しない（人間だけを見る）
+function shoppingDiscount(party) {
+  const best = Math.max(0, ...party.filter(isHumanAdventurer).map((a) => Number(a.stats?.negotiation) || 0));
+  const ratio = Math.min(1, best / MONEY_RULES.shoppingDiscountFullAt);
+  return MONEY_RULES.shoppingDiscountMax * ratio;
+}
+
+function shoppingUnitPrice(party) {
+  return Math.round(MONEY_RULES.itemPrice * (1 - shoppingDiscount(party)));
+}
+
+// 買い出しから帰ったら、書き付けの品を買って棚へ入れる。★ 代金は**このとき**払う（値引きは店で決まる）。
+//   ⚠️ 上限に届いたら、残りは買わない（払わない）。★ 手ぶらで戻った回は何も買わない。
+//   払って赤字になったら、出発と同じく借金の判定を通す（「可能だが推奨しない行動は縛らない」）。
+function settleShopping(expedition, report) {
+  const list = Array.isArray(expedition.shoppingList) ? expedition.shoppingList : [];
+  if (!isShoppingQuest(getQuest(expedition.questId))) return;
+  const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  const unitPrice = shoppingUnitPrice(party);
+  const bought = [];
+  const skipped = [];
+  if (GROWTH_TIER_BY_RESULT[report.result] !== "fail") {
+    list.forEach((itemId) => {
+      if (!getItem(itemId) || stockOwnedTotal() >= STOCK_LIMIT) { skipped.push(itemId); return; }
+      addStock(itemId, 1);
+      bought.push(itemId);
+    });
+  }
+  report.money.shopping = { bought, skipped, unitPrice, asked: list.length };
+  if (bought.length === 0) return;
+  const names = bought.map((id) => getItem(id)?.name).filter(Boolean).join("・");
+  moveMoney(-unitPrice * bought.length, "買い出し", skipped.length ? `${names}／棚がいっぱいで${skipped.length}つ買えず` : names);
+  settleNegativeMoney();
+}
+
+// 遠征から帰ったら、持ち出した支給品を棚へ戻す。★ **使った消耗品だけは戻らない**（1回使えば1つ減る）。
+//   ⚠️ 「使った」は報告書に実際に出た支給品（`usedItemIds`）で見る。それを持たない経路では**消耗しない**側に倒す
+//     （持たせ損にしない＝「支給品を削れば得」を作らない。設計ページ「裸で送り出すのが最適解にしない」）。
+//   ⚠️ 在庫の実装より前に出発した遠征（`stockDrawn` が無い）は、棚から出していないので戻さない。
+function returnItemsToStock(expedition, report) {
+  if (!expedition.stockDrawn) return;
+  const used = new Set(Array.isArray(report.usedItemIds) ? report.usedItemIds : []);
+  const consumed = [];
+  getAllItemIds(expedition.adventurerItemIds ?? {}).forEach((itemId) => {
+    if (getItem(itemId)?.consumable && used.has(itemId) && !consumed.includes(itemId)) {
+      consumed.push(itemId);
+      return;
+    }
+    addStock(itemId, 1);
+  });
+  report.money.consumed = consumed;
+}
+
 function getDemoSpeed() {
   const saved = state?.demoSpeed;
   return DEMO_SPEED_OPTIONS.some((option) => option.value === saved) ? saved : 1;
@@ -254,6 +361,7 @@ function createInitialState() {
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     debt: { active: null, timesBorrowed: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    stock: {},       // 在庫（品 id → 数）。★ 最初は空（2026-09-23・EX-144）
     gameOver: null,  // 運営不能（★ 記録の終わり方の一つ。「負け」ではない）
     player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
   };
@@ -317,6 +425,7 @@ function loadState() {
     if (!Array.isArray(merged.moneyLedger)) merged.moneyLedger = [];
     if (!Array.isArray(merged.moneyEvents)) merged.moneyEvents = [];
     if (!Number.isFinite(merged.money)) merged.money = MONEY_RULES.initialMoney;
+    merged.stock = normalizeStock(parsed.stock);
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
     delete merged.lastObservationUpdate;
@@ -1504,6 +1613,9 @@ function completeExpeditionIfDue(expedition) {
   const reward = Number.isFinite(expedition.fee) ? questReward(questForMoney, report.result, feePaid) : 0;
   report.money = { fee: feePaid, reward };
   receiveReward(reward, questForMoney?.title ?? null);
+  // ★ 在庫（2026-09-23・EX-144）：買い出しなら書き付けの品を買い、そうでなければ持ち出した品を棚へ戻す。
+  settleShopping(expedition, report);
+  returnItemsToStock(expedition, report);
   state.reports.unshift(report);
 
   // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
@@ -1958,8 +2070,15 @@ function walletCardHtml() {
               <span class="wallet-ledger-label">${escapeHtml(entry.label ?? "")}${entry.detail ? `<span class="muted">（${escapeHtml(entry.detail)}）</span>` : ""}</span>
               <span class="wallet-ledger-amount">${entry.amount > 0 ? "＋" : ""}${formatMoneyAmount(entry.amount)}</span>
             </li>`).join("")}</ul>`}
+        ${stockLineHtml()}
       </div>
     </section>`;
+}
+
+// 棚（在庫）の1行（2026-09-23・EX-144）。★ 上限はギルドの持ち物の総数（持ち出している分も数える）。
+function stockLineHtml() {
+  const shelf = state.items.filter((item) => stockCount(item.id) > 0).map((item) => `${item.name}×${stockCount(item.id)}`);
+  return `<p class="wallet-stock muted" data-stock-owned="${stockOwnedTotal()}">棚：${escapeHtml(shelf.length ? shelf.join("・") : "空")}（持ち物 ${stockOwnedTotal()}／${STOCK_LIMIT}）</p>`;
 }
 
 // 読了ハンコ（2026-08-06）。★ プレイヤーが手で押すもので、開封（`opened`）とは別。
@@ -2297,7 +2416,7 @@ function renderQuests() {
           <div class="card-title">
             <div>
               <p class="eyebrow">Supplies</p>
-              <h3>支給品割り当て</h3>
+              <h3>${isShoppingQuest(selectedQuest) ? "買ってきてほしい物" : "支給品割り当て"}</h3>
             </div>
             <span class="status-pill">${getAllItemIds(selectedAdventurerItems).length}個</span>
           </div>
@@ -2387,11 +2506,15 @@ function selectableItemHtml(item) {
   `;
 }
 
+// ★ 同じ枠に別の意味を持たせる（2026-09-23・EX-144。設計ページ「新しい画面を作らない」）。
+//   通常の依頼＝**在庫から持たせる**（棚にある物だけが並ぶ。★ 金額は出さない）。
+//   買い出し＝**欲しい物を置いておく**（まだ無い物なので半透明。在庫に無い物も置ける）。
 function adventurerItemAssignHtml(advId) {
   const adv = getAdventurer(advId);
   if (!adv) return "";
   const slots = selectedAdventurerItems[advId] ?? [null, null];
-  const slotLabels = ["スロット1", "スロット2"];
+  const shopping = isShoppingQuest(getQuest(selectedQuestId));
+  const slotLabels = shopping ? ["書き付け1", "書き付け2"] : ["スロット1", "スロット2"];
   return `
     <div class="assign-row">
       <span class="assign-name">${escapeHtml(getDisplayName(adv))}</span>
@@ -2403,20 +2526,34 @@ function adventurerItemAssignHtml(advId) {
             <div class="assign-slot">
               <span class="slot-label">${slotLabels[slot]}${currentItem ? `：${escapeHtml(getItem(currentItem)?.name ?? "")}` : "（空）"}</span>
               <div class="assign-items">
-                ${state.items.map((item) => {
+                ${assignableItems(shopping, currentItem).map((item) => {
                   const isAssigned = currentItem === item.id;
                   const sameAdvOtherSlot = otherSlotItem === item.id;
-                  return `<button class="item-assign-btn${isAssigned ? " selected" : ""}${sameAdvOtherSlot ? " taken" : ""}"
+                  // 棚の残り（この枠に入れている分は数えない）。★ 数だけ出す。金額は出さない
+                  const left = shopping ? null : stockCount(item.id) - selectedItemCount(item.id);
+                  return `<button class="item-assign-btn${shopping ? " item-wish is-ghost" : ""}${isAssigned ? " selected" : ""}${sameAdvOtherSlot ? " taken" : ""}"
                     onclick="${sameAdvOtherSlot ? "" : `assignItem('${escapeJsArg(advId)}', ${slot}, '${escapeJsArg(item.id)}')`}"
                     ${sameAdvOtherSlot ? "disabled" : ""}
-                    title="${escapeHtml(item.note)}">${escapeHtml(item.name)}</button>`;
-                }).join("")}
+                    title="${escapeHtml(item.note)}">${escapeHtml(item.name)}${left != null && !isAssigned ? `<span class="item-left">×${left}</span>` : ""}</button>`;
+                }).join("") || `<span class="muted">${escapeHtml(emptyStockText())}</span>`}
               </div>
             </div>`;
         }).join("")}
       </div>
     </div>
   `;
+}
+
+// 枠に並べる品。買い出しは**買える品**（段で開いたもの）、それ以外は**棚に残っている品**（＋今この枠に入れている品）。
+function assignableItems(shopping, currentItem) {
+  if (shopping) return shopItems();
+  return state.items.filter((item) => item.id === currentItem || stockCount(item.id) - selectedItemCount(item.id) > 0);
+}
+
+function emptyStockText() {
+  return getClearedQuestIds().has("quest_caravan_escort")
+    ? "棚に支給品がない。買い出しを頼めば増える。"
+    : "ギルドの棚は、まだ空だ。";
 }
 
 function dispatchSummaryHtml(quest, expeditionBlock = null) {
@@ -2430,7 +2567,7 @@ function dispatchSummaryHtml(quest, expeditionBlock = null) {
       <span>依頼</span><strong>${escapeHtml(questDisplayTitle(quest))}</strong>
       <span>分類</span><strong>${escapeHtml(quest.category ?? "遠征")}</strong>
       <span>編成</span><strong>${party.length ? party.map(getDisplayName).map(escapeHtml).join(" / ") : "未選択"}</strong>
-      <span>支給品</span><strong>${itemsText}</strong>
+      <span>${isShoppingQuest(quest) ? "頼む品" : "支給品"}</span><strong>${itemsText}</strong>
       <span>所要時間</span><strong>${escapeHtml(formatQuestDuration(quest))}</strong>
     </div>
     ${expeditionBlock ? `<p class="muted" style="margin-top: 12px;">${escapeHtml(expeditionBlock)}</p>` : ""}
@@ -3440,6 +3577,8 @@ function returnFromResult(reportId) {
 }
 
 function selectQuest(id) {
+  // ★ 買い出しとそれ以外では枠の意味が違う（書き付け／持ち物）。行き来したら枠を空ける（2026-09-23・EX-144）
+  if (isShoppingQuest(getQuest(selectedQuestId)) !== isShoppingQuest(getQuest(id))) selectedAdventurerItems = {};
   selectedQuestId = id;
   departRefusal = null;
   saveState();
@@ -3469,10 +3608,25 @@ function assignItem(advId, slot, itemId) {
   } else {
     const otherSlot = slot === 0 ? 1 : 0;
     if (slots[otherSlot] === itemId) return; // 同じ冒険者の別スロットに同じ支給品は不可
+    // ★ 棚に残っていない物は持たせられない（買い出しの書き付けは在庫と無関係）。2026-09-23・EX-144
+    if (!isShoppingQuest(getQuest(selectedQuestId)) && stockCount(itemId) - selectedItemCount(itemId) <= 0) return;
     slots[slot] = itemId;
   }
   saveState();
   render();
+}
+
+// 枠の中身を棚の数に合わせる（足りない分は後ろの枠から空ける）
+function trimSelectedItemsToStock() {
+  const left = {};
+  Object.values(selectedAdventurerItems).forEach((slots) => {
+    if (!Array.isArray(slots)) return;
+    slots.forEach((itemId, i) => {
+      if (!itemId) return;
+      if (left[itemId] == null) left[itemId] = stockCount(itemId);
+      if (left[itemId] > 0) left[itemId] -= 1; else slots[i] = null;
+    });
+  });
 }
 
 function clearSelections() {
@@ -3515,6 +3669,10 @@ function startExpedition() {
     return;
   }
   departRefusal = null;
+  // ★ 在庫（2026-09-23・EX-144）。買い出しは枠を**書き付け**として持っていく（棚から出さない）。
+  //   それ以外は、棚に無い物を枠から落としてから出す（買い出しの枠から切り替えた直後など）。
+  const shoppingTrip = isShoppingQuest(quest);
+  if (!shoppingTrip) trimSelectedItemsToStock();
   selectedAdventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv) adv.status = "遠征中";
@@ -3525,8 +3683,8 @@ function startExpedition() {
     id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, // ★ 同じ瞬間の2本で衝突しない
     questId: selectedQuestId,
     adventurerIds: [...selectedAdventurerIds],
-    adventurerItemIds: JSON.parse(JSON.stringify(selectedAdventurerItems)),
-    itemIds: getAllItemIds(selectedAdventurerItems),
+    adventurerItemIds: shoppingTrip ? {} : JSON.parse(JSON.stringify(selectedAdventurerItems)),
+    itemIds: shoppingTrip ? [] : getAllItemIds(selectedAdventurerItems),
     startTime: Date.now(),
     durationMs: getQuestDurationMs(quest),
     seed: Math.floor(Math.random() * 1000000),
@@ -3544,6 +3702,12 @@ function startExpedition() {
   // ★ 遠征費は出発した瞬間に引く（2026-09-23・EX-144）。**同時遠征は1本ずつ引いて判定する**（細則4）
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
   expedition.fee = questFee(quest);
+  if (shoppingTrip) {
+    expedition.shoppingList = getAllItemIds(selectedAdventurerItems);
+  } else {
+    getAllItemIds(expedition.adventurerItemIds).forEach((itemId) => addStock(itemId, -1));
+    expedition.stockDrawn = true; // 棚から出した印。帰還時に戻すのはこれがある遠征だけ
+  }
   moveMoney(-expedition.fee, questFeeLabel(quest), quest.title);
   // ★ 割り込む出発も許す（細則3。「可能だが推奨しない行動は縛らない」）。出発した瞬間に借金の判定。
   settleNegativeMoney();
@@ -4342,6 +4506,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
   const allowedByQuest = {
     quest_tavern_errand: ["item_bandage", "item_whistle"],
     quest_guild_cleanup: [], // ★ ギルド内なので支給品は選べない（持たせる判断が発生しない。EX-064）
+    quest_shopping: [], // ★ 買い出しは持っていかない。枠は「欲しい物の書き付け」（2026-09-23・EX-144）
 
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
@@ -6919,6 +7084,39 @@ function newReportId() {
   return `report_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// 買い出しの報告書（2026-09-23・EX-144）。★★ 文面はすべて仮。チャット側が書き直す待ち。
+//   ★ 書き付けを渡すのは**一番交渉の高い人間**（値引きを決めるのと同じ人。本文と帳簿が食い違わないように）。
+//   ★ 人間がいなければ話が通せない（犬は伝えられない）＝手ぶらで戻る。乱数は引かない。
+function generateShoppingReport(expedition, quest, party, logs, add, tensionValue, tensionLevel) {
+  const humans = party.filter(isHumanAdventurer);
+  const subject = partySubject(party);
+  const wishNames = (expedition.shoppingList ?? []).map((id) => getItem(id)?.name).filter(Boolean);
+  add("", `${subject}は「${quest.title}」のため、${quest.area}へ向かった。`);
+  add("", `書き付け：${wishNames.length ? wishNames.join("・") : "なし"}。`);
+  const negotiator = humans.reduce((best, a) => (!best || (a.stats?.negotiation ?? 0) > (best.stats?.negotiation ?? 0) ? a : best), null);
+  const result = negotiator ? "買い付け" : "手ぶらで戻った";
+  if (negotiator) {
+    add("action", `${getDisplayName(negotiator)}が書き付けを大将に渡すと、大将は品目を一つずつ読み上げてから荷を解いた。`);
+    add("afterglow", `${subject}は品を受け取り、ギルドまで運び込んだ。`);
+  } else {
+    add("action", `${subject}は広場まで行ったが、書き付けを渡せる者がいなかった。`);
+    add("afterglow", `書き付けは、そのまま持ち帰られた。`);
+  }
+  return finalizeQuestReport({
+    expedition,
+    quest,
+    party,
+    logs,
+    result,
+    summary: negotiator ? "隊商の大将に買い付けを頼み、品を受け取って戻った。" : "書き付けを渡せず、手ぶらで戻った。",
+    historyLine: negotiator ? `${quest.title}：買い付け。` : `${quest.title}：手ぶらで戻った。`,
+    adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, { result }),
+    tensionValue,
+    tensionLevel,
+    hiddenTags: { shopping: true }
+  });
+}
+
 function finalizeQuestReport(options) {
   const {
     expedition,
@@ -6981,6 +7179,8 @@ function finalizeQuestReport(options) {
 
   if (tensionValue != null) report.tensionValue = tensionValue;
   if (tensionLevel != null) report.tensionLevel = tensionLevel;
+  // ★ 実際に効いた支給品を報告書に残す（2026-09-23・EX-144）。消耗品を棚へ戻すかの判定が読む。本文には触らない
+  if (Array.isArray(usedItemIds)) report.usedItemIds = usedItemIds;
 
   if (wrapElsie && rng) return withElsieLog(report, quest, party, rng);
   return report;
@@ -7039,6 +7239,11 @@ function generateReport(expedition) {
   const tensionMeta = tensionLevel != null ? { tensionValue, tensionLevel } : {};
   const logs = [];
   const add = (kind, text) => logs.push({ kind, text });
+
+  // ── 買い出し（2026-09-23・EX-144）──────────────────────────────────────
+  // ★ `shopping` の旗で分岐する。★ 何を買えたか・いくら払ったかは**書かない**——
+  //   金と在庫は報告書の生成の外（帰還時の `settleShopping`）で動く。本文は「頼みに行った」ことだけ。
+  if (quest.shopping) return generateShoppingReport(expedition, quest, party, logs, add, tensionValue, tensionLevel);
 
   // ── 定型報告書（2026-08-18・EX-064）─────────────────────────────────────
   // ★ 本作で唯一、書き手が受付嬢になる例外。データの旗（fixedReport / reportAuthor）で分岐し、
@@ -7382,6 +7587,7 @@ function generateReport(expedition) {
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+      usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
       hiddenTags: { preservation: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -7442,6 +7648,7 @@ function generateReport(expedition) {
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+      usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
       hiddenTags: { transport: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -7507,6 +7714,7 @@ function generateReport(expedition) {
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+      usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
       hiddenTags: { rescue: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -7706,6 +7914,7 @@ function generateReport(expedition) {
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+      usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
       hiddenTags: { escort: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -7765,6 +7974,7 @@ function generateReport(expedition) {
       observationNotes: generateObservationNotes(quest, party, adventurerItemIds, rng),
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+      usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
       hiddenTags: { record: true, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -7862,6 +8072,7 @@ function generateReport(expedition) {
       observationNotes,
       departConditions,
       highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+      usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
       hiddenTags: { workEvents, outcome, ...fieldworkHiddenTags(field.fw), recordDensityGain: 1 + logs.length },
       ...tensionMeta,
       createdAt: new Date().toISOString()
@@ -7929,6 +8140,7 @@ function generateReport(expedition) {
     observationNotes,
     departConditions,
     highlight: generateHighlight(quest, party, itemIds, departConditions, outcomeInfo.result, rng, effectiveItemIds(field.fw)),
+    usedItemIds: effectiveItemIds(field.fw), // 在庫の消耗品の判定が読む（2026-09-23・EX-144）
     hiddenTags: {
       weather,
       roadEvents,
