@@ -52,6 +52,44 @@ function getQuestDurationMs(quest) {
   return getQuestDurationDays(quest) * REAL_MINUTES_PER_GAME_DAY * MS_PER_REAL_MINUTE;
 }
 
+// === 金（2026-09-23・EX-144） ===
+// ★ 値は `data-money.js` が持つ（すべて仮置き。制作の最後に作者が調整する）。ここは参照するだけ。
+// ★★ **金の出入りは報告書の生成（`generateReport`）の外で行う。** 報告書は三人称の記録で、
+//   金はギルドの帳簿の話——混ぜると、金の仕様を動かすたびに報告書の対比較まで動く。
+const MONEY_RULES = window.masterMoneyRules;
+
+// 遠征費：所要時間の帯（近／短／中／長）で決まる固定額。★ プレイヤーは選べない。
+//   依頼データの `money.fee` があればそちらが正（酒場＝酒樽の代金／掃除＝0）。
+function questFee(quest) {
+  if (typeof quest?.money?.fee === "number") return quest.money.fee;
+  const band = QUEST_DURATION_BANDS[quest?.durationBand] ?? QUEST_DURATION_BANDS[DEFAULT_DURATION_BAND];
+  return MONEY_RULES.feeByBandLabel[band?.label] ?? 0;
+}
+
+function questFeeLabel(quest) {
+  return quest?.money?.feeLabel ?? "遠征費";
+}
+
+// 帳簿に1行つけて、所持金を動かす。★ 0円の出入りは帳簿に書かない（掃除のように費用の無い依頼で行が埋まらないように）。
+const MONEY_LEDGER_KEEP = 8;
+function moveMoney(amount, label, detail = null) {
+  if (!Number.isFinite(amount) || amount === 0) return;
+  state.money = (Number.isFinite(state.money) ? state.money : 0) + amount;
+  if (!Array.isArray(state.moneyLedger)) state.moneyLedger = [];
+  state.moneyLedger.unshift({ at: Date.now(), amount, label, detail, balance: state.money });
+  state.moneyLedger.length = Math.min(state.moneyLedger.length, MONEY_LEDGER_KEEP);
+}
+
+// 報酬：遠征費 × 結末の段の倍率（完遂 ×2／部分 ×1.2／未達 0）。
+//   ★ 段は成長と同じ表（`GROWTH_TIER_BY_RESULT`＝依頼データの outcomes から作る）を引く。
+//     結末と段の対応を2か所で持たない（2026-08-01 の方針）。
+//   依頼データの `money.reward` があればそちらが正（固定額）。
+function questReward(quest, result, fee) {
+  if (typeof quest?.money?.reward === "number") return quest.money.reward;
+  const tier = GROWTH_TIER_BY_RESULT[result] ?? "fail";
+  return Math.round(fee * (MONEY_RULES.rewardMultiplierByTier[tier] ?? 0));
+}
+
 function getDemoSpeed() {
   const saved = state?.demoSpeed;
   return DEMO_SPEED_OPTIONS.some((option) => option.value === saved) ? saved : 1;
@@ -159,6 +197,10 @@ function createInitialState() {
     reportMemos: [],
     searchChain: null,
     demoSpeed: 1, // 体験版モードの時間加速倍率（1=等倍＝本番の見え方）
+    // ★ 金と在庫（2026-09-23・EX-144）。値は data-money.js（すべて仮置き）。
+    //   ★ 旧セーブは `{ ...base, ...parsed }` で欠けが埋まる（`schemaVersion` は上げない＝EX-125 と同じ形）。
+    money: MONEY_RULES.initialMoney,
+    moneyLedger: [], // 直近の出入り（新しいものが先頭）。ホームに出す
     player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
   };
 }
@@ -1386,6 +1428,14 @@ function completeExpeditionIfDue(expedition) {
   // ★ 名前の参照化 第二段（2026-09-17・EX-121）。**全部の行が揃ってから**通す。
   //   在席ログ・掛け合い・成長ログも報告書の本文なので、足し終わったあとに置き換える。
   applyNamedTargetToReport(report);
+  // ★ 報酬（2026-09-23・EX-144）。**報告書の生成が終わってから**帳簿につける（本文には触らない）。
+  //   報告書には「この遠征で動いた金」だけを記録として残す（画面の帳簿は8行で流れるので）。
+  //   ⚠️ 出発時の遠征費を持たない遠征（金の実装より前に出発した旧セーブ）は、報酬も0として畳む。
+  const questForMoney = getQuest(expedition.questId);
+  const feePaid = Number.isFinite(expedition.fee) ? expedition.fee : 0;
+  const reward = Number.isFinite(expedition.fee) ? questReward(questForMoney, report.result, feePaid) : 0;
+  report.money = { fee: feePaid, reward };
+  moveMoney(reward, "報酬", questForMoney?.title ?? null);
   state.reports.unshift(report);
 
   // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
@@ -1752,9 +1802,43 @@ function renderHome() {
       </section>
     </div>
     ${bindCardHtml()}
+    ${walletCardHtml()}
 
     ${expeditions.map(expeditionProgressHtml).join("")}
   `;
+}
+
+// ギルドの財布（2026-09-23・EX-144）。★ 所持金と直近の出入りだけを出す。
+//   ★ 置き場はホーム（保留タスク「酒樽の代金」の指定＝報告書またはホーム）。
+//     **報告書には入れない**——報告書は三人称の記録で、帳簿の数字を混ぜると記録の性格が変わる。
+//   通貨の名前は未定なので数値だけ（設計ページ）。
+function formatMoneyAmount(amount) {
+  if (!Number.isFinite(amount)) return "0";
+  return amount < 0 ? `−${Math.abs(amount)}` : `${amount}`;
+}
+
+function walletCardHtml() {
+  const ledger = Array.isArray(state.moneyLedger) ? state.moneyLedger.slice(0, 5) : [];
+  const money = Number.isFinite(state.money) ? state.money : 0;
+  return `
+    <section class="card wallet-card">
+      <div class="card-body">
+        <div class="card-title">
+          <div>
+            <p class="eyebrow">Guild Purse</p>
+            <h3>ギルドの財布</h3>
+          </div>
+          <span class="status-pill${money < 0 ? " danger" : ""}" data-money="${money}">所持金 ${formatMoneyAmount(money)}</span>
+        </div>
+        ${ledger.length === 0
+          ? `<p class="muted">まだ出入りはありません。</p>`
+          : `<ul class="wallet-ledger">${ledger.map((entry) => `
+            <li class="${entry.amount < 0 ? "out" : "in"}">
+              <span class="wallet-ledger-label">${escapeHtml(entry.label ?? "")}${entry.detail ? `<span class="muted">（${escapeHtml(entry.detail)}）</span>` : ""}</span>
+              <span class="wallet-ledger-amount">${entry.amount > 0 ? "＋" : ""}${formatMoneyAmount(entry.amount)}</span>
+            </li>`).join("")}</ul>`}
+      </div>
+    </section>`;
 }
 
 // 読了ハンコ（2026-08-06）。★ プレイヤーが手で押すもので、開封（`opened`）とは別。
@@ -3335,6 +3419,10 @@ function startExpedition() {
     //   （その回は報告書側が「編成に入っている」で拾う）。
     elsieAtGuild: isElsieAtGuild()
   };
+  // ★ 遠征費は出発した瞬間に引く（2026-09-23・EX-144）。**同時遠征は1本ずつ引いて判定する**（細則4）
+  //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
+  expedition.fee = questFee(quest);
+  moveMoney(-expedition.fee, questFeeLabel(quest), quest.title);
   state.expeditions = [...getExpeditions(), expedition];
   // ★ 遠征が0本→1本になった瞬間が、暦と行方不明の時計の起点（2026-09-20・EX-138）。
   //   2本目の出発では起点を動かさない（区間は続いている）。

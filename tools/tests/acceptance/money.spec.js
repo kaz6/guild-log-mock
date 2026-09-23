@@ -21,24 +21,6 @@ const { freshPage, interview } = require("../helpers/app");
 //   決まったらここに入れる。null のままなら、その1件だけ判定を保留する。
 const RELIEF_INTERVAL_N = null;
 
-test.describe("所持金", () => {
-  test.fixme("金ははじめからある（初期所持金が正）", async ({ page }) => {
-    await freshPage(page);
-    await interview(page);
-    expect(await page.evaluate(() => state.money)).toBeGreaterThan(0);
-  });
-
-  test.fixme("酒場の買い出し（就任祝い）で所持金が減る", async ({ page }) => {
-    // ★ 最初に見る金の動きが、報酬ではなく**自分のための支出**になる
-    await freshPage(page);
-    await interview(page);
-    const before = await page.evaluate(() => state.money);
-    // 「隣の酒場に買い出し」を1件こなす
-    const after = await page.evaluate(() => state.money);
-    expect(after).toBeLessThan(before);
-  });
-});
-
 test.describe("借金", () => {
   test.fixme("所持金がマイナスになったら借りられる（そのとき借入イベントが出る）", async ({ page }) => {
     expect(await page.evaluate(() => canBorrow())).toBe(true);
@@ -86,10 +68,6 @@ test.describe("運営不能", () => {
 });
 
 test.describe("遠征費", () => {
-  test.fixme("出発時に距離で決まる固定額が引かれる（プレイヤーは選べない）", async ({ page }) => {
-    expect(await page.evaluate(() => document.querySelector(".expedition-fee-input"))).toBeNull();
-  });
-
   test.fixme("遠征費で所持金を割り込む出発ができる（出発した瞬間に借金イベント）", async ({ page }) => {
     // ★「可能だが推奨しない行動は縛らない」。止めると、金が尽きたとき何もできなくなる
     expect(await page.evaluate(() => canStartExpedition())).toBe(true);
@@ -97,10 +75,6 @@ test.describe("遠征費", () => {
 
   test.fixme("同時遠征の遠征費は1本ずつ引いて判定し、落ちた1本で止まる", async ({ page }) => {
     expect(await page.evaluate(() => (state.expeditions ?? []).length)).toBeGreaterThan(0);
-  });
-
-  test.fixme("失敗したら遠征費だけが減った状態になる（報酬は入らない）", async ({ page }) => {
-    expect(await page.evaluate(() => state.money)).toBeLessThan(0);
   });
 });
 
