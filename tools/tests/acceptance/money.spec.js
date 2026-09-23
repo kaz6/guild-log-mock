@@ -21,21 +21,6 @@ const { freshPage, interview } = require("../helpers/app");
 //   決まったらここに入れる。null のままなら、その1件だけ判定を保留する。
 const RELIEF_INTERVAL_N = null;
 
-test.describe("支給品はパーティ共有", () => {
-  test.fixme("遠征ごとにパーティへ渡す（誰に持たせるかを選ばない）", async ({ page }) => {
-    expect(await page.evaluate(() => document.querySelectorAll(".item-assign-btn").length)).toBe(0);
-  });
-
-  test.fixme("持てる量はメンバーのスロットの合計", async ({ page }) => {
-    expect(await page.evaluate(() => partyItemCapacity(["adv_mina", "adv_gadd"]))).toBeGreaterThan(0);
-  });
-
-  test.fixme("使うのは語彙で選ばれた担い手（道具の行に名前が出る）", async ({ page }) => {
-    // ★ 所持者と担い手の食い違いが消えるので、無人称にしていた道具の行に名前を出せる
-    expect(await page.evaluate(() => document.body.innerText)).toMatch(/[ガミエロ][ッナルウ]/);
-  });
-});
-
 test.describe("救済クエスト", () => {
   test.fixme("解禁後、掲示板の候補に N件に1回以上出る", async ({ page }) => {
     // ★ N は未確定（裁定 2026-09-22：「N は未確定のまま。受け入れテストは N を引数にして書く」）。

@@ -44,7 +44,7 @@ async function spend(page, amount) {
 }
 
 // 買い出しを1回、帰還まで畳む（2026-09-23・EX-144）。出発は本物の経路（startExpedition）を通す。
-//   party … 冒険者 id の配列／wishes … 冒険者 id → [品 id, 品 id]（書き付けの枠）
+//   party … 冒険者 id の配列／wishes … 書き付け（品 id の並び。★ 共有の荷と同じ枠で、容量は1人2枠）
 //   negotiation … 指定すると、出発前にその値を全員の交渉に置く（値引きの比較用）
 async function runShopping(page, { party, wishes, negotiation = null }) {
   return page.evaluate(({ party, wishes, negotiation }) => {
@@ -52,7 +52,8 @@ async function runShopping(page, { party, wishes, negotiation = null }) {
     const moneyBefore = state.money;
     selectedQuestId = "quest_shopping";
     selectedAdventurerIds = [...party];
-    selectedAdventurerItems = JSON.parse(JSON.stringify(wishes));
+    selectedSharedItems = [...wishes];
+    selectedObsHolders = [];
     startExpedition();
     const exp = state.expeditions.find((e) => e.questId === "quest_shopping");
     if (!exp) return { error: "出発できなかった" };
@@ -71,9 +72,27 @@ async function runShopping(page, { party, wishes, negotiation = null }) {
   }, { party, wishes, negotiation });
 }
 
+// 通常の依頼を1回、本物の出発経路で出して帰還まで畳む（共有の荷・記録票の検証用）
+async function runDispatch(page, { questId, party, shared = [], obsHolders = [] }) {
+  return page.evaluate(({ questId, party, shared, obsHolders }) => {
+    selectedQuestId = questId;
+    selectedAdventurerIds = [...party];
+    selectedSharedItems = [...shared];
+    selectedObsHolders = [...obsHolders];
+    startExpedition();
+    const exp = state.expeditions.find((e) => e.questId === questId);
+    if (!exp) return { error: "出発できなかった" };
+    const departed = { itemMap: JSON.parse(JSON.stringify(exp.adventurerItemIds)), shared: [...(exp.sharedItemIds ?? [])], stockAtDepart: JSON.parse(JSON.stringify(state.stock)), ownedAtDepart: stockOwnedTotal() };
+    exp.startTime = Date.now() - exp.durationMs - 1_000;
+    checkExpeditionCompletion();
+    const report = state.reports[0];
+    return { ...departed, report: { result: report.result, observationNotes: report.observationNotes, usedItemIds: report.usedItemIds ?? null }, stockAfter: JSON.parse(JSON.stringify(state.stock)), ownedAfter: stockOwnedTotal() };
+  }, { questId, party, shared, obsHolders });
+}
+
 // 棚を直接置く（テストの前提づくり。帳簿には書かない）
 async function setStock(page, stock) {
   await page.evaluate((s) => { state.stock = s; saveState(); render(); }, stock);
 }
 
-module.exports = { settleExpedition, setMoney, spend, runShopping, setStock };
+module.exports = { settleExpedition, setMoney, spend, runShopping, runDispatch, setStock };

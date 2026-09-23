@@ -1413,3 +1413,19 @@ hr.soft {
 .item-assign-btn.item-wish.is-ghost.selected { opacity: 0.8; }
 .item-left { margin-left: 4px; font-size: 0.85em; opacity: 0.75; }
 .wallet-stock { margin-top: 8px; }
+
+/* 共有の荷と個人の記録票（2026-09-23・EX-144 裁定A）。★ 誰が記録票を持っているかが一目で分かること */
+.shared-load, .obs-sheet-panel { display: grid; gap: 8px; }
+.obs-sheet-panel { margin-top: 16px; padding-top: 12px; border-top: 1px dashed rgba(255, 255, 255, 0.18); }
+.shared-load-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shared-load-note { margin: 0; font-size: 0.85em; }
+.shared-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+.shared-chip { border: 1px solid rgba(233, 196, 120, 0.6); background: rgba(233, 196, 120, 0.14); color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; font: inherit; font-size: 0.9em; }
+.shared-chip.item-wish.is-ghost { opacity: 0.55; border-style: dashed; }
+.obs-sheet-rows { display: grid; gap: 6px; }
+.obs-sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); }
+.obs-sheet-row.holding { border-color: rgba(146, 186, 125, 0.8); background: rgba(146, 186, 125, 0.12); font-weight: 600; }
+.obs-sheet-btn { border: 1px solid rgba(255, 255, 255, 0.25); background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; font: inherit; font-size: 0.85em; }
+.obs-sheet-btn.selected { border-color: rgba(146, 186, 125, 0.9); background: rgba(146, 186, 125, 0.25); }
+.obs-sheet-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.status-pill.obs-holder-pill { background: #92ba7d; color: #1d2417; font-weight: 700; }
