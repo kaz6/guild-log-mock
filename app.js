@@ -183,14 +183,16 @@ function stockDrawnItemIds(expedition) {
 // ★ 支給品は**遠征ごとにパーティへ渡す**（誰に持たせるかは選ばない）。持てる量は**メンバーのスロットの合計**。
 // ★ **観察記録票だけは個人**に持たせる（誰に書かせるかを選ぶ）。持たせた人のスロットを1つ埋めるので、
 //   記録票を持たせるほど共有の荷が減る（「誰に書かせるか」と「何を持っていくか」が同じ枠で天秤にかかる）。
-// ★ スロットは全員2で固定（犬も数える。エルシーのハーネスの `capacity` は死蔵のまま）。
+// ★ スロットは全員2で固定（犬も数える）。★ **装身具の `capacity` のぶん荷が増える**（2026-09-23・EX-145）——
+//   エルシーのハーネス（支給品を背負って運べる）が、設計ページの「パーティの荷が増える」として効く。値は仮置き（データ側）。
 const ITEM_SLOTS_PER_MEMBER = 2;
 const OBS_SHEET_ID = "item_obs_sheet";
 
 function partyItemCapacity(advIds, obsHolderIds = []) {
   const members = (advIds ?? []).filter((id) => getAdventurer(id));
   const sheets = (obsHolderIds ?? []).filter((id) => members.includes(id)).length;
-  return Math.max(0, members.length * ITEM_SLOTS_PER_MEMBER - sheets);
+  const carried = members.reduce((sum, id) => sum + Math.max(0, Number(getAdventurer(id)?.accessory?.capacity) || 0), 0);
+  return Math.max(0, members.length * ITEM_SLOTS_PER_MEMBER + carried - sheets);
 }
 
 // 選んでいる共有の荷のうち、その品の数（棚の残りから引いて見せるため）
