@@ -176,6 +176,14 @@ function selectedItemCount(itemId) {
   return getAllItemIds(selectedAdventurerItems).filter((id) => id === itemId).length;
 }
 
+// ★ 運営不能の直前（2026-09-23・EX-144）＝**借金中、または借金2回を使い切った状態**。
+//   救済クエストが必ず掲示板に入る条件。⚠️ 定義は裁定 2026-09-22 の書き直しで、作者の確定ではない。
+function isOnBrinkOfClosing() {
+  if (state.gameOver) return false;
+  const debt = state.debt ?? {};
+  return Boolean(debt.active) || (debt.timesBorrowed ?? 0) >= MONEY_RULES.maxBorrowCount;
+}
+
 function isShoppingQuest(quest) {
   return Boolean(quest?.shopping);
 }
@@ -2290,7 +2298,8 @@ function questCooldownState(quest, reports) {
 function buildBoardQuests(clearedQuestIds, reports) {
   const slots = window.masterBoardRules?.slots;
   const candidates = state.quests
-    .filter((quest) => !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
+    // ★ 救済クエストは通常の候補に入れない（下で「直前」のときだけ先頭に入れる。2026-09-23・EX-144）
+    .filter((quest) => !quest.hidden && !quest.relief && isQuestUnlocked(quest, clearedQuestIds)
       && questBoardVisibility(quest, reports).visible
       // ★ いま出ている依頼は並べない（2026-09-20・EX-138 の裁定2＝同じ依頼の二重出撃を禁止）。
       //   ⚠️ クールタイムは**帰ってきてから**効くので、出ている間はここで下ろさないと選べてしまう。
@@ -2304,6 +2313,12 @@ function buildBoardQuests(clearedQuestIds, reports) {
   const rested = candidates.filter((c) => !c.cool.fresh && c.cool.ready)
     .sort((a, b) => (b.cool.since - a.cool.since) || byOrder(a, b));
   const ordered = [...fresh, ...rested].map((c) => c.quest);
+  // ★ 救済クエスト（2026-09-23・EX-144）：**運営不能の直前には必ず枠に入る**（先頭。枠の中なので6枚は越えない）。
+  //   ★ 「必ず」なのでクールタイムを見ない。⚠️ 「たまに出る」（間隔 N）は未確定＝直前以外では出さない。
+  if (isOnBrinkOfClosing()) {
+    state.quests.filter((quest) => quest.relief && !isQuestOnExpedition(quest.id))
+      .reverse().forEach((quest) => ordered.unshift(quest));
+  }
   return typeof slots === "number" ? ordered.slice(0, slots) : ordered;
 }
 
@@ -4507,6 +4522,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_tavern_errand: ["item_bandage", "item_whistle"],
     quest_guild_cleanup: [], // ★ ギルド内なので支給品は選べない（持たせる判断が発生しない。EX-064）
     quest_shopping: [], // ★ 買い出しは持っていかない。枠は「欲しい物の書き付け」（2026-09-23・EX-144）
+    quest_relief_odd_jobs: ["item_bandage"], // ★ 救済（2026-09-23・EX-144）。町なかの雑用。仮
 
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
@@ -7117,6 +7133,29 @@ function generateShoppingReport(expedition, quest, party, logs, add, tensionValu
   });
 }
 
+// 救済クエストの報告書（2026-09-23・EX-144）。★★ 文面はすべて仮。チャット側が書き直す待ち。
+//   ★ 報酬の額は本文に書かない（金は報告書の生成の外）。必ず済ませて戻る（未達を持たない）。
+function generateReliefReport(expedition, quest, party, logs, add, tensionValue, tensionLevel) {
+  const subject = partySubject(party);
+  const result = "小口の用を済ませた";
+  add("", `${subject}は「${quest.title}」のため、${quest.area}へ向かった。`);
+  add("action", `頼まれたのは、荷の積み替えと、戸口の修繕と、言付けがひとつ。どれも半日かからない用だった。`);
+  add("afterglow", `依頼人は少ない謝礼を渡しながら、「助かったよ」と言った。`);
+  return finalizeQuestReport({
+    expedition,
+    quest,
+    party,
+    logs,
+    result,
+    summary: "町の小さな用を片付けて戻った。謝礼は少ない。",
+    historyLine: `${quest.title}：済ませた。`,
+    adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, { result }),
+    tensionValue,
+    tensionLevel,
+    hiddenTags: { relief: true }
+  });
+}
+
 function finalizeQuestReport(options) {
   const {
     expedition,
@@ -7244,6 +7283,8 @@ function generateReport(expedition) {
   // ★ `shopping` の旗で分岐する。★ 何を買えたか・いくら払ったかは**書かない**——
   //   金と在庫は報告書の生成の外（帰還時の `settleShopping`）で動く。本文は「頼みに行った」ことだけ。
   if (quest.shopping) return generateShoppingReport(expedition, quest, party, logs, add, tensionValue, tensionLevel);
+  // ── 救済（2026-09-23・EX-144）。★ 文面は仮。乱数は引かない ──
+  if (quest.relief) return generateReliefReport(expedition, quest, party, logs, add, tensionValue, tensionLevel);
 
   // ── 定型報告書（2026-08-18・EX-064）─────────────────────────────────────
   // ★ 本作で唯一、書き手が受付嬢になる例外。データの旗（fixedReport / reportAuthor）で分岐し、

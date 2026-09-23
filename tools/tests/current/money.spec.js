@@ -427,3 +427,51 @@ test.describe("買い出しクエスト", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
+
+test.describe("救済クエスト", () => {
+  test("費用0で報酬が出る（報酬は近の遠征費に届かない額）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const quests = window.masterQuests.filter((q) => q.relief);
+      const q = quests[0];
+      const moneyBefore = state.money;
+      state.expeditions = [...getExpeditions(), {
+        id: "exp_relief_test", questId: q.id, adventurerIds: ["adv_mina"], adventurerItemIds: {}, itemIds: [],
+        startTime: Date.now() - 60_000, durationMs: 1, seed: 7, departTimeOfDay: "昼", departWeather: "晴れ",
+        firstRunOfQuest: false, elsieAtGuild: true, fee: questFee(q)
+      }];
+      getAdventurer("adv_mina").status = "遠征中";
+      checkExpeditionCompletion();
+      return { count: quests.length, fee: questFee(q), reward: state.reports[0].money.reward,
+        gained: state.money - moneyBefore, nearFee: window.masterMoneyRules.feeByBandLabel["近"] };
+    });
+    expect(got.count).toBeGreaterThan(0);
+    expect(got.fee).toBe(0);
+    expect(got.reward).toBeGreaterThan(0);
+    expect(got.gained).toBe(got.reward);
+    // ★ 金策にならない額（設計ページ「近の遠征費10に届かない」）
+    expect(got.reward).toBeLessThan(got.nearFee);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("借金中、または借金2回を使い切った状態のとき、必ず枠に入る（それ以外では出ない）", async ({ page }) => {
+    // ★ 「運営不能の直前」の書き直し（裁定 2026-09-22）。⚠️ 作者の定義として確定ではない。違えばここを直す。
+    // ★ 「たまに出る」の間隔 N は未確定＝直前以外では出さない（N＝∞）。N が決まったら3つ目の判定を直す。
+    const errors = await freshPage(page);
+    await interview(page);
+    // 枠が埋まっていても入ることを見るため、進行を先に積んでおく
+    const all = await page.evaluate(() => window.masterQuests.filter((q) => !q.hidden && !q.relief).map((q) => q.id));
+    await seedClearedQuests(page, all.slice(0, 8));
+    const onBoard = () => page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).some((q) => q.relief));
+    expect(await onBoard(), "直前でないのに出ている（N は未確定＝出さない）").toBe(false);
+    await page.evaluate(() => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1 }; });
+    expect(await onBoard(), "借金中なのに出ていない").toBe(true);
+    await page.evaluate(() => { state.debt = { active: null, timesBorrowed: 2 }; });
+    expect(await onBoard(), "2回使い切ったのに出ていない").toBe(true);
+    // ★ 枠の数は越えない
+    expect(await page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).length))
+      .toBeLessThanOrEqual(await page.evaluate(() => window.masterBoardRules.slots));
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});

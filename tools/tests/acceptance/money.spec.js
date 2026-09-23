@@ -37,17 +37,6 @@ test.describe("支給品はパーティ共有", () => {
 });
 
 test.describe("救済クエスト", () => {
-  test.fixme("費用0で報酬が出る", async ({ page }) => {
-    expect(await page.evaluate(() => window.masterQuests.some((q) => q.relief && q.fee === 0))).toBe(true);
-  });
-
-  test.fixme("借金中、または借金2回を使い切った状態のとき、必ず枠に入る", async ({ page }) => {
-    // ★ 「運営不能の直前」の書き直し（裁定 2026-09-22）。
-    //   ⚠️ **作者の定義として確定ではない。違えばここを直す。**
-    expect(await page.evaluate(() =>
-      questBoardList().some((q) => q.relief))).toBe(true);
-  });
-
   test.fixme("解禁後、掲示板の候補に N件に1回以上出る", async ({ page }) => {
     // ★ N は未確定（裁定 2026-09-22：「N は未確定のまま。受け入れテストは N を引数にして書く」）。
     test.skip(RELIEF_INTERVAL_N === null, "N が未確定なので判定できない");
