@@ -14,6 +14,7 @@ async function settleExpedition(page, { questId, tier }) {
     const moneyBefore = state.money;
     const fee = questFee(quest);
     moveMoney(-fee, questFeeLabel(quest), quest.title);
+    settleNegativeMoney(); // ★ 出発と同じ：遠征費で割り込んだら、その場で借金の判定
     const now = Date.now();
     state.expeditions = [...getExpeditions(), {
       id: `exp_test_${seed}_${tier}`, questId, adventurerIds: party, adventurerItemIds: {}, itemIds: [],
@@ -27,4 +28,19 @@ async function settleExpedition(page, { questId, tier }) {
   }, { questId, party: parties[row.partyIndex], seed: row.seed, tier });
 }
 
-module.exports = { settleExpedition };
+// 所持金を直接置く（借金の前提を作るため）。★ 帳簿には書かない＝テストの前提づくりであって出入りではない。
+async function setMoney(page, value) {
+  await page.evaluate((v) => { state.money = v; saveState(); render(); }, value);
+}
+
+// 本物の経路で「出費」を起こす（出発と同じく、減らしたら借金の判定まで通す）。
+async function spend(page, amount) {
+  return page.evaluate((a) => {
+    moveMoney(-a, "テスト用の出費");
+    settleNegativeMoney();
+    saveState();
+    return { money: state.money, debt: JSON.parse(JSON.stringify(state.debt)), gameOver: state.gameOver, events: state.moneyEvents.length };
+  }, amount);
+}
+
+module.exports = { settleExpedition, setMoney, spend };

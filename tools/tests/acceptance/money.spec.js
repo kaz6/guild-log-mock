@@ -21,63 +21,6 @@ const { freshPage, interview } = require("../helpers/app");
 //   決まったらここに入れる。null のままなら、その1件だけ判定を保留する。
 const RELIEF_INTERVAL_N = null;
 
-test.describe("借金", () => {
-  test.fixme("所持金がマイナスになったら借りられる（そのとき借入イベントが出る）", async ({ page }) => {
-    expect(await page.evaluate(() => canBorrow())).toBe(true);
-  });
-
-  test.fixme("借りた直後の所持金が正である", async ({ page }) => {
-    // ★ 細則1の書き直し（裁定 2026-09-22）。原文は「赤字を埋めて少し余る額」で判定できない。
-    //   借りた直後もマイナスのまま即運営不能、を起こさないことが狙い。
-    expect(await page.evaluate(() => state.money)).toBeGreaterThan(0);
-  });
-
-  test.fixme("借金はゲーム全体で2回まで（3回目は借りられない）", async ({ page }) => {
-    expect(await page.evaluate(() => state.debt.timesBorrowed)).toBe(2);
-    expect(await page.evaluate(() => canBorrow())).toBe(false);
-  });
-
-  test.fixme("返済するまで次を借りられない（同時に抱えられる借金は1つ）", async ({ page }) => {
-    expect(await page.evaluate(() => canBorrow())).toBe(false);
-  });
-
-  test.fixme("返済は自動（報酬から天引きされる）", async ({ page }) => {
-    // ★ 手動だと、返済を忘れたまま次のマイナスで運営不能＝知らなかったで終わる理不尽になる
-    expect(await page.evaluate(() => state.debt.remaining)).toBeLessThan(0);
-  });
-
-  test.fixme("2回目の借金をした時点で受付嬢との会話イベントが出る", async ({ page }) => {
-    expect(await page.evaluate(() => document.body.innerText)).toContain("赤字");
-  });
-});
-
-test.describe("運営不能", () => {
-  test.fixme("条件①：借金中にさらにマイナスになったら運営不能", async ({ page }) => {
-    expect(await page.evaluate(() => state.gameOver)).toBe(true);
-  });
-
-  test.fixme("条件②：1回借りて返済し、2回目を借りたあと再びマイナスで運営不能", async ({ page }) => {
-    // ★ ここまでは許す、という裁定。2回目を借りた時点では運営不能にならない
-    expect(await page.evaluate(() => state.gameOver)).toBe(true);
-  });
-
-  test.fixme("運営不能になったら直前（最後に綴じた記録）からやり直せる", async ({ page }) => {
-    // ★ EX-141 で実装した「記録を綴じる／戻す」がそのまま使える（新しい仕組みは要らない）
-    expect(await page.evaluate(() => latestBoundBook() !== null)).toBe(true);
-  });
-});
-
-test.describe("遠征費", () => {
-  test.fixme("遠征費で所持金を割り込む出発ができる（出発した瞬間に借金イベント）", async ({ page }) => {
-    // ★「可能だが推奨しない行動は縛らない」。止めると、金が尽きたとき何もできなくなる
-    expect(await page.evaluate(() => canStartExpedition())).toBe(true);
-  });
-
-  test.fixme("同時遠征の遠征費は1本ずつ引いて判定し、落ちた1本で止まる", async ({ page }) => {
-    expect(await page.evaluate(() => (state.expeditions ?? []).length)).toBeGreaterThan(0);
-  });
-});
-
 test.describe("在庫", () => {
   test.fixme("在庫の上限は5（6個目を買えない）", async ({ page }) => {
     expect(await page.evaluate(() => STOCK_LIMIT)).toBe(5);

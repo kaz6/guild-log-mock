@@ -80,6 +80,56 @@ function moveMoney(amount, label, detail = null) {
   state.moneyLedger.length = Math.min(state.moneyLedger.length, MONEY_LEDGER_KEEP);
 }
 
+// ★ 所持金がマイナスになったら借りる。借りられなければ運営不能（2026-09-21 確定・設計ページ）。
+//   - 運営不能の条件①：**借金中に**さらにマイナス
+//   - 運営不能の条件②：**2回借り切ったあと**に再びマイナス（1回目を借りて返し、2回目を借りるまでは許す）
+//   - 細則1：借入額＝赤字額＋余裕。★ **借りた直後の所持金は必ず正**（借りた直後に即運営不能、を起こさない）
+//   ⚠️ ここは所持金が減ったときだけ呼ぶ（報酬や返済で呼ぶ理由は無い）。
+function settleNegativeMoney() {
+  if (state.gameOver || !(state.money < 0)) return;
+  const debt = state.debt ?? (state.debt = { active: null, timesBorrowed: 0 });
+  if (debt.active) {
+    state.gameOver = { at: Date.now(), reason: "借金を返しきる前に、また赤字になった" };
+    return;
+  }
+  if (debt.timesBorrowed >= MONEY_RULES.maxBorrowCount) {
+    state.gameOver = { at: Date.now(), reason: "もう借りられないところで、また赤字になった" };
+    return;
+  }
+  const amount = -state.money + MONEY_RULES.borrowMargin;
+  debt.timesBorrowed += 1;
+  debt.active = { borrowed: amount, remaining: amount };
+  moveMoney(amount, "借入", `${debt.timesBorrowed}回目`);
+  if (!Array.isArray(state.moneyEvents)) state.moneyEvents = [];
+  state.moneyEvents.push({
+    kind: "borrow",
+    count: debt.timesBorrowed,
+    amount,
+    // ★ 2回目で受付嬢との会話イベント（「赤字で、次はなさそう」）
+    text: debt.timesBorrowed >= MONEY_RULES.maxBorrowCount ? MONEY_RULES.texts.borrowSecond : MONEY_RULES.texts.borrowFirst
+  });
+}
+
+// 報酬を受け取る。★ 借金があれば**報酬から天引き**する（細則2・自動）。
+//   手動にすると、返し忘れたまま次のマイナスで運営不能＝知らなかったで終わる理不尽になる。
+//   帳簿には「報酬」と「返済」を別の行でつける（天引きされたことが見えるように）。
+function receiveReward(reward, detail) {
+  if (!(reward > 0)) return;
+  moveMoney(reward, "報酬", detail);
+  const active = state.debt?.active;
+  if (!active) return;
+  const repay = Math.min(reward, active.remaining);
+  active.remaining -= repay;
+  moveMoney(-repay, "返済", active.remaining > 0 ? `残り ${active.remaining}` : "完済");
+  if (active.remaining <= 0) state.debt.active = null;
+}
+
+function dismissMoneyEvent() {
+  if (Array.isArray(state.moneyEvents)) state.moneyEvents.shift();
+  saveState();
+  render();
+}
+
 // 報酬：遠征費 × 結末の段の倍率（完遂 ×2／部分 ×1.2／未達 0）。
 //   ★ 段は成長と同じ表（`GROWTH_TIER_BY_RESULT`＝依頼データの outcomes から作る）を引く。
 //     結末と段の対応を2か所で持たない（2026-08-01 の方針）。
@@ -201,6 +251,10 @@ function createInitialState() {
     //   ★ 旧セーブは `{ ...base, ...parsed }` で欠けが埋まる（`schemaVersion` は上げない＝EX-125 と同じ形）。
     money: MONEY_RULES.initialMoney,
     moneyLedger: [], // 直近の出入り（新しいものが先頭）。ホームに出す
+    // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
+    debt: { active: null, timesBorrowed: 0 },
+    moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    gameOver: null,  // 運営不能（★ 記録の終わり方の一つ。「負け」ではない）
     player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
   };
 }
@@ -258,6 +312,11 @@ function loadState() {
     //   ⚠️ **新旧のどちらか一方しか無い**のが普通なので、新を優先して片方だけ読む。
     merged.ecologyRecord = migrateEcologyRecord(parsed.ecologyRecord ?? parsed.beastLog);
     delete merged.beastLog; // 旧キーは残さない（残すと次の保存で二重に書かれる）
+    // 金（2026-09-23・EX-144）：形が崩れていたら既定へ戻す（`schemaVersion` は上げない）
+    merged.debt = normalizeDebt(parsed.debt);
+    if (!Array.isArray(merged.moneyLedger)) merged.moneyLedger = [];
+    if (!Array.isArray(merged.moneyEvents)) merged.moneyEvents = [];
+    if (!Number.isFinite(merged.money)) merged.money = MONEY_RULES.initialMoney;
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
     delete merged.lastObservationUpdate;
@@ -273,6 +332,15 @@ function loadState() {
 function normalizeExpeditions(parsed) {
   if (Array.isArray(parsed?.expeditions)) return parsed.expeditions.filter(Boolean);
   return parsed?.expedition ? [parsed.expedition] : [];
+}
+
+function normalizeDebt(raw) {
+  const times = Number.isFinite(raw?.timesBorrowed) ? raw.timesBorrowed : 0;
+  const a = raw?.active;
+  const active = a && Number.isFinite(a.remaining) && a.remaining > 0
+    ? { borrowed: Number.isFinite(a.borrowed) ? a.borrowed : a.remaining, remaining: a.remaining }
+    : null;
+  return { active, timesBorrowed: times };
 }
 
 // 帰還の通知（1件 → 行列）。★ 同時に2本帰ったとき、片方が黙って消えないようにする。
@@ -1435,7 +1503,7 @@ function completeExpeditionIfDue(expedition) {
   const feePaid = Number.isFinite(expedition.fee) ? expedition.fee : 0;
   const reward = Number.isFinite(expedition.fee) ? questReward(questForMoney, report.result, feePaid) : 0;
   report.money = { fee: feePaid, reward };
-  moveMoney(reward, "報酬", questForMoney?.title ?? null);
+  receiveReward(reward, questForMoney?.title ?? null);
   state.reports.unshift(report);
 
   // 隊商護衛失敗 → 捜索チェーン起動（state変異はここに集約する）
@@ -1677,6 +1745,64 @@ function interviewComplete() {
 //   ⚠️ 判定は**開封**で見る。読了ハンコはプレイヤーが任意で押すものなので、
 //     そちらで見ると押さない人には促しが永久に出ない。
 //   ⚠️ 依頼 id では分岐しない（最初の報告書が何になっても成り立つ形にしてある）。
+function bindRestoreConfirmHtml(book, unbound) {
+  return `
+        <div class="bind-confirm">
+          <p>最後に綴じた記録（${escapeHtml(stampDateText(book.boundAt))}）まで戻ります。
+          ここから先の記録 ${unbound}通は、綴じられていません。</p>
+          <div class="button-row">
+            <button class="primary-button" onclick="restoreBoundRecord()">戻る</button>
+            <button class="secondary-button" onclick="closeBindRestoreConfirm()">やめる</button>
+          </div>
+        </div>`;
+}
+
+// 運営不能（2026-09-23・EX-144）。★ 記録の終わり方の一つで、「負け」ではない（設計ページ）。
+//   ★ **直前からやり直せる**（細則5）＝EX-141 の「最後に綴じた記録まで戻る」が本番の入口になる。
+//   ⚠️ 綴じた記録が1冊も無いときは戻り先が無い。そのときは**最初からやり直す**しかない（実装側の判断）。
+function gameOverCardHtml() {
+  if (!state.gameOver) return "";
+  const books = readBoundBooks();
+  const book = books[0] ?? null;
+  const unbound = book ? Math.max(0, state.reports.length - (book.meta?.reportCount ?? 0)) : 0;
+  const t = MONEY_RULES.texts;
+  const action = book
+    ? (bindRestoreConfirmOpen
+      ? bindRestoreConfirmHtml(book, unbound)
+      : `<div class="button-row"><button class="primary-button" onclick="openBindRestoreConfirm()">最後に綴じた記録まで戻る</button></div>`)
+    : `<p class="muted">綴じた記録は一冊も無い。戻れる場所は、最初しかない。</p>
+       <div class="button-row"><button class="primary-button" onclick="document.getElementById('resetButton').click()">最初からやり直す</button></div>`;
+  return `
+    <section class="card game-over-card">
+      <div class="card-body">
+        <p class="eyebrow">Ledger Closed</p>
+        <h3>${escapeHtml(t.gameOverTitle)}</h3>
+        <p>${escapeHtml(t.gameOverBody)}</p>
+        ${action}
+      </div>
+    </section>`;
+}
+
+// 受付嬢の言葉（借入）。★ 1件ずつ読む（帰還のカードと同じ流儀）。
+function moneyEventCardHtml() {
+  const event = Array.isArray(state.moneyEvents) ? state.moneyEvents[0] : null;
+  if (!event) return "";
+  return `
+    <section class="card money-event-card" data-money-event="${escapeHtml(event.kind)}-${event.count}">
+      <div class="card-body reception">
+        <div class="reception-portrait" aria-hidden="true"></div>
+        <div>
+          <p class="eyebrow">Guild Purse</p>
+          <h3>受付嬢</h3>
+          <div class="speech">${escapeHtml(event.text ?? "")}</div>
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissMoneyEvent()">わかりました</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+}
+
 function bindCardHtml() {
   const anyOpened = state.reports.some((report) => report.opened);
   const books = readBoundBooks();
@@ -1692,15 +1818,8 @@ function bindCardHtml() {
   // ③⑦ 記録係の行為なので地の文
   const notice = bindNoticeText ? `<p class="bind-notice">${escapeHtml(bindNoticeText)}</p>` : "";
   // ⑥ 戻す前の確認。★ 勝手に戻さない（「戻る／やめる」の2択を必ず出す）。
-  const confirmBlock = bindRestoreConfirmOpen && book ? `
-        <div class="bind-confirm">
-          <p>最後に綴じた記録（${escapeHtml(stampDateText(book.boundAt))}）まで戻ります。
-          ここから先の記録 ${unbound}通は、綴じられていません。</p>
-          <div class="button-row">
-            <button class="primary-button" onclick="restoreBoundRecord()">戻る</button>
-            <button class="secondary-button" onclick="closeBindRestoreConfirm()">やめる</button>
-          </div>
-        </div>` : "";
+  //   ★ 運営不能のカードも同じ確認を出すので、そちらが開いている間はここに出さない（二重にしない）。
+  const confirmBlock = bindRestoreConfirmOpen && book && !state.gameOver ? bindRestoreConfirmHtml(book, unbound) : "";
   // ★ 戻す側の入口は**加速中だけ**に出す Mock 用のボタン（「Mock用：扉の音を待たず…」と同じ流儀）。
   //   本番の入口は運営不能の判定で、そこは金の実装とセットで繋ぐ（2026-09-21 の裁定）。
   const mockRestore = getDemoSpeed() > 1 && book && !bindRestoreConfirmOpen
@@ -1741,6 +1860,8 @@ function renderHome() {
   const returnedQuest = returnedReport ? getQuest(returnedReport.questId) : null;
 
   app.innerHTML = `
+    ${gameOverCardHtml()}
+    ${moneyEventCardHtml()}
     ${returnedReports.length > 1 ? `
     <div class="weather-bar">
       <span class="weather-bar-icon">📨</span>
@@ -1770,16 +1891,16 @@ function renderHome() {
             <p class="eyebrow">Guild Reception</p>
             <h3>受付嬢</h3>
             <div class="speech">
-              ${state.player?.name ? `${escapeHtml(state.player.name)}さん、` : ""}${unopened.length > 0
+              ${state.gameOver ? escapeHtml(MONEY_RULES.texts.gameOverReception) : `${state.player?.name ? `${escapeHtml(state.player.name)}さん、` : ""}${unopened.length > 0
                 ? `おかえりなさい。未開封の報告書が ${unopened.length} 通、届いています。落ち着いて、一通ずつ確認しましょう。`
                 : expeditions.length > 1
                   ? `遠征中の一行が${expeditions.length}組あります。扉の音がしたら、私が報告書をお持ちしますね。`
                   : expeditions.length === 1
                   ? "遠征中の一行があります。扉の音がしたら、私が報告書をお持ちしますね。"
-                  : "本日の依頼掲示板を確認できます。出発前の支給品も、忘れずに選んでくださいね。"}
+                  : "本日の依頼掲示板を確認できます。出発前の支給品も、忘れずに選んでくださいね。"}`}
             </div>
             <div class="button-row" style="margin-top: 16px;">
-              <button class="primary-button" onclick="setRoute('quests')">依頼を選ぶ</button>
+              ${state.gameOver ? "" : `<button class="primary-button" onclick="setRoute('quests')">依頼を選ぶ</button>`}
               <button class="secondary-button" onclick="setRoute('adventurers')">名簿を見る</button>
             </div>
           </div>
@@ -2087,7 +2208,7 @@ function renderQuests() {
   const questOnExpedition = selectedQuestId ? isQuestOnExpedition(selectedQuestId) : false;
   const chainBlocked = selectedQuest ? isChainQuest(selectedQuest) && chainSlotBusy() : false;
   const canStart = selectedQuestId && selectedAdventurerIds.length > 0
-    && !questOnExpedition && !chainBlocked && !expeditionBlock;
+    && !questOnExpedition && !chainBlocked && !expeditionBlock && !state.gameOver;
 
   const cond = getCurrentConditions();
   const timeOptions = ["朝", "昼", "夕方", "夜"];
@@ -2195,7 +2316,7 @@ function renderQuests() {
             <h3>出発確認</h3>
           </div>
         </div>
-        ${selectedQuest ? dispatchSummaryHtml(selectedQuest, expeditionBlock) : `<div class="empty">まず依頼を選んでください。</div>`}
+        ${selectedQuest ? dispatchSummaryHtml(selectedQuest, state.gameOver ? "ギルドは畳まれている。もう誰も送り出せない。" : expeditionBlock) : `<div class="empty">まず依頼を選んでください。</div>`}
         <div class="button-row" style="margin-top: 16px;">
           <button class="primary-button" ${canStart ? "" : "disabled"} onclick="startExpedition()">遠征開始</button>
           <button class="ghost-button" onclick="clearSelections()">選択解除</button>
@@ -3369,6 +3490,7 @@ function startExpedition() {
   //   ★ 塞ぐのは**矛盾が出る2つだけ**。本数は縛らない（人数が実質の上限）。
   const quest = getQuest(selectedQuestId);
   if (!quest) return;
+  if (state.gameOver) return;                                   // 運営不能：ギルドは畳まれている
   if (isQuestOnExpedition(selectedQuestId)) return;            // 裁定2：同じ依頼の二重出撃は禁止
   if (isChainQuest(quest) && chainSlotBusy()) return;          // 裁定b：チェーン系は同時1本まで
   // ★ **出発の直前に status を見直す**（2026-09-20・EX-138）。
@@ -3423,6 +3545,8 @@ function startExpedition() {
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
   expedition.fee = questFee(quest);
   moveMoney(-expedition.fee, questFeeLabel(quest), quest.title);
+  // ★ 割り込む出発も許す（細則3。「可能だが推奨しない行動は縛らない」）。出発した瞬間に借金の判定。
+  settleNegativeMoney();
   state.expeditions = [...getExpeditions(), expedition];
   // ★ 遠征が0本→1本になった瞬間が、暦と行方不明の時計の起点（2026-09-20・EX-138）。
   //   2本目の出発では起点を動かさない（区間は続いている）。
