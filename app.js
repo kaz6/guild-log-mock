@@ -160,7 +160,7 @@ function addStock(itemId, n) {
 
 function stockOwnedTotal() {
   const shelf = Object.keys(state.stock ?? {}).reduce((sum, id) => sum + stockCount(id), 0);
-  const out = getExpeditions().reduce((sum, e) => sum + (e.stockDrawn ? getAllItemIds(e.adventurerItemIds ?? {}).length : 0), 0);
+  const out = getExpeditions().reduce((sum, e) => sum + (e.stockDrawn ? stockDrawnItemIds(e).length : 0), 0);
   return shelf + out;
 }
 
@@ -168,12 +168,80 @@ function normalizeStock(raw) {
   if (!raw || typeof raw !== "object") return {};
   return Object.fromEntries(Object.entries(raw)
     .map(([id, n]) => [id, Math.max(0, Math.floor(Number(n) || 0))])
-    .filter(([id, n]) => n > 0 && getItem(id)));
+    // ★ 個人の品（観察記録票）は棚に置かない（ギルドに無限にある。2026-09-23・EX-144 裁定）
+    .filter(([id, n]) => n > 0 && getItem(id) && !getItem(id).personal));
 }
 
-// 編成の枠に今入れている数（出撃の画面で、棚の残りから引いて見せるため）
+// 遠征が棚から持ち出した品。★ 共有の荷だけ（記録票は棚から出していない）。
+//   `sharedItemIds` を持たない遠征（共有の実装より前に出発した回）は、持ち物全体から記録票を除いて数える。
+function stockDrawnItemIds(expedition) {
+  if (Array.isArray(expedition.sharedItemIds)) return expedition.sharedItemIds;
+  return getAllItemIds(expedition.adventurerItemIds ?? {}).filter((id) => !getItem(id)?.personal);
+}
+
+// === 共有の荷と個人の記録票（2026-09-23・EX-144 裁定A） ===
+// ★ 支給品は**遠征ごとにパーティへ渡す**（誰に持たせるかは選ばない）。持てる量は**メンバーのスロットの合計**。
+// ★ **観察記録票だけは個人**に持たせる（誰に書かせるかを選ぶ）。持たせた人のスロットを1つ埋めるので、
+//   記録票を持たせるほど共有の荷が減る（「誰に書かせるか」と「何を持っていくか」が同じ枠で天秤にかかる）。
+// ★ スロットは全員2で固定（犬も数える。エルシーのハーネスの `capacity` は死蔵のまま）。
+const ITEM_SLOTS_PER_MEMBER = 2;
+const OBS_SHEET_ID = "item_obs_sheet";
+
+function partyItemCapacity(advIds, obsHolderIds = []) {
+  const members = (advIds ?? []).filter((id) => getAdventurer(id));
+  const sheets = (obsHolderIds ?? []).filter((id) => members.includes(id)).length;
+  return Math.max(0, members.length * ITEM_SLOTS_PER_MEMBER - sheets);
+}
+
+// 選んでいる共有の荷のうち、その品の数（棚の残りから引いて見せるため）
 function selectedItemCount(itemId) {
-  return getAllItemIds(selectedAdventurerItems).filter((id) => id === itemId).length;
+  return selectedSharedItems.filter((id) => id === itemId).length;
+}
+
+// 個人の品（記録票）が持たせられるか。★ 解禁の時期は変えない（体験版＝隊商護衛のあと）
+function isPersonalItemUnlocked(item) {
+  return Boolean(item?.personal) && (!item.unlockedBy || getClearedQuestIds().has(item.unlockedBy));
+}
+
+// 記録票を持てるのは人間だけ（★ 犬は書かない）
+function canHoldObsSheet(adv) {
+  return Boolean(adv) && isHumanAdventurer(adv) && isPersonalItemUnlocked(getItem(OBS_SHEET_ID));
+}
+
+// 道具の行為の語（data-vocab.js の items）。★ 対象（What）は見ない（2026-09-11 の却下どおり）
+function itemVocabActs(itemId) {
+  const entries = window.masterVocab?.items?.[itemId];
+  return Array.isArray(entries) ? [...new Set(entries.flatMap((e) => e.acts ?? []))] : [];
+}
+
+// ★ 共有した支給品の使い手（2026-09-23・EX-144 裁定A）。**EX-074 の担い手の規則を、その場面の育成値で当てる**：
+//   語で絞る（0人なら人間全員・犬は使わない）→ 育成値が最大 → 同じなら編成順（比較は `>` なので先の者が残る）。
+//   ★ 場面＝その遠征の依頼。育成値は工程エンジンと同じジャンルの表（`growthStatsForCategory`）から引く。
+//   ★ 戦闘の手当ては別の場面（育成値＝支援）なので、`simulateBattle` の中で同じ規則を当て直している。
+function sharedItemUser(itemId, party, quest) {
+  const humans = party.filter(isHumanAdventurer);
+  if (humans.length === 0) return null;
+  const acts = itemVocabActs(itemId);
+  const spoken = acts.length > 0 ? humans.filter((adv) => hasVocabAct(adv, acts)) : [];
+  const candidates = spoken.length > 0 ? spoken : humans;
+  const keys = growthStatsForCategory(quest?.category);
+  const score = (adv) => Math.max(0, ...keys.map((k) => Number(adv.stats?.[k]) || 0));
+  let best = null;
+  candidates.forEach((adv) => { if (!best || score(adv) > score(best)) best = adv; });
+  return best;
+}
+
+// 出発時に、共有の荷を使い手ごとの持ち物（`adventurerItemIds`）へ振り分ける。記録票は持たせた人へ。
+//   ★ 報告書の生成は今までどおり「持っている人＝使う人」として読むので、生成側は変えなくてよい。
+function buildExpeditionItemMap(party, quest, sharedItemIds, obsHolderIds) {
+  const map = {};
+  const push = (advId, itemId) => { (map[advId] ??= []).push(itemId); };
+  sharedItemIds.forEach((itemId) => {
+    const user = sharedItemUser(itemId, party, quest);
+    if (user) push(user.id, itemId);
+  });
+  obsHolderIds.forEach((advId) => { if (party.some((a) => a.id === advId)) push(advId, OBS_SHEET_ID); });
+  return map;
 }
 
 // ★ 運営不能の直前（2026-09-23・EX-144）＝**借金中、または借金2回を使い切った状態**。
@@ -197,6 +265,7 @@ function shoppingTripCount() {
 function shopItems() {
   const trips = shoppingTripCount();
   return state.items.filter((item) => {
+    if (item.personal) return false; // ★ 記録票は買わない（ギルドに無限にある）
     const need = MONEY_RULES.shopTierAfterTrips?.[item.shopTier];
     return item.shopTier != null && need != null && trips >= need;
   });
@@ -245,7 +314,8 @@ function returnItemsToStock(expedition, report) {
   if (!expedition.stockDrawn) return;
   const used = new Set(Array.isArray(report.usedItemIds) ? report.usedItemIds : []);
   const consumed = [];
-  getAllItemIds(expedition.adventurerItemIds ?? {}).forEach((itemId) => {
+  // ★ 記録票は棚から出していないので戻さない（消耗もしない＝毎回持たせられる）
+  stockDrawnItemIds(expedition).forEach((itemId) => {
     if (getItem(itemId)?.consumable && used.has(itemId) && !consumed.includes(itemId)) {
       consumed.push(itemId);
       return;
@@ -310,7 +380,10 @@ backfillEcologyRecordFrames();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
-let selectedAdventurerItems = state.selectedAdventurerItems ?? {};
+// ★ 出撃の支給品（2026-09-23・EX-144 裁定A）：共有の荷（品 id の並び・重複あり）と、記録票を持たせる人。
+//   買い出しのときは共有の荷が「書き付け」になる。旧 `selectedAdventurerItems`（1人2枠）は使わない。
+let selectedSharedItems = Array.isArray(state.selectedSharedItems) ? state.selectedSharedItems : [];
+let selectedObsHolders = Array.isArray(state.selectedObsHolders) ? state.selectedObsHolders : [];
 let editingAdventurerId = null;
 // 重症の冒険者に断られたときの一言。保存しない（画面だけの一時状態）。
 let departRefusal = null;
@@ -357,7 +430,8 @@ function createInitialState() {
     },
     selectedQuestId: null,
     selectedAdventurerIds: [],
-    selectedAdventurerItems: {},
+    selectedSharedItems: [],
+    selectedObsHolders: [],
     ecologyRecord: {},
     reportMemos: [],
     searchChain: null,
@@ -417,7 +491,10 @@ function loadState() {
     merged.items = mergeMasterList(masterItems);
     merged.adventurers = mergeAdventurerList(masterAdventurers, parsed.adventurers);
     // 旧形式 { advId: "itemId" } を新形式 { advId: ["itemId", null] } に正規化
-    merged.selectedAdventurerItems = normalizeItemMap(parsed.selectedAdventurerItems);
+    // 出撃の支給品の選択（2026-09-23・EX-144）。旧 `selectedAdventurerItems` は読まない（選び直してもらう）
+    delete merged.selectedAdventurerItems;
+    merged.selectedSharedItems = Array.isArray(parsed.selectedSharedItems) ? parsed.selectedSharedItems.filter((id) => typeof id === "string") : [];
+    merged.selectedObsHolders = Array.isArray(parsed.selectedObsHolders) ? parsed.selectedObsHolders.filter((id) => typeof id === "string") : [];
     // 遠征：単数 → 配列へ（2026-09-20・EX-138。`schemaVersion` は上げない＝内容で吸収する）
     merged.expeditions = normalizeExpeditions(parsed);
     delete merged.expedition; // 旧キーは残さない（残すと次の保存で二重に書かれる）
@@ -855,7 +932,8 @@ function appendPresenceLogToReport(report, expedition) {
 function saveState() {
   state.selectedQuestId = selectedQuestId;
   state.selectedAdventurerIds = selectedAdventurerIds;
-  state.selectedAdventurerItems = selectedAdventurerItems;
+  state.selectedSharedItems = selectedSharedItems;
+  state.selectedObsHolders = selectedObsHolders;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -970,7 +1048,8 @@ function restoreBoundRecord() {
   state = loadState();
   selectedQuestId = state.selectedQuestId ?? null;
   selectedAdventurerIds = state.selectedAdventurerIds ?? [];
-  selectedAdventurerItems = state.selectedAdventurerItems ?? {};
+  selectedSharedItems = state.selectedSharedItems ?? [];
+  selectedObsHolders = state.selectedObsHolders ?? [];
   editingAdventurerId = null;
   bindRestoreConfirmOpen = false;
   bindNoticeText = `${stampDateText(book.boundAt)}に綴じた記録まで戻った。`;
@@ -2431,13 +2510,12 @@ function renderQuests() {
           <div class="card-title">
             <div>
               <p class="eyebrow">Supplies</p>
-              <h3>${isShoppingQuest(selectedQuest) ? "買ってきてほしい物" : "支給品割り当て"}</h3>
+              <h3>${isShoppingQuest(selectedQuest) ? "買ってきてほしい物" : "支給品"}</h3>
             </div>
-            <span class="status-pill">${getAllItemIds(selectedAdventurerItems).length}個</span>
           </div>
           ${selectedAdventurerIds.length === 0
             ? `<div class="empty">冒険者を選択してください。</div>`
-            : `<div class="assign-list">${selectedAdventurerIds.map(adventurerItemAssignHtml).join("")}</div>`}
+            : suppliesPanelHtml(selectedQuest)}
         </div>
       </section>
     </div>
@@ -2501,6 +2579,7 @@ function selectableAdventurerHtml(adventurer) {
         </div>
         <div class="status-pills">
           <span class="status-pill ${disabled ? "away" : ""}">${escapeHtml(adventurer.status)}</span>
+          ${selected && selectedObsHolders.includes(adventurer.id) && !isShoppingQuest(getQuest(selectedQuestId)) ? `<span class="status-pill obs-holder-pill">📓 記録票</span>` : ""}
           ${injuryBadgeHtml(adventurer)}
         </div>
       </div>
@@ -2521,48 +2600,71 @@ function selectableItemHtml(item) {
   `;
 }
 
-// ★ 同じ枠に別の意味を持たせる（2026-09-23・EX-144。設計ページ「新しい画面を作らない」）。
-//   通常の依頼＝**在庫から持たせる**（棚にある物だけが並ぶ。★ 金額は出さない）。
-//   買い出し＝**欲しい物を置いておく**（まだ無い物なので半透明。在庫に無い物も置ける）。
-function adventurerItemAssignHtml(advId) {
-  const adv = getAdventurer(advId);
-  if (!adv) return "";
-  const slots = selectedAdventurerItems[advId] ?? [null, null];
-  const shopping = isShoppingQuest(getQuest(selectedQuestId));
-  const slotLabels = shopping ? ["書き付け1", "書き付け2"] : ["スロット1", "スロット2"];
+// ★ 支給品の欄（2026-09-23・EX-144 裁定A）。**共有の荷**と**個人の記録票**を分けて見せる。
+//   共有の荷＝パーティに渡す（誰に持たせるかは選ばない。使うのは語で選ばれた担い手）。容量はメンバーのスロットの合計。
+//   記録票＝誰に書かせるかを選ぶ（持たせた人のスロットを1つ埋める）。★ **誰が持っているかが一目で分かる**こと。
+//   買い出しのときは共有の荷が**欲しい物の書き付け**になり、半透明で並ぶ（まだ無い物。設計ページ「同じ枠に別の意味」）。
+function suppliesPanelHtml(quest) {
+  const shopping = isShoppingQuest(quest);
+  const cap = suppliesCapacity(shopping);
+  const full = selectedSharedItems.length >= cap;
+  const ghost = shopping ? " item-wish is-ghost" : "";
+  const chips = selectedSharedItems.map((itemId, i) =>
+    `<button class="shared-chip${ghost}" onclick="removeSharedItem(${i})" title="外す">${escapeHtml(getItem(itemId)?.name ?? "")} ✕</button>`).join("");
+  const addable = assignableItems(shopping);
+  const obsItem = getItem(OBS_SHEET_ID);
+  const showObs = !shopping && isPersonalItemUnlocked(obsItem);
   return `
-    <div class="assign-row">
-      <span class="assign-name">${escapeHtml(getDisplayName(adv))}</span>
-      <div class="assign-slots">
-        ${[0, 1].map((slot) => {
-          const currentItem = slots[slot];
-          const otherSlotItem = slots[slot === 0 ? 1 : 0];
-          return `
-            <div class="assign-slot">
-              <span class="slot-label">${slotLabels[slot]}${currentItem ? `：${escapeHtml(getItem(currentItem)?.name ?? "")}` : "（空）"}</span>
-              <div class="assign-items">
-                ${assignableItems(shopping, currentItem).map((item) => {
-                  const isAssigned = currentItem === item.id;
-                  const sameAdvOtherSlot = otherSlotItem === item.id;
-                  // 棚の残り（この枠に入れている分は数えない）。★ 数だけ出す。金額は出さない
-                  const left = shopping ? null : stockCount(item.id) - selectedItemCount(item.id);
-                  return `<button class="item-assign-btn${shopping ? " item-wish is-ghost" : ""}${isAssigned ? " selected" : ""}${sameAdvOtherSlot ? " taken" : ""}"
-                    onclick="${sameAdvOtherSlot ? "" : `assignItem('${escapeJsArg(advId)}', ${slot}, '${escapeJsArg(item.id)}')`}"
-                    ${sameAdvOtherSlot ? "disabled" : ""}
-                    title="${escapeHtml(item.note)}">${escapeHtml(item.name)}${left != null && !isAssigned ? `<span class="item-left">×${left}</span>` : ""}</button>`;
-                }).join("") || `<span class="muted">${escapeHtml(emptyStockText())}</span>`}
-              </div>
-            </div>`;
-        }).join("")}
+    <div class="shared-load">
+      <div class="shared-load-head">
+        <strong>${shopping ? "書き付け（買ってきてほしい物）" : "共有の荷"}</strong>
+        <span class="status-pill${full ? " away" : ""}" data-shared-count="${selectedSharedItems.length}" data-shared-cap="${cap}">${selectedSharedItems.length}/${cap}</span>
+      </div>
+      <p class="muted shared-load-note">${shopping
+        ? "1人2枠。多く連れて行けば、多く頼める。"
+        : "パーティに渡す。使うのは、その道具の扱いに長けた者。"}</p>
+      <div class="shared-chips">${chips || `<span class="muted">${shopping ? "まだ何も書いていない。" : "まだ何も積んでいない。"}</span>`}</div>
+      <div class="assign-items">
+        ${addable.map((item) => {
+          // 棚の残り（荷に積んだ分は引く）。★ 数だけ出す。金額は出さない
+          const left = shopping ? null : stockCount(item.id) - selectedItemCount(item.id);
+          return `<button class="item-assign-btn${ghost}" ${full ? "disabled" : ""}
+            onclick="addSharedItem('${escapeJsArg(item.id)}')"
+            title="${escapeHtml(item.note)}">${escapeHtml(item.name)}${left != null ? `<span class="item-left">×${left}</span>` : ""}</button>`;
+        }).join("") || `<span class="muted">${escapeHtml(emptyStockText())}</span>`}
       </div>
     </div>
+    ${showObs ? `
+    <div class="obs-sheet-panel">
+      <div class="shared-load-head">
+        <strong>観察記録票（個人）</strong>
+        <span class="status-pill" data-obs-count="${selectedObsHolders.length}">${selectedObsHolders.length}人</span>
+      </div>
+      <p class="muted shared-load-note">持たせた人が書き手になる。1人のスロットを1つ使う。何度でも持たせられる。</p>
+      <div class="obs-sheet-rows">
+        ${selectedAdventurerIds.map((advId) => {
+          const adv = getAdventurer(advId);
+          if (!adv) return "";
+          const holding = selectedObsHolders.includes(advId);
+          if (!canHoldObsSheet(adv)) {
+            return `<div class="obs-sheet-row"><span>${escapeHtml(getDisplayName(adv))}</span><span class="muted">書かない</span></div>`;
+          }
+          const blocked = !holding && selectedSharedItems.length > cap - 1;
+          return `<div class="obs-sheet-row${holding ? " holding" : ""}">
+            <span>${holding ? "📓 " : ""}${escapeHtml(getDisplayName(adv))}</span>
+            <button class="obs-sheet-btn${holding ? " selected" : ""}" data-adv="${escapeHtml(advId)}"
+              onclick="toggleObsSheet('${escapeJsArg(advId)}')" ${blocked ? `disabled title="共有の荷を1つ減らすと持たせられる"` : ""}>${holding ? "記録票を持っている" : "記録票を持たせる"}</button>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>` : ""}
   `;
 }
 
-// 枠に並べる品。買い出しは**買える品**（段で開いたもの）、それ以外は**棚に残っている品**（＋今この枠に入れている品）。
-function assignableItems(shopping, currentItem) {
+// 積める品。買い出しは**買える品**（段で開いたもの）、それ以外は**棚に残っている品**。★ 記録票は並べない（個人の欄で選ぶ）
+function assignableItems(shopping) {
   if (shopping) return shopItems();
-  return state.items.filter((item) => item.id === currentItem || stockCount(item.id) - selectedItemCount(item.id) > 0);
+  return state.items.filter((item) => !item.personal && stockCount(item.id) - selectedItemCount(item.id) > 0);
 }
 
 function emptyStockText() {
@@ -2573,10 +2675,12 @@ function emptyStockText() {
 
 function dispatchSummaryHtml(quest, expeditionBlock = null) {
   const party = selectedAdventurerIds.map(getAdventurer).filter(Boolean);
-  const itemsText = party.map((adv) => {
-    const names = getAdvItemIds(selectedAdventurerItems, adv.id).map((iId) => getItem(iId)?.name).filter(Boolean);
-    return names.length > 0 ? `${escapeHtml(getDisplayName(adv))}：${names.map(escapeHtml).join("・")}` : null;
-  }).filter(Boolean).join(" / ") || "なし";
+  const sharedNames = selectedSharedItems.map((iId) => getItem(iId)?.name).filter(Boolean);
+  const sheetNames = isShoppingQuest(quest) ? [] : party.filter((adv) => selectedObsHolders.includes(adv.id)).map(getDisplayName);
+  const itemsText = [
+    sharedNames.length ? `${isShoppingQuest(quest) ? "" : "共有："}${sharedNames.map(escapeHtml).join("・")}` : null,
+    sheetNames.length ? `記録票：${sheetNames.map(escapeHtml).join("・")}` : null
+  ].filter(Boolean).join(" ／ ") || "なし";
   return `
     <div class="kv">
       <span>依頼</span><strong>${escapeHtml(questDisplayTitle(quest))}</strong>
@@ -3593,7 +3697,7 @@ function returnFromResult(reportId) {
 
 function selectQuest(id) {
   // ★ 買い出しとそれ以外では枠の意味が違う（書き付け／持ち物）。行き来したら枠を空ける（2026-09-23・EX-144）
-  if (isShoppingQuest(getQuest(selectedQuestId)) !== isShoppingQuest(getQuest(id))) selectedAdventurerItems = {};
+  if (isShoppingQuest(getQuest(selectedQuestId)) !== isShoppingQuest(getQuest(id))) selectedSharedItems = [];
   selectedQuestId = id;
   departRefusal = null;
   saveState();
@@ -3606,7 +3710,7 @@ function toggleAdventurer(id) {
   departRefusal = null;
   if (selectedAdventurerIds.includes(id)) {
     selectedAdventurerIds = selectedAdventurerIds.filter((advId) => advId !== id);
-    delete selectedAdventurerItems[id];
+    trimSuppliesToParty(); // 抜けた人の記録票と、減った容量からはみ出した荷を落とす
   } else {
     if (selectedAdventurerIds.length >= MAX_PARTY_SIZE) return;
     selectedAdventurerIds = [...selectedAdventurerIds, id];
@@ -3615,32 +3719,62 @@ function toggleAdventurer(id) {
   render();
 }
 
-function assignItem(advId, slot, itemId) {
-  if (!selectedAdventurerItems[advId]) selectedAdventurerItems[advId] = [null, null];
-  const slots = selectedAdventurerItems[advId];
-  if (slots[slot] === itemId) {
-    slots[slot] = null;
+// 共有の荷に1つ足す。★ 容量（メンバーのスロットの合計−記録票の数）を越えない。
+//   通常の依頼は棚に残っている物だけ／買い出しは買える品（段で開いたもの）を書き付けに置く。
+function addSharedItem(itemId) {
+  const shopping = isShoppingQuest(getQuest(selectedQuestId));
+  const item = getItem(itemId);
+  if (!item || item.personal) return;
+  if (selectedSharedItems.length >= suppliesCapacity(shopping)) return;
+  if (shopping) {
+    if (!shopItems().some((i) => i.id === itemId)) return;
+  } else if (stockCount(itemId) - selectedItemCount(itemId) <= 0) {
+    return;
+  }
+  selectedSharedItems = [...selectedSharedItems, itemId];
+  saveState();
+  render();
+}
+
+function removeSharedItem(index) {
+  selectedSharedItems = selectedSharedItems.filter((_, i) => i !== index);
+  saveState();
+  render();
+}
+
+// 記録票を持たせる／外す。★ 持たせると、その人のスロットが1つ埋まる（共有の荷の容量が1減る）。
+//   ⚠️ 共有の荷が容量いっぱいのときは持たせられない（荷を減らしてから）。黙って荷を落とさない。
+function toggleObsSheet(advId) {
+  if (selectedObsHolders.includes(advId)) {
+    selectedObsHolders = selectedObsHolders.filter((id) => id !== advId);
   } else {
-    const otherSlot = slot === 0 ? 1 : 0;
-    if (slots[otherSlot] === itemId) return; // 同じ冒険者の別スロットに同じ支給品は不可
-    // ★ 棚に残っていない物は持たせられない（買い出しの書き付けは在庫と無関係）。2026-09-23・EX-144
-    if (!isShoppingQuest(getQuest(selectedQuestId)) && stockCount(itemId) - selectedItemCount(itemId) <= 0) return;
-    slots[slot] = itemId;
+    if (!selectedAdventurerIds.includes(advId) || !canHoldObsSheet(getAdventurer(advId))) return;
+    if (selectedSharedItems.length > suppliesCapacity(false) - 1) return;
+    selectedObsHolders = [...selectedObsHolders, advId];
   }
   saveState();
   render();
 }
 
-// 枠の中身を棚の数に合わせる（足りない分は後ろの枠から空ける）
-function trimSelectedItemsToStock() {
+function suppliesCapacity(shopping) {
+  return partyItemCapacity(selectedAdventurerIds, shopping ? [] : selectedObsHolders);
+}
+
+// 編成が変わったら、抜けた人の記録票を外し、容量からはみ出した共有の荷を後ろから落とす
+function trimSuppliesToParty(shopping = isShoppingQuest(getQuest(selectedQuestId))) {
+  selectedObsHolders = selectedObsHolders.filter((id) => selectedAdventurerIds.includes(id));
+  const cap = suppliesCapacity(shopping);
+  if (selectedSharedItems.length > cap) selectedSharedItems = selectedSharedItems.slice(0, cap);
+}
+
+// 共有の荷を棚の数に合わせる（足りない分は後ろから落とす。買い出しの書き付けから切り替えた直後など）
+function trimSharedItemsToStock() {
   const left = {};
-  Object.values(selectedAdventurerItems).forEach((slots) => {
-    if (!Array.isArray(slots)) return;
-    slots.forEach((itemId, i) => {
-      if (!itemId) return;
-      if (left[itemId] == null) left[itemId] = stockCount(itemId);
-      if (left[itemId] > 0) left[itemId] -= 1; else slots[i] = null;
-    });
+  selectedSharedItems = selectedSharedItems.filter((itemId) => {
+    if (getItem(itemId)?.personal) return false;
+    if (left[itemId] == null) left[itemId] = stockCount(itemId);
+    if (left[itemId] > 0) { left[itemId] -= 1; return true; }
+    return false;
   });
 }
 
@@ -3648,7 +3782,8 @@ function clearSelections() {
   departRefusal = null;
   selectedQuestId = null;
   selectedAdventurerIds = [];
-  selectedAdventurerItems = {};
+  selectedSharedItems = [];
+  selectedObsHolders = [];
   saveState();
   render();
 }
@@ -3668,9 +3803,7 @@ function startExpedition() {
   const partyNow = selectedAdventurerIds.map(getAdventurer);
   if (partyNow.some((adv) => !adv || adv.status !== "待機中")) {
     selectedAdventurerIds = selectedAdventurerIds.filter((id) => getAdventurer(id)?.status === "待機中");
-    selectedAdventurerItems = Object.fromEntries(
-      Object.entries(selectedAdventurerItems).filter(([advId]) => selectedAdventurerIds.includes(advId))
-    );
+    trimSuppliesToParty();
     saveState();
     render();
     return;
@@ -3687,7 +3820,13 @@ function startExpedition() {
   // ★ 在庫（2026-09-23・EX-144）。買い出しは枠を**書き付け**として持っていく（棚から出さない）。
   //   それ以外は、棚に無い物を枠から落としてから出す（買い出しの枠から切り替えた直後など）。
   const shoppingTrip = isShoppingQuest(quest);
-  if (!shoppingTrip) trimSelectedItemsToStock();
+  trimSuppliesToParty(shoppingTrip);
+  if (!shoppingTrip) trimSharedItemsToStock();
+  // ★ 共有の荷を使い手ごとに振り分ける（2026-09-23・EX-144 裁定A）。**編成順＝選んだ順**（同点の決め手）。
+  //   status を変える前に作る（使い手の規則は人の状態を見ないが、順序を確定させておく）。
+  const departingParty = selectedAdventurerIds.map(getAdventurer).filter(Boolean);
+  const obsHolders = shoppingTrip ? [] : selectedObsHolders.filter((id) => canHoldObsSheet(getAdventurer(id)));
+  const itemMap = shoppingTrip ? {} : buildExpeditionItemMap(departingParty, quest, selectedSharedItems, obsHolders);
   selectedAdventurerIds.forEach((id) => {
     const adv = getAdventurer(id);
     if (adv) adv.status = "遠征中";
@@ -3698,8 +3837,8 @@ function startExpedition() {
     id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, // ★ 同じ瞬間の2本で衝突しない
     questId: selectedQuestId,
     adventurerIds: [...selectedAdventurerIds],
-    adventurerItemIds: shoppingTrip ? {} : JSON.parse(JSON.stringify(selectedAdventurerItems)),
-    itemIds: shoppingTrip ? [] : getAllItemIds(selectedAdventurerItems),
+    adventurerItemIds: itemMap,
+    itemIds: getAllItemIds(itemMap),
     startTime: Date.now(),
     durationMs: getQuestDurationMs(quest),
     seed: Math.floor(Math.random() * 1000000),
@@ -3718,9 +3857,12 @@ function startExpedition() {
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
   expedition.fee = questFee(quest);
   if (shoppingTrip) {
-    expedition.shoppingList = getAllItemIds(selectedAdventurerItems);
+    expedition.shoppingList = [...selectedSharedItems];
   } else {
-    getAllItemIds(expedition.adventurerItemIds).forEach((itemId) => addStock(itemId, -1));
+    // ★ 棚から出すのは共有の荷だけ（記録票は棚に無い＝ギルドに無限にある）
+    expedition.sharedItemIds = [...selectedSharedItems];
+    expedition.obsSheetHolders = [...obsHolders];
+    expedition.sharedItemIds.forEach((itemId) => addStock(itemId, -1));
     expedition.stockDrawn = true; // 棚から出した印。帰還時に戻すのはこれがある遠征だけ
   }
   moveMoney(-expedition.fee, questFeeLabel(quest), quest.title);
@@ -3737,7 +3879,8 @@ function startExpedition() {
   });
   selectedQuestId = null;
   selectedAdventurerIds = [];
-  selectedAdventurerItems = {};
+  selectedSharedItems = [];
+  selectedObsHolders = [];
   saveState();
   setRoute("home");
 }
@@ -8223,7 +8366,8 @@ resetButton.addEventListener("click", () => {
   state = createInitialState();
   selectedQuestId = null;
   selectedAdventurerIds = [];
-  selectedAdventurerItems = {};
+  selectedSharedItems = [];
+  selectedObsHolders = [];
   editingAdventurerId = null;
   route = "home";
   render();
@@ -8645,7 +8789,13 @@ function simulateBattle(quest, party, itemIds, rng) {
       // 勝敗が決したラウンドでは発動しない（上のbreakより後ろに置くことで保証）。1ラウンド1回まで。
       if (woundedThisRound && bandages > 0) {
         const standing = fighters.filter((f) => !f.downed);
-        const healer = [...standing].sort((a, b) => b.support - a.support)[0];
+        // ★ 巻く人＝共有の包帯の使い手（2026-09-23・EX-144 裁定A）。EX-074 の規則を**この場面の育成値（支援）**で当てる：
+        //   包帯の語（手当て・留める）を持つ者に絞る（立っている中に0人なら全員）→ 支援が最大 → 同じなら編成順。
+        //   fighters は人間だけ（犬は巻かない）。★ 手当ての量は巻く人で変わらない（変わるのは本文と、伸びる人）。
+        const bandageActs = itemVocabActs("item_bandage");
+        const spokenStanding = standing.filter((f) => hasVocabAct({ id: f.id }, bandageActs));
+        const healerPool = spokenStanding.length > 0 ? spokenStanding : standing;
+        const healer = [...healerPool].sort((a, b) => b.support - a.support)[0];
         const severity = { "深手": 2, "手負い": 1 };
         const target = [...standing].filter((f) => severity[f.status]).sort((a, b) => severity[b.status] - severity[a.status])[0];
         if (healer && target) {

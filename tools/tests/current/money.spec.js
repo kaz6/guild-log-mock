@@ -4,7 +4,7 @@
 //     値は data-money.js／依頼データから読み、「その値どおりに動いているか」だけを見る。
 const { test, expect } = require("@playwright/test");
 const { freshPage, interview, seedClearedQuests, departQuest, waitForReturn } = require("../helpers/app");
-const { settleExpedition, setMoney, spend, runShopping, setStock } = require("../helpers/money");
+const { settleExpedition, setMoney, spend, runShopping, runDispatch, setStock } = require("../helpers/money");
 
 test.describe("所持金", () => {
   test("金ははじめからある（初期所持金が正）", async ({ page }) => {
@@ -272,7 +272,7 @@ test.describe("在庫", () => {
     await page.locator(".quest-card").first().click();
     await page.locator(".adventurer-card").first().click();
     const got = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll(".item-card, .item-assign-btn, .assign-row .slot-label")];
+      const nodes = [...document.querySelectorAll(".item-card, .item-assign-btn, .shared-chip")];
       return {
         count: nodes.length,
         buttons: document.querySelectorAll(".item-assign-btn").length,
@@ -300,7 +300,7 @@ test.describe("在庫", () => {
     await setStock(page, { item_bandage: 2, item_smoke: 2 }); // 4個。あと1つだけ買える
     const got = await runShopping(page, {
       party: ["adv_mina", "adv_gadd"],
-      wishes: { adv_mina: ["item_bandage", "item_smoke"], adv_gadd: ["item_bandage", null] }
+      wishes: ["item_bandage", "item_smoke", "item_bandage"]
     });
     expect(got.error).toBeUndefined();
     expect(got.shopping.bought.length).toBe(1);
@@ -322,8 +322,7 @@ test.describe("在庫", () => {
 
     await setStock(page, { item_map: 1 });
     await page.evaluate(() => setRoute("quests"));
-    const names = await page.evaluate(() => [...document.querySelectorAll(".assign-row")][0]
-      ? [...[...document.querySelectorAll(".assign-row")][0].querySelectorAll(".assign-slot")][0].innerText : "");
+    const names = await page.evaluate(() => [...document.querySelectorAll(".item-assign-btn")].map((b) => b.innerText).join(" "));
     expect(names).toContain("古地図");
     expect(names).not.toContain("包帯");
     // 1つしか無い品は、1枠に入れたらもう並ばない
@@ -372,7 +371,7 @@ test.describe("買い出しクエスト", () => {
     // 交渉値だけを変えた2回で、単価が下がること（額そのものは判定しない）
     const errors = await freshPage(page);
     await interview(page);
-    const wishes = { adv_mina: ["item_bandage", null] };
+    const wishes = ["item_bandage"];
     const low = await runShopping(page, { party: ["adv_mina"], wishes, negotiation: 0 });
     await setStock(page, {});
     const high = await runShopping(page, { party: ["adv_mina"], wishes, negotiation: 255 });
@@ -388,11 +387,13 @@ test.describe("買い出しクエスト", () => {
     // ★ ステータスではなく人数。1人2枠なので、1人と3人で書き付けに書ける量が変わる
     const errors = await freshPage(page);
     await interview(page);
-    const one = await runShopping(page, { party: ["adv_mina"], wishes: { adv_mina: ["item_bandage", "item_smoke"] } });
+    // ★ 書き付けを5つ渡しても、1人なら2枠ぶんしか持っていかない
+    const five = ["item_bandage", "item_smoke", "item_bandage", "item_smoke", "item_bandage"];
+    const one = await runShopping(page, { party: ["adv_mina"], wishes: five });
     await setStock(page, {});
     const three = await runShopping(page, {
       party: ["adv_mina", "adv_gadd", "adv_elne"],
-      wishes: { adv_mina: ["item_bandage", "item_smoke"], adv_gadd: ["item_bandage", "item_smoke"], adv_elne: ["item_bandage", null] }
+      wishes: five
     });
     expect(one.shopping.bought.length).toBe(2);
     expect(three.shopping.bought.length).toBeGreaterThan(one.shopping.bought.length);
@@ -409,8 +410,8 @@ test.describe("買い出しクエスト", () => {
     const ghosts = page.locator(".item-assign-btn.item-wish.is-ghost");
     expect(await ghosts.count(), "空の棚でも、買える品は書き付けに置ける").toBeGreaterThan(0);
     await ghosts.first().click();
-    expect(await page.evaluate(() => getAllItemIds(selectedAdventurerItems).length)).toBe(1);
-    expect(await page.locator(".item-assign-btn.item-wish.is-ghost.selected").count()).toBe(1);
+    expect(await page.evaluate(() => selectedSharedItems.length)).toBe(1);
+    expect(await page.locator(".shared-chip.item-wish.is-ghost").count(), "置いた物も半透明のまま").toBe(1);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 
@@ -421,7 +422,7 @@ test.describe("買い出しクエスト", () => {
     const first = await page.evaluate(() => shopItems().map((i) => i.id));
     expect(first.length).toBeGreaterThan(0);
     expect(first.length).toBeLessThan(await page.evaluate(() => state.items.length));
-    await runShopping(page, { party: ["adv_mina"], wishes: { adv_mina: ["item_bandage", null] } });
+    await runShopping(page, { party: ["adv_mina"], wishes: ["item_bandage"] })
     const later = await page.evaluate(() => shopItems().map((i) => i.id));
     expect(later.length).toBeGreaterThan(first.length);
     expect(errors, errors.join(" | ")).toEqual([]);
@@ -472,6 +473,190 @@ test.describe("救済クエスト", () => {
     // ★ 枠の数は越えない
     expect(await page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).length))
       .toBeLessThanOrEqual(await page.evaluate(() => window.masterBoardRules.slots));
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
+
+// ── 支給品はパーティ共有（2026-09-23・EX-144 裁定A）。受け入れテストから移した3件 ──
+const CARAVAN_CHAIN = ["quest_tavern_errand", "quest_guild_cleanup", "quest_old_house_cleanup", "quest_signpost", "quest_field_mystery", "quest_barn_bite", "quest_caravan_escort"];
+
+test.describe("支給品はパーティ共有", () => {
+  test("遠征ごとにパーティへ渡す（誰に持たせるかを選ばない）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await setStock(page, { item_bandage: 1, item_map: 1 });
+    await page.evaluate(() => { setRoute("quests"); selectQuest(getQuest("quest_tavern_errand") ? "quest_tavern_errand" : null); toggleAdventurer("adv_mina"); toggleAdventurer("adv_gadd"); });
+    // ★ 1人ずつの枠（スロット）が画面に無い。荷はパーティに1つ
+    expect(await page.locator(".assign-slot, .assign-row").count()).toBe(0);
+    await page.locator(".item-assign-btn").first().click();
+    expect(await page.locator(".shared-chip").count()).toBe(1);
+    // 出発すると、使い手は規則で決まる（プレイヤーは選んでいない）
+    const got = await runDispatch(page, { questId: "quest_tavern_errand", party: ["adv_mina", "adv_gadd"], shared: ["item_bandage", "item_map"] });
+    expect(got.error).toBeUndefined();
+    expect(got.shared).toEqual(["item_bandage", "item_map"]);
+    expect(Object.values(got.itemMap).flat().sort()).toEqual(["item_bandage", "item_map"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("持てる量はメンバーのスロットの合計", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => ({
+      two: partyItemCapacity(["adv_mina", "adv_gadd"]),
+      withDog: partyItemCapacity(["adv_mina", "adv_gadd", "adv_elsie"]),
+      per: ITEM_SLOTS_PER_MEMBER
+    }));
+    expect(got.two).toBe(2 * got.per);
+    expect(got.withDog, "エルシーも荷を持つ（パーティの荷が増える）").toBe(3 * got.per);
+    // 容量を越えて積めない
+    await setStock(page, { item_bandage: 3, item_smoke: 2 });
+    const n = await page.evaluate(() => {
+      selectQuest("quest_tavern_errand"); toggleAdventurer("adv_mina");
+      ["item_bandage", "item_bandage", "item_smoke"].forEach(addSharedItem);
+      return selectedSharedItems.length;
+    });
+    expect(n).toBe(got.per);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("使うのは語彙で選ばれた担い手（語で絞る→場面の育成値→編成順）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const herb = getQuest("quest_herb");
+      const party = (ids) => ids.map(getAdventurer);
+      const user = (item, ids, q = herb) => sharedItemUser(item, party(ids), q)?.id ?? null;
+      return {
+        // 料理人がいれば鍋は料理人が使う（〈火と食〉はガッドだけ）
+        pot: user("item_pot", ["adv_mina", "adv_gadd", "adv_elne"]),
+        // 包帯の語（手当て・留める）を持たないガッドは使わない
+        bandage: user("item_bandage", ["adv_gadd", "adv_elne"]),
+        // 煙幕は人間に語の持ち主がいない → 人間全員から、場面の育成値（採集＝探索）が最大の者
+        smoke: user("item_smoke", ["adv_gadd", "adv_mina"]),
+        // 犬は使わない（エルシーだけが〈離れる〉を持っていても）
+        smokeNoDog: user("item_smoke", ["adv_elsie", "adv_row"]),
+        // 同じ値なら編成順（先に選んだ者）
+        tieFirst: user("item_whistle", ["adv_row", "adv_mina"], { category: "生活" }),
+        tieFlip: user("item_whistle", ["adv_mina", "adv_row"], { category: "生活" }),
+        stats: { mina: getAdventurer("adv_mina").stats.negotiation, row: getAdventurer("adv_row").stats.negotiation },
+        // 報告書は「持っている人＝使う人」として読む（道具の行に出る名前が使い手になる）
+        holder: (() => {
+          const map = buildExpeditionItemMap(party(["adv_mina", "adv_gadd"]), herb, ["item_pot"], []);
+          return supplyItemHolderName(party(["adv_mina", "adv_gadd"]), map, "item_pot");
+        })(),
+        gaddName: getDisplayName(getAdventurer("adv_gadd"))
+      };
+    });
+    expect(got.pot).toBe("adv_gadd");
+    expect(got.bandage).toBe("adv_elne");
+    expect(got.smoke).toBe("adv_mina");
+    expect(got.smokeNoDog).toBe("adv_row");
+    if (got.stats.mina === got.stats.row) {
+      expect(got.tieFirst).toBe("adv_row");
+      expect(got.tieFlip).toBe("adv_mina");
+    }
+    expect(got.holder).toBe(got.gaddName);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("戦闘の手当ても同じ規則（包帯の語を持つ者に絞り、支援が最大の者が巻く）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    // エルネ（手当て）がいない編成：旧規則なら支援が最大のロウが巻いていた。語で絞るとミナ（留める）が巻く
+    const healers = await page.evaluate(() => {
+      const quest = getQuest("quest_caravan_escort");
+      const party = ["adv_mina", "adv_gadd", "adv_row"].map(getAdventurer);
+      const ids = new Set();
+      for (let seed = 1; seed <= 200; seed += 1) {
+        const b = simulateBattle(quest, party, ["item_bandage", "item_bandage"], makeRng(seed));
+        (b?.events ?? []).filter((e) => e.type === "heal").forEach((e) => ids.add(e.healerId));
+      }
+      return [...ids];
+    });
+    expect(healers.length, "200回で一度も手当てが起きない（検証になっていない）").toBeGreaterThan(0);
+    expect(healers).toEqual(["adv_mina"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
+
+// ── 観察記録票だけは個人に持たせる（例外・2026-09-23・EX-144 裁定）──
+test.describe("観察記録票は個人（例外）", () => {
+  test("誰に持たせるかを選べる。持っている人が一目で分かる（隊商護衛のあとに解禁）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => { setRoute("quests"); selectQuest("quest_tavern_errand"); toggleAdventurer("adv_mina"); });
+    expect(await page.locator(".obs-sheet-btn").count(), "解禁前（隊商護衛の前）は出さない").toBe(0);
+    await seedClearedQuests(page, CARAVAN_CHAIN);
+    await page.evaluate(() => { clearSelections(); setRoute("quests"); selectQuest("quest_herb"); toggleAdventurer("adv_mina"); toggleAdventurer("adv_elne"); toggleAdventurer("adv_elsie"); });
+    expect(await page.locator(".obs-sheet-btn").count(), "人間2人ぶん（犬は書かない）").toBe(2);
+    await page.locator('.obs-sheet-btn[data-adv="adv_elne"]').click();
+    expect(await page.evaluate(() => selectedObsHolders)).toEqual(["adv_elne"]);
+    expect(await page.locator(".obs-sheet-row.holding").innerText()).toContain("エルネ");
+    // 編成カードにも札が出る
+    const cardBadges = await page.evaluate(() => [...document.querySelectorAll(".adventurer-card")]
+      .filter((c) => c.querySelector(".obs-holder-pill")).map((c) => c.querySelector("h3").innerText));
+    expect(cardBadges.length).toBe(1);
+    expect(cardBadges[0]).toContain("エルネ");
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("持った人が書き手になる", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await seedClearedQuests(page, CARAVAN_CHAIN);
+    const got = await runDispatch(page, { questId: "quest_herb", party: ["adv_mina", "adv_elne"], obsHolders: ["adv_elne"] });
+    expect(got.error).toBeUndefined();
+    expect(got.itemMap.adv_elne).toEqual(["item_obs_sheet"]);
+    const writers = (got.report.observationNotes?.notes ?? []).map((n) => n.adventurerId);
+    expect(writers).toEqual(["adv_elne"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("消耗しない（書いても戻る。毎回持たせられる）／在庫に数えない・買わない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await seedClearedQuests(page, CARAVAN_CHAIN);
+    const first = await runDispatch(page, { questId: "quest_herb", party: ["adv_mina"], obsHolders: ["adv_mina"] });
+    expect(first.ownedAtDepart, "棚から出していない＝持ち物の数に入らない").toBe(0);
+    expect(first.stockAfter).toEqual({});
+    // もう一度持たせられる（棚が空でも）
+    const second = await runDispatch(page, { questId: "quest_herb", party: ["adv_mina"], obsHolders: ["adv_mina"] });
+    expect(second.itemMap.adv_mina).toEqual(["item_obs_sheet"]);
+    const shop = await page.evaluate(() => ({
+      inShop: shopItems().some((i) => i.id === "item_obs_sheet"),
+      inAddable: assignableItems(false).some((i) => i.id === "item_obs_sheet"),
+      normalized: normalizeStock({ item_obs_sheet: 3, item_bandage: 1 })
+    }));
+    expect(shop.inShop, "買い出しの品目から外す").toBe(false);
+    expect(shop.inAddable, "共有の荷には並ばない").toBe(false);
+    expect(shop.normalized).toEqual({ item_bandage: 1 });
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("持たせた人のスロットを1つ埋める（記録票を持たせるほど共有の荷が減る）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await seedClearedQuests(page, CARAVAN_CHAIN);
+    await setStock(page, { item_bandage: 3, item_smoke: 2 });
+    const got = await page.evaluate(() => {
+      selectQuest("quest_herb"); toggleAdventurer("adv_mina"); toggleAdventurer("adv_elne");
+      const before = suppliesCapacity(false);
+      toggleObsSheet("adv_mina"); toggleObsSheet("adv_elne");
+      const after = suppliesCapacity(false);
+      ["item_bandage", "item_bandage", "item_bandage", "item_smoke"].forEach(addSharedItem);
+      const loaded = selectedSharedItems.length;
+      toggleObsSheet("adv_elne"); // 外すと1つ空く
+      const reopened = suppliesCapacity(false);
+      addSharedItem("item_smoke");
+      // 荷がいっぱいのときは、記録票を持たせられない（黙って荷を落とさない）
+      toggleObsSheet("adv_elne");
+      return { before, after, loaded, reopened, finalShared: selectedSharedItems.length, holders: [...selectedObsHolders] };
+    });
+    expect(got.after).toBe(got.before - 2);
+    expect(got.loaded).toBe(got.after);
+    expect(got.reopened).toBe(got.after + 1);
+    expect(got.finalShared).toBe(got.reopened);
+    expect(got.holders).toEqual(["adv_mina"]);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
