@@ -11,9 +11,9 @@ function run(args) {
   return execFileSync("node", args, { cwd: REPO, encoding: "utf8", timeout: 60_000 });
 }
 
-test("構文チェックが通る（app.js とデータ6本）", () => {
+test("構文チェックが通る（app.js とデータ7本）", () => {
   expect(() => run(["--check", "app.js"])).not.toThrow();
-  ["data-adventurers.js", "data-enemies.js", "data-items.js", "data-quests.js", "data-time.js", "data-money.js"]
+  ["data-adventurers.js", "data-enemies.js", "data-items.js", "data-quests.js", "data-time.js", "data-money.js", "data-past.js"]
     .forEach((f) => expect(() => run(["--check", f]), f).not.toThrow());
 });
 

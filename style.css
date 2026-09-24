@@ -1429,3 +1429,8 @@ hr.soft {
 .obs-sheet-btn.selected { border-color: rgba(146, 186, 125, 0.9); background: rgba(146, 186, 125, 0.25); }
 .obs-sheet-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .status-pill.obs-holder-pill { background: #92ba7d; color: #1d2417; font-weight: 700; }
+
+/* 冒険者の過去（2026-09-24・EX-146）。最小限（Unity で差し替える前提） */
+.past-stage { margin-top: 8px; }
+.past-heading { margin: 0; font-size: 0.85em; opacity: 0.75; }
+.past-text { margin: 2px 0 0; line-height: 1.7; }
