@@ -701,6 +701,58 @@ function applyGrowthGain(adv, statKey, base, mult) {
   return adv.stats[statKey] - current;
 }
 
+// === 冒険者の過去（2026-09-24・EX-146） ===
+// ★ 設計：DECISION_LOG 2026-09-24。文面と閾値は data-past.js（どちらも仮）。
+// ★ 解放の条件は**その冒険者と遠征した回数**。`state.reports` から数える（新しい値を作らない。再出現・クールタイムと同じ形）。
+//   ★ **関係値（親愛度）ができたら、この数え方を親愛度へ切り替える前提**（設計どおり。行方不明の {名前} と同じ保留）。
+//   ★ 成功回数では数えない（却下済み）。未達の遠征も1回。
+//   ⚠️ 定型報告書（ギルドの掃除）は数えない（実装側の判断）：ギルド内の仕事で遠征ではなく、報告書に合図の1行も足せないため。
+function pastExpeditionCount(advId, reports = state.reports) {
+  return (reports ?? []).filter((r) => !r?.hiddenTags?.fixedReport && (r?.adventurerIds ?? []).includes(advId)).length;
+}
+
+function pastUnlockedStages(advId, reports = state.reports) {
+  const count = pastExpeditionCount(advId, reports);
+  return (window.masterPastRules?.thresholds ?? []).filter((t) => count >= t).length;
+}
+
+// 段が開いた遠征の報告書の末尾に1行（★ 通知・バッジは出さない。報告書を読んだ人だけが気づく）。
+//   帰還の処理の中で、**この報告書を棚に入れる前**に呼ぶ（この回を足した数で閾値を越えたかを見る）。
+function appendPastSignalToReport(report, expedition) {
+  if (!report?.logs || report?.hiddenTags?.fixedReport) return;
+  const rules = window.masterPastRules;
+  if (!rules) return;
+  const lines = [];
+  expedition.adventurerIds.forEach((advId) => {
+    const adv = getAdventurer(advId);
+    if (!adv || !window.masterAdventurerPasts?.[advId]) return;
+    const before = pastUnlockedStages(advId, state.reports);
+    const after = pastUnlockedStages(advId, [report, ...state.reports]);
+    if (after <= before) return;
+    const template = adv.species === "dog" ? rules.signal.dog : rules.signal.human;
+    lines.push(template.replaceAll("{名前}", getDisplayName(adv)));
+  });
+  if (lines.length === 0) return;
+  report.logs = [...report.logs, ...lines.map((text) => ({ kind: "afterglow", text }))];
+}
+
+// 名簿の詳細の「過去」。★ **未解放の段は出さない**（「まだある」ことも見せない）。1段も開いていなければ欄ごと出さない。
+function adventurerPastHtml(adventurer) {
+  const entries = window.masterAdventurerPasts?.[adventurer.id];
+  const stages = pastUnlockedStages(adventurer.id);
+  if (!Array.isArray(entries) || stages === 0) return "";
+  const headings = window.masterPastRules.headings[adventurer.species === "dog" ? "dog" : "human"];
+  return `
+    <section class="adventurer-detail-section adventurer-past">
+      <p class="meta-label">過去</p>
+      ${entries.slice(0, stages).map((text, i) => `
+        <div class="past-stage" data-past-stage="${i + 1}">
+          <p class="past-heading">${escapeHtml(headings[i] ?? "")}</p>
+          <p class="past-text">${escapeHtml(text)}</p>
+        </div>`).join("")}
+    </section>`;
+}
+
 // スライス10：2段成長式（主2.5＋微0.3重複／微0.3）×生還補正×成否補正をパーティ全員に適用する。
 // 主成長セット＝依頼種別のstat ∪ 戦闘での行動stat（hiddenTags.battleGrowth）。エルシーは種別＋微成長のみ。
 function appendGrowthLogToReport(report, expedition) {
@@ -1702,6 +1754,8 @@ function completeExpeditionIfDue(expedition) {
   appendPresenceLogToReport(report, expedition);
   appendPartyBanterToReport(report, expedition);
   appendGrowthLogToReport(report, expedition);
+  // ★ 過去の段が開いたら末尾に1行（2026-09-24・EX-146）。この回を足した数で見るので、棚に入れる前に呼ぶ。
+  appendPastSignalToReport(report, expedition);
   // ★ 名前の参照化 第二段（2026-09-17・EX-121）。**全部の行が揃ってから**通す。
   //   在席ログ・掛け合い・成長ログも報告書の本文なので、足し終わったあとに置き換える。
   applyNamedTargetToReport(report);
@@ -2952,6 +3006,7 @@ function adventurerEditorHtml(adventurer) {
       <p class="meta-label">${adventurer.species === "dog" ? "いまの様子" : "冒険譚"}</p>
       ${adventurerTaleHtml(adventurer)}
     </section>
+    ${adventurerPastHtml(adventurer)}
 
     <section class="adventurer-detail-section">
       <p class="meta-label">履歴</p>
