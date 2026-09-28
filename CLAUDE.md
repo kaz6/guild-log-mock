@@ -153,18 +153,30 @@ python3 -m http.server 8000
 
 ```bash
 npm install            # 初回だけ。★ Chromium の取得が要る場合は npx playwright install chromium
-npm test               # ★ current。ここが全部緑であることが作業の前提（13件・約30秒）
-npm run test:acceptance # 未実装の受け入れテスト（27件・すべて fixme で走らない）
+npm test               # ★ current。ここが全部緑であることが作業の前提
+npm run test:acceptance # 受け入れテスト（未実装のものは fixme で走らない）
 npm run test:all        # 両方
 npm run test:update-baseline  # 対比較の基準を作り直す（下記の規則を必ず読むこと）
 ```
 
 ★ **2つに分かれている。混ぜないこと。**
 
+★ **件数はここに書かない。実物で確かめる**（2026-09-28 に書き換え。旧記述の「current 13件／受け入れ27件・すべて fixme」は
+EX-144〜147 で実装が進んで古くなっていた——**自走の最初に読む手順書が、実態と違う前提から始めさせていた**）。
+
+```bash
+npx playwright test --list --project=current | tail -1     # current の件数
+npx playwright test --list --project=acceptance | tail -1  # 受け入れの件数
+grep -rnE "test\.(fixme|skip)\(" tools/tests/               # 走らないテスト（未着手）の一覧。0行なら0本
+```
+
+- ※ 参考（2026-09-28・EX-147 の後）：current 53件／受け入れ 1件／fixme・skip 0本／`npm run test:all` 54件すべて通過。
+  ★ **この行は古くなる。判断に使うのは上のコマンドの出力。**
+
 | | 中身 | 期待する結果 |
 |---|---|---|
 | **`tools/tests/current/`** | **今通るべきもの**——下記4の動作確認8項目／★ **対比較**／`scripts/` の検査と構文チェック | ★ **全部緑。赤は退行の合図** |
-| **`tools/tests/acceptance/`** | **まだ実装していない受け入れテスト**（金と在庫。出典は Notion「設計：金と在庫と買い出しクエスト」） | ★ **すべて `test.fixme`**。走らない |
+| **`tools/tests/acceptance/`** | **受け入れテスト**（金と在庫。出典は Notion「設計：金と在庫と買い出しクエスト」）。未実装のものは `test.fixme` で置く | ★ **走るものは全部緑**。`fixme` は未着手の一覧 |
 
 - ⚠️ ★ **未実装のテストを `current` に置かない。** 置くと `npm test` が常に赤になり、
   **退行なのか未着手なのか区別できなくなる**＝自走の判定がそこで死ぬ。
