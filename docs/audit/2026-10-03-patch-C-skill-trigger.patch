@@ -1,0 +1,11 @@
+diff -ru c/.claude/skills/session-end/SKILL.md d/.claude/skills/session-end/SKILL.md
+--- c/.claude/skills/session-end/SKILL.md	2026-10-03 05:15:00.916524093 +0000
++++ d/.claude/skills/session-end/SKILL.md	2026-10-03 05:15:07.202516376 +0000
+@@ -1,6 +1,6 @@
+ ---
+ name: session-end
+-description: セッションを終了して記録を残す。DECISION_LOG.md と SESSION_STATE.md を更新し、コミットし、Notion に反映するまでを一続きで行う。ユーザーが「終わり」「今日はここまで」「セッション終了」「記録して」「まとめて」「/clear する前に」等と言ったとき、また1タスクが完了して次のタスクへ移ろうとしているときは、必ずこのスキルを使うこと。明示的に「セッション終了」と言われなくても、作業が一区切りついた合図があれば使う。記録を怠るとNotion（正本）とローカルが乖離するため、省略しないこと。
++description: セッションを終了して記録を残す。DECISION_LOG.md と SESSION_STATE.md を更新し、コミットし、Notion に反映するまでを一続きで行う。ユーザーが「終わり」「今日はここまで」「セッション終了」「記録して」「まとめて」「/clear する前に」等と言ったときに使う。1タスクの完了時の配信は CLAUDE.md のとおりその場で済ませ、このスキルは記録（DECISION_LOG／SESSION_STATE／CURRENT_SPEC／却下案索引／対応表）の反映に使う。
+ ---
+ 
+ > このスキルのマスターは Notion `02_operations/スキル：session-end`。このファイルはそこからの写し。
