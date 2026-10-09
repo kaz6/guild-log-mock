@@ -9,6 +9,46 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__.*__notion-search$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-guard.js\" pre-search"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__.*__notion-update-page$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-guard.js\" pre-update"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__.*__notion-(update-page|create-pages)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-guard.js\" post-write"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__.*__notion-fetch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-guard.js\" post-fetch"
+          }
+        ]
+      }
     ]
   }
 }
