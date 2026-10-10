@@ -1,0 +1,56 @@
+# 自動化 #2：Issue を書くと PR が来る仕組み（遠征ギルドログ専用）
+# 正本は kaz6/ops の templates/guild-log-mock/claude.yml。guild-log-mock の .github/workflows/claude.yml に置く。
+#
+# 使い方：Issue の本文か、Issue・PR のコメントに「@claude」と書いて依頼する（kaz6 本人のみ反応）
+#   Issue は依頼の入口。決まったことの正本は今まで通り docs/DECISION_LOG.md と docs/SESSION_STATE.md
+#   PR は作者が確認してマージする
+# 手動で動かす：@claude を含むコメントを書くこと自体が起動方法（Run workflow ボタンは無い）
+# 費用の見積もり：Sonnet 5.5 で1件 $0.5〜2（最大30ターンで打ち切り）。質問だけなら $0.05 前後
+#
+# 鍵：
+#   ANTHROPIC_API_KEY … Console の ensei ワークスペースのキー（月上限 $40）
+#   GitHub の操作は公式の Claude GitHub App として行う（github_token は渡さない）
+#     → App で作った PR では他のワークフローも起動するので、#3 の自動レビューが #2 の PR に乗れる
+#   id-token: write は、Action が App のトークンを受け取るために必要
+
+name: Claude（Issue → PR）
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write        # ブランチを作ってコミットするため
+  issues: write          # Issue に返事を書くため
+  pull-requests: write   # PR を作る・PR に返事を書くため
+  id-token: write        # Claude GitHub App のトークンを受け取るため
+
+concurrency:
+  group: claude-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  claude:
+    # kaz6 本人が @claude と書いたときだけ動く（Action 側の「書き込み権限のある人だけ」の確認に加えた二重の守り）
+    if: >-
+      github.actor == 'kaz6' &&
+      (
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --model claude-sonnet-5-5
+            --max-turns 30
+            --append-system-prompt "このリポジトリでは、決まったことの正本は docs/DECISION_LOG.md と docs/SESSION_STATE.md。Issue は依頼の入口にすぎない。作業の前に両方を読むこと。依頼に書かれていない設計判断が必要になったら、勝手に決めずに A / B の案を返事に書いて止まること。.github/ 以下は変更しないこと。返事は日本語で、結論を先に書くこと。"
