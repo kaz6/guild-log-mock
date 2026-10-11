@@ -5,16 +5,28 @@
 //   終了コードと出力だけを見る。**こうすればテストから使っても scripts/ の性質は崩れない。**
 const { test, expect } = require("@playwright/test");
 const { execFileSync } = require("child_process");
+const fs = require("fs");
 const { REPO } = require("../helpers/app");
 
 function run(args) {
   return execFileSync("node", args, { cwd: REPO, encoding: "utf8", timeout: 60_000 });
 }
 
-test("構文チェックが通る（app.js とデータ7本）", () => {
+// リポジトリ直下の data-*.js をすべて拾う。
+// ★ なぜ手書きの一覧をやめたか：以前は7本を手で並べていて、index.html が読む
+//   data-outcomes.js と data-vocab.js が抜けていた（＝そこの構文エラーを npm test が見逃す）。
+//   データを足すたびに一覧を直す形だと、また書き忘れる。
+function listDataFiles() {
+  return fs.readdirSync(REPO).filter((name) => /^data-.+\.js$/.test(name)).sort();
+}
+
+test("構文チェックが通る（app.js とデータ全部）", () => {
   expect(() => run(["--check", "app.js"])).not.toThrow();
-  ["data-adventurers.js", "data-enemies.js", "data-items.js", "data-quests.js", "data-time.js", "data-money.js", "data-past.js"]
-    .forEach((f) => expect(() => run(["--check", f]), f).not.toThrow());
+  const dataFiles = listDataFiles();
+  // 拾えた数が0なら、探す場所を間違えている（その場合は何も検査せず緑になってしまう）
+  expect(dataFiles.length).toBeGreaterThan(0);
+  // ★ node --check は1回に1ファイルしか見ない（2つ目以降は引数扱い）ので、1本ずつ起動する
+  dataFiles.forEach((f) => expect(() => run(["--check", f]), f).not.toThrow());
 });
 
 test("観察記録の穴が0件（scripts/check-observation-targets.js）", () => {
