@@ -78,9 +78,10 @@ Unity の話をするときのバージョンをここで固定しておく（AI
 ## プロジェクト概要
 
 「遠征ギルドログ Mock」は、ローカルで動く HTML/CSS/JavaScript のモックです。
-ロジックのほぼ全てが `app.js` に集約されています。ビルドステップはありません。
+ロジックのほぼ全てが `app.js` に、マスターデータは `data-*.js` にあります。ビルドステップはありません。
 
-- `app.js`：データ定義・状態管理・ログ生成ロジック・画面描画すべてを含む本体
+- `app.js`：状態管理・ログ生成ロジック・画面描画を含む本体
+- `data-*.js`：マスターデータ（`window.masterQuests` など）。読み込む順は `index.html` の `FILES`
 - `index.html` / `style.css`：画面側
 - `docs/CURRENT_SPEC.md`：現状の仕様まとめ（**仕様の正本**。Notion 側は生成物）
 - `NEXT_TASKS.md`：既知課題・後回しタスク
@@ -143,7 +144,7 @@ git rev-list --left-right --count HEAD...origin/<ブランチ名>   # 左＝ロ�
 
 ### 1. ローカル起動
 
-どちらでも動く（両方とも実機確認済み。JSエラーなし・依頼17件のロードまで確認）。
+どちらでも動く（両方とも実機確認済み。JSエラーなし・依頼データのロードまで確認）。
 
 ```bash
 # A: ファイルを直接開く（依存なし。README の案内もこれ）
@@ -245,7 +246,7 @@ grep -rnE "test\.(fixme|skip)\(" tools/tests/               # 走らないテス
 ```bash
 # 構文チェック（変更したファイルに対して実行する。★ npm test もこれを子プロセスで通す）
 node --check app.js
-node --check data-adventurers.js data-enemies.js data-items.js data-quests.js
+for f in data-*.js; do node --check "$f"; done   # node --check は1回に1ファイルしか見ない（2つ目以降は引数扱い）
 ```
 
 - **lint は未整備**：ESLint 設定ファイルがなく、`eslint app.js` は設定不在エラー（exit 2）で落ちる。
@@ -427,10 +428,10 @@ Notion 追記先
 
 ## app.js の構造（現状）
 
-### データ定義
-- `masterQuests`：依頼の定義（id, title, category, danger, area, recommended, tags, observationTarget, **observationKind**, tensionBase/tensionRange, summary）
-- `masterItems`：支給品の定義
-- `masterAdventurers`（相当データ）：冒険者データ。weapon / accessory / obsession / traits / stats を持つ
+### データ定義（定義は `data-*.js`。`app.js` は `window.master*` を参照する）
+- `masterQuests`（`data-quests.js`）：依頼の定義（id, title, category, danger, area, recommended, tags, observationTarget, **observationKind**, tensionBase/tensionRange, summary）
+- `masterItems`（`data-items.js`）：支給品の定義
+- `masterAdventurers`（`data-adventurers.js`）：冒険者データ。weapon / accessory / obsession / traits / stats を持つ
 - ★ **観察記録は `generateAdventurerObservationNote`（`app.js`）が書く**。選び方は3段階（2026-09-15・EX-105）：
   **①対象ごとの専用分岐**（森喰い兎／「なにか」／残る灯り）→ **②種別ごとの既定**（依頼データの `observationKind`。
   生態目録の分類語と同じ語）→ **③受け皿**（種別が無いか、表に無い語のとき）。
@@ -441,7 +442,7 @@ Notion 追記先
 
 ### ログ生成の中心
 - `generateReport(expedition)` が司令塔。`quest.id` で分岐し、依頼ジャンルごとに専用の `generate*Logs()` 関数（例: `generateBattleLogs` / `generateBarnHuntLogs` / `generateBridgeRepairLogs` など）を呼ぶか、`questEventPools` / `lifeQuestEventPools` を使った汎用フローに乗せる。
-- `generateHighlight(quest, party, itemIds, departConditions, result, rng)` がハイライト文生成の中心。quest.id / category で分岐し、最後に result 別のフォールバックに落ちる。
+- `generateHighlight(quest, party, itemIds, departConditions, result, rng, usedItemIds)` がハイライト文生成の中心。quest.id / category で分岐し、最後に result 別のフォールバックに落ちる。
 
 ### 人数・主体表現
 - `isSoloParty` / `isSoloHumanParty` / `isCompanionParty`（人間1人＋エルシー）/ `isMultiHumanParty` / `partySubject` / `usesSoloHumanStyle` で編成パターンを判定する。
@@ -462,7 +463,7 @@ Notion 追記先
 
 ## 新しい依頼ジャンルを追加するときの最小差分ポイント
 
-1. `masterQuests` に1件追加
+1. `data-quests.js` の `masterQuests` に1件追加
 2. 専用の `generate*Logs()` 関数を新規作成（既存の似た依頼の関数を参考にする。既存関数の改造ではなく新規関数として作る）
 3. `canUseItemInQuest` の `allowedByQuest` に許可アイテムを追加（★ **必須**。既定が全禁止なので、書かないと支給品の行が一切出ない）
 4. `generateReport()` に `quest.id` 分岐を追加し、上記関数を呼ぶ。エルシーのログ方針（インライン or withElsieLog）を決めて統一する
