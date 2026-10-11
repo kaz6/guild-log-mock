@@ -34,7 +34,7 @@ function declaration(now = new Date()) {
     `> 更新日時: ${jstStamp(now)}（生成: ${utcStamp(now)}）`,
     "> **このページは写しであって、正本ではありません。** 正は repo の docs 配下の SESSION_STATE です。",
     "> **ここを手で編集しても repo には戻りません。** 直すときは repo 側を直してください" +
-      "（このページは session-end の ⑤-b が「node scripts/gen-notion-session-state.js」の出力で毎回まるごと置き換えます）。"
+      "（このページは session-end の ⑤-b が「node scripts/gen-notion-session-state.js」の出力から更新します。手で編集した箇所は、前回の生成出力との照合で見つかると全面置き換えで消えます）。"
   ];
 }
 
