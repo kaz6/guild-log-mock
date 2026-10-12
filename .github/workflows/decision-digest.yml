@@ -96,7 +96,8 @@ jobs:
 
           CHUNK_TARGET = 24_000          # 塊の目安の字数（見出しの切れ目でここを超えたら切る）
           CHUNK_MAX = 34_000             # 塊の字数の上限（これを超えそうなら見出し以外でも切る）
-          REDUCE_MAX = 20_000            # まとめ直し1回に渡す JSON の字数の上限（出力は入力以下なので、出力の上限に収まる大きさにする）
+          REDUCE_MAX = 22_000            # まとめ直し1回に渡す JSON の字数の上限（出力は入力以下なので、出力の上限に収まる大きさにする）
+          FINAL_TARGET = 18_000          # 最後のまとめ直しの出力の目安（JSON の字数。整形すると本体は 2万字以内になる）
           DIGEST_MAX = 20_000            # ダイジェスト本体の字数の目安（超えたら絞り直す）
           INPUT_TOKEN_LIMIT = 90_000     # 実測の入力がこれを超えたら止める（10万を超えると単価が5倍）
           MAX_TOKENS_EXTRACT = 12_000
@@ -329,8 +330,15 @@ jobs:
               return json.dumps(items, ensure_ascii=False, separators=(",", ":"))
 
 
-          def reduce_once(items, extra=""):
-              system = REDUCE_SYSTEM + (("\n" + extra) if extra else "")
+          def reduce_once(items, target=None):
+              """まとめ直し1回。target は出力の JSON の字数の目標（モデルに明示する。無ければ最終用の FINAL_TARGET）。"""
+              n = len(dumps(items))
+              target = int(min(n, target if target else FINAL_TARGET))
+              system = REDUCE_SYSTEM + (
+                  f"\n\n# 大きさ\n- 出力の JSON の合計は {target:,} 字以内にする（入力は {n:,} 字）。超えそうなときは、重要度の低い項目から落とす。"
+                  "\n- 残す優先：運用ルール・禁止事項・数値・仕様の骨格・やり直しの効かない決定。"
+                  "\n- 落とす優先：実装上の細かい注意、個別の文言、確認の手順、他の項目から導ける項目。"
+              )
               text, stop = call_haiku(system, dumps(items), MAX_TOKENS_REDUCE)
               if stop == "max_tokens":
                   raise RuntimeError("まとめ直しの出力が上限に達した（後ろの決定が欠けるので、コミットしない）")
@@ -344,8 +352,8 @@ jobs:
               return [i for i in out if i["status"] in ("有効", "未確定")]
 
 
-          def reduce_all(items, extra=""):
-              """入力が REDUCE_MAX を超えるあいだ、順序を保って群に分けてまとめ直し、最後に1回まとめ直す。"""
+          def reduce_all(items):
+              """入力が REDUCE_MAX を超えるあいだ、順序を保って群に分け、群ごとに目標の大きさを示してまとめ直す。最後に1回まとめ直す。"""
               rounds = 0
               while len(dumps(items)) > REDUCE_MAX:
                   rounds += 1
@@ -362,11 +370,13 @@ jobs:
                   if cur:
                       groups.append(cur)
                   before = len(dumps(items))
-                  log(f"まとめ直し {rounds} 段階目：{len(items)} 件 → {len(groups)} 群")
-                  items = [x for g in groups for x in reduce_once(g, extra)]
+                  ratio = max(0.3, min(0.8, FINAL_TARGET / before))
+                  log(f"まとめ直し {rounds} 段階目：{len(items)} 件（{before:,} 字）→ {len(groups)} 群、各群を {ratio:.0%} に")
+                  items = [x for g in groups for x in reduce_once(g, int(len(dumps(g)) * ratio))]
+                  log(f"  → {len(items)} 件（{len(dumps(items)):,} 字）")
                   if len(dumps(items)) >= before * 0.95:
                       raise RuntimeError("まとめ直しで一覧がほとんど小さくならなかった")
-              return reduce_once(items, extra)
+              return reduce_once(items)
 
 
           # ---------------------------------------------------------------- 見出しの照合と整形
@@ -466,7 +476,7 @@ jobs:
               while len(body) > DIGEST_MAX and squeeze < 2:
                   squeeze += 1
                   log(f"本体が {len(body):,} 字で目安 {DIGEST_MAX:,} 字を超えたので絞り直す（{squeeze}回目）")
-                  items = reduce_once(items, f"さらに、全体の合計が {DIGEST_MAX - 4000:,} 字以内になるよう、重要度の低い項目（実装上の細かい注意、個別の数値の細部、他の項目から導ける項目）を落とす。")
+                  items = reduce_once(items, int(len(dumps(items)) * 0.7))
                   body = render_body(items)
               ok, fixed, unknown = verify_headings(items, headings)
               body = render_body(items)
