@@ -377,7 +377,7 @@ jobs:
                   log(f"まとめ直し {rounds} 段階目：{len(items)} 件（{before:,} 字）→ {len(groups)} 群、各群を {ratio:.0%} に")
                   items = [x for g in groups for x in reduce_once(g, int(len(dumps(g)) * ratio))]
                   log(f"  → {len(items)} 件（{len(dumps(items)):,} 字）")
-                  if len(dumps(items)) >= before * 0.95:
+                  if len(dumps(items)) > REDUCE_MAX and len(dumps(items)) >= before * 0.95:
                       raise RuntimeError("まとめ直しで一覧がほとんど小さくならなかった")
               return reduce_once(items)
 
