@@ -13,7 +13,7 @@
 # 動き：原本を見出しの切れ目で塊に分ける → 塊ごとに Haiku 5.5 で「いま有効な決定」を抜き出す → 一覧をまとめ直す
 #   （後の決定で上書き・撤回されたものを落とす。入力が大きいときは段階を分ける）→ スクリプトが話題ごとのマークダウンに整える
 #   各行の末尾に（日付・原本の見出し）を付ける。見出しは原本の見出しと照合する（合わなければ補正、できなければ「※見出し未確認」）
-#   原本が前回から変わっていなければ（原本のハッシュと生成版が同じなら）何もしない（API も呼ばない）
+#   原本が前回から変わっていなければ（原本のハッシュと生成版が同じなら）何もしない（API も呼ばない）。作り直しても要約の中身が前回と同じなら、コミットしない
 # 起動：毎月1日の schedule と workflow_dispatch（force=true なら原本が同じでも作り直す）
 # 手動で動かす：Actions →「DECISION_DIGEST の更新」→ Run workflow
 # 費用：Haiku 5.5（入力 $0.10 / 出力 $0.50 per 100万トークン）。原本24万字で1回およそ $0.05〜0.15。毎回ダイジェストの末尾とコミットメッセージに書く
@@ -96,11 +96,11 @@ jobs:
 
           CHUNK_TARGET = 24_000          # 塊の目安の字数（見出しの切れ目でここを超えたら切る）
           CHUNK_MAX = 34_000             # 塊の字数の上限（これを超えそうなら見出し以外でも切る）
-          REDUCE_MAX = 36_000            # まとめ直し1回に渡す JSON の字数の上限
+          REDUCE_MAX = 20_000            # まとめ直し1回に渡す JSON の字数の上限（出力は入力以下なので、出力の上限に収まる大きさにする）
           DIGEST_MAX = 20_000            # ダイジェスト本体の字数の目安（超えたら絞り直す）
           INPUT_TOKEN_LIMIT = 90_000     # 実測の入力がこれを超えたら止める（10万を超えると単価が5倍）
           MAX_TOKENS_EXTRACT = 12_000
-          MAX_TOKENS_REDUCE = 16_000
+          MAX_TOKENS_REDUCE = 30_000
 
           JST = timezone(timedelta(hours=9))
           HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
@@ -309,14 +309,15 @@ jobs:
           def extract(ctx, body, idx, total, depth=0):
               user = f"# 原本の一部（{idx}/{total}）。この塊の直前の見出し：{ctx or '（なし）'}\n\n{body}"
               text, stop = call_haiku(EXTRACT_SYSTEM, user, MAX_TOKENS_EXTRACT)
+              if stop == "max_tokens" and depth < 3:
+                  # 出力が途中で切れた＝後ろの決定が欠ける。半分に分けてやり直す
+                  halves = split_half(body)
+                  if halves:
+                      log(f"  塊 {idx} は出力が上限に達したので半分に分ける")
+                      return extract(ctx, halves[0], idx, total, depth + 1) + extract(ctx, halves[1], idx, total, depth + 1)
               try:
                   return parse_items(text, truncated=(stop == "max_tokens"))
               except ValueError as e:
-                  if stop == "max_tokens" and depth < 2:
-                      halves = split_half(body)
-                      if halves:
-                          log(f"  塊 {idx} は出力が上限に達したので半分に分ける")
-                          return extract(ctx, halves[0], idx, total, depth + 1) + extract(ctx, halves[1], idx, total, depth + 1)
                   if depth < 1 and stop != "max_tokens":
                       log(f"  塊 {idx} の出力が読めなかったのでやり直す（{e}）")
                       text, stop = call_haiku(EXTRACT_SYSTEM, user + "\n\n（JSON の配列だけを出力すること）", MAX_TOKENS_EXTRACT)
@@ -331,11 +332,15 @@ jobs:
           def reduce_once(items, extra=""):
               system = REDUCE_SYSTEM + (("\n" + extra) if extra else "")
               text, stop = call_haiku(system, dumps(items), MAX_TOKENS_REDUCE)
+              if stop == "max_tokens":
+                  raise RuntimeError("まとめ直しの出力が上限に達した（後ろの決定が欠けるので、コミットしない）")
               try:
-                  out = parse_items(text, truncated=(stop == "max_tokens"))
+                  out = parse_items(text)
               except ValueError:
                   text, stop = call_haiku(system + "\n（JSON の配列だけを出力すること）", dumps(items), MAX_TOKENS_REDUCE)
-                  out = parse_items(text, truncated=(stop == "max_tokens"))
+                  if stop == "max_tokens":
+                      raise RuntimeError("まとめ直しの出力が上限に達した（後ろの決定が欠けるので、コミットしない）")
+                  out = parse_items(text)
               return [i for i in out if i["status"] in ("有効", "未確定")]
 
 
@@ -491,6 +496,13 @@ jobs:
               out = "\n".join(head) + "\n" + body + "\n".join(foot)
               if len(body) > DIGEST_MAX:
                   log(f"警告：本体が {len(body):,} 字で目安を超えたまま")
+              def body_of(t):
+                  a = t.find("## いま有効な決定")
+                  b = t.rfind("\n---\n生成の記録")
+                  return t[a:b].strip() if a >= 0 and b > a else None
+              if not FORCE and existing_text and body_of(existing_text) == body_of(out):
+                  log("要約の中身が前回と同じなので、コミットしない")
+                  return 0
               msg = f"docs: DECISION_DIGEST を更新（自動生成・原本{len(source):,}字→要約{len(body):,}字・費用 約${cost:.4f}）"
               payload = {"message": msg, "content": base64.b64encode(out.encode("utf-8")).decode("ascii"), "branch": branch}
               if existing_sha:
