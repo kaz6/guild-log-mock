@@ -377,7 +377,12 @@ jobs:
                   log(f"まとめ直し {rounds} 段階目：{len(items)} 件（{before:,} 字）→ {len(groups)} 群、各群を {ratio:.0%} に")
                   items = [x for g in groups for x in reduce_once(g, int(len(dumps(g)) * ratio))]
                   log(f"  → {len(items)} 件（{len(dumps(items)):,} 字）")
-                  if len(dumps(items)) > REDUCE_MAX and len(dumps(items)) >= before * 0.95:
+                  after = len(dumps(items))
+                  if after > REDUCE_MAX and after >= before * 0.95:
+                      if after <= REDUCE_MAX * 1.3:
+                          # 件数は絞れていて、上限を少し超えたまま頭打ち。最後のまとめ直し（出力上限 MAX_TOKENS_REDUCE）で受けられる大きさなので進む
+                          log(f"  上限を少し超えたまま縮まなくなったので、最後のまとめ直しへ進む（{after:,} 字）")
+                          break
                       raise RuntimeError("まとめ直しで一覧がほとんど小さくならなかった")
               return reduce_once(items)
 
