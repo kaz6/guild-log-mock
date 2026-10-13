@@ -15,9 +15,10 @@
 # 出力：
 #   迷いなく直せるもの（誤字・脱字で Haiku が確信したもの、括弧を足すだけの閉じ忘れ）だけを、ブランチ ops/proofread-<日時> に
 #   コミットして下書きの PR を出す。判断が要るもの（用語の揺れ・表記の統一・文法）は変更せず、PR 本文の表に並べる
-#   PR 本文の先頭に「自動マージの対象外」と書く。末尾に費用と件数。変更が0件なら PR は作らず、実行の要約（Summary）に出す
+#   PR 本文の先頭に「自動マージの対象外」と書く。末尾に費用と件数。変更が0件で判断が要るものだけがあるときは、同じ本文で Issue を1件立てる
+#   （PR は変更が無いと作れないため）。Haiku が挙げた候補と、それを変更・表・捨てるのどれにしたかは、すべてログに出す
 # 鍵：secrets.ANTHROPIC_API_KEY（リポジトリごとに登録。値は読まない・出力しない）
-# 権限：contents: write（ブランチを push する）と pull-requests: write（下書きの PR を作る）
+# 権限：contents: write（ブランチを push する）、pull-requests: write（下書きの PR を作る）、issues: write（変更0件のときの Issue）
 #   リポジトリの設定で「Actions に PR の作成を許す」が切れていると PR を作れない。そのときはブランチだけ push して、本文をログに出して失敗する
 # 費用の見積もり：Haiku 5.5（$0.10・$0.50 per 100万トークン）で、文章6万字の企画なら1回 $0.01〜0.03 程度
 
@@ -29,6 +30,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 env:
   # ▼ 企画ごとに変える所（ここだけ）
@@ -580,6 +582,8 @@ jobs:
               for f in fixes:
                   rec = by_id.get(str(f.get("id", "")))
                   verdict, why = judge(f, rec)
+                  log(f"  候補 {where(rec) if rec else f.get('id')}：{f.get('kind', '')} 「{f.get('before', '')}」→「{f.get('after', '')}」"
+                      f" certain={f.get('certain')} → {verdict}{'（' + why + '）' if why else ''}")
                   if verdict == "drop":
                       dropped += 1
                       continue
@@ -625,7 +629,7 @@ jobs:
               cost = usage[1] * PRICE_IN + usage[2] * PRICE_OUT
               pending = sum(len(v) for v in machine.values()) + len(ai_table)
               parts = [
-                  "> **自動マージの対象外です。** ops（自動化 #10 文章の校正）が出した候補です。ops はこの PR をマージしません。採るかどうか・直し方は作者が決めてください。",
+                  "> **自動マージの対象外です。** ops（自動化 #10 文章の校正）が出した候補です。ops はこの PR をマージしません（変更が0件のときは PR の代わりにこの Issue に出します）。採るかどうか・直し方は作者が決めてください。",
               ]
               if failed:
                   parts += ["", f"> ⚠️ Haiku の呼び出しが {failed}/{n_calls} 回失敗しました。その分の文章は誤字・脱字を見ていません。"]
@@ -702,9 +706,18 @@ jobs:
               if summary:
                   open(summary, "a", encoding="utf-8").write(body + "\n")
               if not applied:
-                  log("変更が0件のため、PR は作りません（判断が要るものは上の要約にあります）")
+                  log("変更が0件のため、PR は作りません")
+                  if not pending:
+                      log("判断が要るものも0件でした")
+                      return
+                  title = f"校正の候補 {datetime.now(JST).strftime('%Y-%m-%d')}（変更なし・判断待ち {pending} 件）"
+                  code, res = gh_api("POST", f"/repos/{REPO}/issues", {"title": title, "body": body})
+                  if code == 201:
+                      log(f"判断が要るものを Issue に出しました：{res.get('html_url')}")
+                      return
+                  log(f"Issue を作れませんでした（HTTP {code}：{res.get('message', '')}）")
                   log("---- 本文 ----\n" + body + "\n---- ここまで ----")
-                  return
+                  raise SystemExit(1)
               stamp = datetime.now(JST).strftime("%Y%m%d-%H%M")
               branch = f"ops/proofread-{stamp}"
               git("config", "user.name", "github-actions[bot]")
