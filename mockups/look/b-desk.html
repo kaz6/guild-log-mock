@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>見本B 記録係の机</title>
+<!-- 見本B：記録係の机を真上から見る。灯りの輪の中に紙を置き、周りは暗い木の机。絵は使わず CSS の光だけ。
+     ★ 外部の書体は読まない（地はゴシック、紙の上だけ明朝） -->
+<style>
+  :root {
+    --wood: #2a1d14; --wood-2: #3a291c; --lamp: rgba(255, 196, 120, .30);
+    --paper: #efe4cc; --ink: #2a241c; --ink-soft: #6b5f4e; --brass: #c9a25a; --shu: #b8322a; --text-on-wood: #e9dcc4;
+    --gothic: "Hiragino Sans", "Yu Gothic", "YuGothic", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+    --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; color: var(--text-on-wood); font-family: var(--gothic);
+    background:
+      radial-gradient(circle at 30% 12%, var(--lamp), transparent 55%),
+      repeating-linear-gradient(92deg, var(--wood) 0 14px, var(--wood-2) 14px 15px, var(--wood) 15px 37px);
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 12px 12px 40px; overflow-x: hidden; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 12px; opacity: .85; }
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid var(--brass); background: transparent; color: var(--text-on-wood); border-radius: 3px; }
+  .tabs button.on { background: var(--brass); color: var(--wood); }
+  /* 計器は机の縁に打った真鍮の札 */
+  .plates { display: flex; gap: 6px; margin-bottom: 14px; }
+  .plate { flex: 1; background: linear-gradient(#d9b46b, #a9823f); color: #2a1d10; border-radius: 3px; padding: 5px 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 4px rgba(0,0,0,.5); text-align: center; }
+  .plate span { display: block; font-size: 10px; letter-spacing: .15em; }
+  .plate strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+  .paper { background: var(--paper); color: var(--ink); font-family: var(--mincho); padding: 18px 16px 22px; box-shadow: 0 14px 30px rgba(0,0,0,.55); transform: rotate(-.6deg); position: relative; }
+  .paper h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: .12em; }
+  .paper .meta { font-family: var(--gothic); font-size: 12px; color: var(--ink-soft); margin: 0 0 12px; }
+  #lines { font-size: 15px; line-height: 1.9; min-height: 8em; }
+  .log-line { margin: 0 0 .55em; opacity: 0; transition: opacity .25s; }
+  .log-line.shown { opacity: 1; }
+  .log-line.typing::after { content: "｜"; color: var(--shu); }
+  .hint { font-family: var(--gothic); font-size: 11px; color: var(--ink-soft); text-align: right; margin: 4px 0 0; }
+  .foot { display: flex; align-items: flex-end; gap: 10px; margin-top: 14px; }
+  .hl { flex: 1; font-size: 13px; color: var(--ink-soft); margin: 0; }
+  .hanko { width: 64px; height: 64px; border: 3px solid var(--shu); color: var(--shu); display: grid; place-items: center; font-weight: 700; transform: rotate(9deg); font-size: 12px; text-align: center; line-height: 1.15; }
+  .stamp-btn { font-family: var(--gothic); font-size: 13px; background: var(--shu); color: #fff; border: 0; padding: 10px 12px; border-radius: 3px; }
+  .stamp-btn:disabled { opacity: .35; }
+  /* 拠点：机の上に置いたもの（掲示板の写し・名簿の札・報告書の束） */
+  .desk { display: grid; gap: 14px; }
+  .card { background: var(--paper); color: var(--ink); font-family: var(--mincho); padding: 12px 14px; box-shadow: 0 8px 18px rgba(0,0,0,.5); }
+  .card:nth-child(1) { transform: rotate(.5deg); }
+  .card:nth-child(2) { transform: rotate(-.7deg); }
+  .card h2 { font-family: var(--gothic); font-size: 12px; letter-spacing: .25em; color: var(--ink-soft); margin: 0 0 6px; }
+  .card ul { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  .card li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(0,0,0,.08); }
+  .card li:last-child { border-bottom: 0; }
+  .tag { font-family: var(--gothic); font-size: 11px; color: var(--ink-soft); }
+  .tray { display: grid; gap: 6px; }
+  .slip { font: inherit; font-family: var(--mincho); text-align: left; background: var(--paper); color: var(--ink); border: 0; padding: 10px 12px; box-shadow: 0 4px 10px rgba(0,0,0,.5); display: flex; justify-content: space-between; align-items: center; }
+  .slip .mini { color: var(--shu); border: 2px solid var(--shu); font-size: 10px; padding: 2px 4px; transform: rotate(8deg); font-family: var(--gothic); font-weight: 700; }
+  .note { font-size: 12px; opacity: .75; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><span id="dateLabel"></span><div class="tabs"><button data-screen="report">報告書</button><button data-screen="base">机</button></div></div>
+  <div id="look"></div>
+  <p class="note">見本B「記録係の机」。画面のどこを押しても文字送りを飛ばせます。判を押した報告書は、次に開くと最初から全部出ます（この画面の中だけ。保存はしません）。</p>
+</div>
+<script src="sample.js"></script>
+<script src="look.js"></script>
+<script>
+  document.getElementById("dateLabel").textContent = Look.todayLabel();
+  window.renderLook = function (view) {
+    var L = Look, S = L.S, e = L.esc;
+    var plates = '<div class="plates">' + L.gauges().map(function (g) {
+      return '<div class="plate"><span>' + e(g.label) + '</span><strong>' + e(g.text) + '</strong></div>';
+    }).join("") + '</div>';
+    if (view.screen === "base") {
+      return { html: plates + '<div class="desk">'
+        + '<div class="card"><h2>掲示板の写し</h2><ul>' + S.board.map(function (q) { return '<li><span>' + e(q.title) + '</span><span class="tag">' + e(q.category) + '</span></li>'; }).join("") + '</ul></div>'
+        + '<div class="card"><h2>名簿</h2><ul>' + S.adventurers.map(function (a) { return '<li><span>' + e(a.name) + '</span><span class="tag">' + e(a.status) + (a.injury ? '・' + e(a.injury) : '') + '</span></li>'; }).join("") + '</ul></div>'
+        + '<div class="tray">' + S.reports.map(function (r, i) {
+          return '<button class="slip" data-open="' + i + '"><span>' + e(r.questTitle) + '</span>' + (r.readStampAt ? '<span class="mini">読了</span>' : '') + '</button>';
+        }).join("") + '</div></div>' };
+    }
+    var r = S.reports[view.reportIndex];
+    return { html: plates + '<div class="paper">'
+      + '<h1>' + e(r.questTitle) + '</h1>'
+      + '<p class="meta">' + e(r.party.join("・")) + '　／　' + e(r.result) + '</p>'
+      + '<div id="lines"></div><p class="hint" id="skipHint">押すと全文</p>'
+      + '<div class="foot"><p class="hl">' + e(r.highlight || r.summary || "") + '</p>'
+      + (r.readStampAt ? '<div class="hanko">読了<br>' + L.stampDate(r.readStampAt) + '</div>' : '<button class="stamp-btn" id="stampBtn" disabled>判を押す</button>')
+      + '</div></div>' };
+  };
+</script>
+</body>
+</html>
