@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>見出しの書体を比べる</title>
+<!-- EX-153：見本A の見出し・看板・判子に使う書体の候補を、同じ画面で並べる比較表。
+     ★ この比較表だけは候補3つを同時に読む（選ぶための表なので）。見本そのもの（a-paper.html?font=…）が読む外部の書体は1つだけ。
+     ★ 本文は比べない（本文は候補に関係なく端末の明朝のまま）。下の一文は本文との釣り合いを見るための見本 -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Zen+Antique&family=Dela+Gothic+One&family=Yuji+Syuku&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f3ecdc; --paper-edge: #e4d8bf; --ink: #2b2620; --ink-soft: #6d6355; --rule: #cdbf9f; --shu: #b8322a; --bg: #d9cfba;
+    --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--mincho); }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 14px 12px 40px; }
+  .intro { font-size: 14px; line-height: 1.8; margin: 0 0 14px; }
+  .cand { background: var(--paper); border: 1px solid var(--paper-edge); box-shadow: 0 6px 16px rgba(60,40,10,.15); padding: 14px 14px 16px; margin-bottom: 16px; }
+  .cand h2 { font-family: var(--mincho); font-size: 13px; letter-spacing: .1em; color: var(--ink-soft); margin: 0 0 10px; font-weight: 400; display: flex; justify-content: space-between; gap: 8px; }
+  .cand h2 a { color: var(--shu); }
+  .board { border: 3px double var(--ink); text-align: center; padding: 8px 4px 6px; margin-bottom: 10px; }
+  .board .name { font-size: 34px; letter-spacing: .25em; margin-right: -.25em; line-height: 1.3; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .title { flex: 1; font-size: 22px; letter-spacing: .12em; line-height: 1.45; }
+  .hanko { width: 84px; height: 84px; position: relative; color: var(--shu); display: grid; place-items: center; text-align: center; font-size: 12px; line-height: 1.2; transform: rotate(-8deg); flex: none; }
+  .hanko svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hanko div { position: relative; }
+  .hanko b { display: block; font-size: 16px; letter-spacing: 0; font-weight: inherit; margin-top: 2px; }
+  .body { font-family: var(--mincho); font-size: 18px; line-height: 2; margin: 10px 0 0; border-top: 1px dotted var(--rule); padding-top: 8px; }
+  .f-none { font-family: var(--mincho); font-weight: 600; }
+  .f-zen { font-family: "Zen Antique", var(--mincho); }
+  .f-dela { font-family: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", "YuGothic", "Noto Sans JP", sans-serif; }
+  .f-yuji { font-family: "Yuji Syuku", "HGGyoshotai", "HG行書体", var(--mincho); }
+  .note { font-size: 12px; color: var(--ink-soft); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="intro">見本A の<b>看板（ギルド名）・報告書の題・判子</b>に使う書体の候補です。本文は、どの候補でも端末の明朝のままにします（各段の下の一文が本文の大きさ）。<a href="index.html">見本の一覧へ</a></p>
+  <div id="list"></div>
+  <p class="note">※ この比較表だけは候補3つを同時に読み込みます。見本そのもの（各段の「見本で開く」）が読む外部の書体は1つだけです。読み込めないときは、看板と題は各段の代わりの書体（明朝／ゴシック／行書体）で出ます。</p>
+</div>
+<script>
+  var KIKKO = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
+    + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
+  var C = [
+    { cls: "f-none", name: "（比べる元）端末の明朝", aim: "外部の書体なし。今の見本A", href: "a-paper.html" },
+    { cls: "f-zen", name: "Zen Antique", aim: "大正〜昭和の活字。古い印刷物の明朝", href: "a-paper.html?font=zen" },
+    { cls: "f-dela", name: "Dela Gothic One", aim: "昭和の看板の太いゴシック", href: "a-paper.html?font=dela" },
+    { cls: "f-yuji", name: "Yuji Syuku", aim: "筆文字（楷書寄りの毛筆）", href: "a-paper.html?font=yuji" }
+  ];
+  document.getElementById("list").innerHTML = C.map(function (c) {
+    return '<section class="cand"><h2><span>' + c.name + '　―　' + c.aim + '</span><a href="' + c.href + '">見本で開く</a></h2>'
+      + '<div class="board ' + c.cls + '"><div class="name">西端ギルド</div></div>'
+      + '<div class="row"><div class="title ' + c.cls + '">街道の外れを行く隊商の護衛</div>'
+      + '<div class="hanko ' + c.cls + '">' + KIKKO + '<div>読了<b>10/13</b></div></div></div>'
+      + '<p class="body">一行は「街道の外れを行く隊商の護衛」のため、生活圏の外縁を抜ける街道へ向かった。</p></section>';
+  }).join("");
+</script>
+</body>
+</html>
