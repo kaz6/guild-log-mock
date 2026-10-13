@@ -4,12 +4,34 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>見本A 書類そのもの</title>
-<!-- 見本A：書類そのもの。紙・打たれた文字・朱の判子だけで画面を作る。★ 外部の書体は読まない（端末の明朝を使う） -->
+<!-- 見本A：書類そのもの。紙・打たれた文字・朱の判子だけで画面を作る。
+     EX-153：本文を大きく／見出し・看板・判子だけレトロな書体を試す（?font= で候補を1つだけ読む。無指定なら外部の書体は読まない）／判子を亀甲（六角）の枠に。
+     ★ 本文はどの候補でも端末の明朝のまま（読み返す文章は読みやすさを優先） -->
+<script>
+  // 書体の候補（★ 1ページで読む外部の書体は1つまで）。読めないときは fallback に落ちる
+  (function () {
+    var FONTS = {
+      zen:  { family: "Zen Antique",     q: "Zen+Antique",     fallback: '"Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif' },
+      dela: { family: "Dela Gothic One", q: "Dela+Gothic+One", fallback: '"Hiragino Sans", "Yu Gothic", "YuGothic", "Noto Sans JP", sans-serif' },
+      yuji: { family: "Yuji Syuku",      q: "Yuji+Syuku",      fallback: '"HGGyoshotai", "HG行書体", "Hiragino Mincho ProN", "Yu Mincho", serif' }
+    };
+    var key = new URLSearchParams(location.search).get("font");
+    var f = FONTS[key];
+    if (!f) return;
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=" + f.q + "&display=swap";
+    document.head.appendChild(link);
+    document.documentElement.style.setProperty("--sign", '"' + f.family + '", ' + f.fallback);
+    document.documentElement.setAttribute("data-font", key);
+  })();
+</script>
 <style>
   :root {
     --paper: #f3ecdc; --paper-edge: #e4d8bf; --ink: #2b2620; --ink-soft: #6d6355;
     --rule: #cdbf9f; --shu: #b8322a; --bg: #d9cfba;
     --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
+    --sign: var(--mincho); /* 見出し・看板・判子の書体。?font= で差し替わる */
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--mincho); }
@@ -20,54 +42,70 @@
   .sheet { background: var(--paper); border: 1px solid var(--paper-edge); box-shadow: 0 2px 0 var(--paper-edge), 0 8px 20px rgba(60,40,10,.18); padding: 20px 18px 28px; position: relative; }
   .sheet::before { content: ""; position: absolute; inset: 8px; border: 1px solid var(--rule); pointer-events: none; }
   .docno { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); letter-spacing: .1em; }
-  h1 { font-size: 20px; letter-spacing: .25em; text-align: center; margin: 14px 0 4px; font-weight: 600; }
-  .sub { text-align: center; font-size: 13px; color: var(--ink-soft); margin: 0 0 14px; }
-  .fields { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); margin: 0 0 14px; font-size: 13px; }
+  h1 { font-family: var(--sign); font-size: 24px; letter-spacing: .2em; text-align: center; margin: 14px 0 6px; font-weight: 600; line-height: 1.4; }
+  [data-font] h1 { font-weight: 400; }
+  .sub { text-align: center; font-size: 14px; color: var(--ink-soft); margin: 0 0 14px; }
+  .fields { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); margin: 0 0 16px; font-size: 15px; }
   .fields div { display: flex; border-bottom: 1px dotted var(--rule); padding: 5px 2px; }
   .fields div:last-child { border-bottom: 0; }
   .fields dt { width: 5.5em; color: var(--ink-soft); letter-spacing: .2em; margin: 0; }
   .fields dd { margin: 0; flex: 1; }
-  #lines { font-size: 15px; line-height: 1.95; min-height: 8em; }
-  .log-line { margin: 0 0 .6em; opacity: 0; text-indent: 1em; }
+  /* 本文：スマホで3枚続けて読んでも疲れない大きさ（EX-153。旧 15px／1.95） */
+  #lines { font-size: 18px; line-height: 2.0; letter-spacing: .02em; min-height: 8em; }
+  .log-line { margin: 0 0 .8em; opacity: 0; text-indent: 1em; }
   .log-line.shown { opacity: 1; }
   .log-line.typing::after { content: "▍"; color: var(--ink-soft); }
-  .hint { font-size: 12px; color: var(--ink-soft); text-align: right; margin: 6px 0 0; }
+  .hint { font-size: 13px; color: var(--ink-soft); text-align: right; margin: 6px 0 0; }
   .foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 18px; }
-  .hl { font-size: 13px; border-left: 3px solid var(--shu); padding-left: 8px; color: var(--ink-soft); flex: 1; margin-right: 12px; }
-  .hanko { width: 74px; height: 74px; border: 3px solid var(--shu); border-radius: 50%; color: var(--shu); display: grid; place-items: center; text-align: center; font-size: 12px; line-height: 1.2; transform: rotate(-12deg); font-weight: 700; flex: none; }
-  .hanko b { display: block; font-size: 18px; letter-spacing: .1em; }
+  .hl { font-size: 15px; line-height: 1.8; border-left: 3px solid var(--shu); padding-left: 8px; color: var(--ink-soft); flex: 1; margin-right: 12px; }
+  .hanko { width: 84px; height: 84px; position: relative; color: var(--shu); display: grid; place-items: center; text-align: center; font-family: var(--sign); font-size: 12px; line-height: 1.2; transform: rotate(-8deg); font-weight: 700; flex: none; }
+  .hanko svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hanko div { position: relative; }
+  .hanko b { display: block; font-size: 16px; letter-spacing: 0; font-weight: inherit; margin-top: 2px; }
+  [data-font] .hanko { font-weight: 400; }
   .stamp-btn { font: inherit; border: 2px dashed var(--shu); color: var(--shu); background: transparent; padding: 10px 12px; flex: none; }
   .stamp-btn:disabled { opacity: .35; }
   /* 状態は書類の欄外の「受付印」の枠に3つだけ */
   .meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
   .meter { border: 1px solid var(--ink); background: var(--paper); padding: 6px 4px; text-align: center; }
-  .meter span { display: block; font-size: 11px; color: var(--ink-soft); letter-spacing: .2em; }
+  .meter span { display: block; font-size: 12px; color: var(--ink-soft); letter-spacing: .2em; }
   .meter strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  h2 { font-size: 14px; letter-spacing: .3em; margin: 18px 0 6px; border-bottom: 1px solid var(--ink); padding-bottom: 3px; }
-  ul.plain { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  h2 { font-size: 15px; letter-spacing: .3em; margin: 18px 0 6px; border-bottom: 1px solid var(--ink); padding-bottom: 3px; }
+  ul.plain { list-style: none; margin: 0; padding: 0; font-size: 16px; }
   ul.plain li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 2px; border-bottom: 1px dotted var(--rule); }
   ul.plain button { font: inherit; background: none; border: 0; padding: 0; color: var(--ink); text-align: left; text-decoration: underline dotted; }
   .mini { color: var(--shu); border: 1.5px solid var(--shu); border-radius: 50%; font-size: 10px; width: 2.4em; height: 2.4em; display: inline-grid; place-items: center; transform: rotate(-10deg); flex: none; }
-  .muted { color: var(--ink-soft); font-size: 12px; }
+  .muted { color: var(--ink-soft); font-size: 13px; }
+  /* 拠点の看板（ギルド名）。東の町で流行りの看板文字、という体で見出しにだけ使う */
+  .signboard { background: var(--paper); border: 3px double var(--ink); padding: 10px 8px 8px; margin-bottom: 12px; text-align: center; box-shadow: 0 2px 0 var(--paper-edge); }
+  .signboard .name { font-family: var(--sign); font-size: 34px; letter-spacing: .25em; line-height: 1.3; font-weight: 700; margin-right: -.25em; }
+  [data-font] .signboard .name { font-weight: 400; }
+  .fontsw a { color: var(--ink); }
+  .fontsw a.on { color: var(--shu); font-weight: 700; text-decoration: none; }
+  .signboard .kana { font-size: 11px; letter-spacing: .4em; color: var(--ink-soft); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="tabs"><button data-screen="report">報告書</button><button data-screen="base">拠点</button></div>
   <div id="look"></div>
-  <p class="muted">見本A「書類そのもの」。画面のどこを押しても文字送りを飛ばせます。読了ハンコを押した報告書は、次に開くと最初から全部出ます（この画面の中だけ。保存はしません）。</p>
+  <p class="muted fontsw">見出しの書体：<a href="a-paper.html">端末の明朝</a>／<a href="a-paper.html?font=zen">Zen Antique</a>／<a href="a-paper.html?font=dela">Dela Gothic One</a>／<a href="a-paper.html?font=yuji">Yuji Syuku</a>（<a href="fonts.html">並べて比べる</a>）</p>
+  <p class="muted">見本A「書類そのもの」<span id="fontNote"></span>。画面のどこを押しても文字送りを飛ばせます。読了ハンコを押した報告書は、次に開くと最初から全部出ます（この画面の中だけ。保存はしません）。</p>
 </div>
 <script src="sample.js"></script>
 <script src="look.js"></script>
 <script>
+  // 亀甲（六角）の判子の枠。二重線にして、朱肉のかすれを少しだけ出す
+  var KIKKO = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
+    + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
   window.renderLook = function (view) {
     var L = Look, S = L.S, e = L.esc;
     var meters = '<div class="meters">' + L.gauges().map(function (g) {
       return '<div class="meter"><span>' + e(g.label) + '</span><strong>' + e(g.text) + '</strong></div>';
     }).join("") + '</div>';
     if (view.screen === "base") {
-      return { html: meters + '<div class="sheet">'
-        + '<div class="docno"><span>西端ギルド　受付控</span><span>' + L.todayLabel() + '</span></div>'
+      return { html: '<div class="signboard"><div class="name">西端ギルド</div><div class="kana">遠征報告受付</div></div>' + meters + '<div class="sheet">'
+        + '<div class="docno"><span>受付控</span><span>' + L.todayLabel() + '</span></div>'
         + '<h1>本日の控え</h1><p class="sub">受付　アルメナ</p>'
         + '<h2>掲示板</h2><ul class="plain">' + S.board.map(function (q) { return '<li><span>' + e(q.title) + '</span><span class="muted">' + e(q.category) + '</span></li>'; }).join("") + '</ul>'
         + '<h2>名簿</h2><ul class="plain">' + S.adventurers.map(function (a) { return '<li><span>' + e(a.name) + '</span><span class="muted">' + e(a.status) + (a.injury ? '・' + e(a.injury) : '') + '</span></li>'; }).join("") + '</ul>'
@@ -82,9 +120,18 @@
       + '<dl class="fields"><div><dt>一行</dt><dd>' + e(r.party.join("、")) + '</dd></div><div><dt>結末</dt><dd>' + e(r.result) + '</dd></div></dl>'
       + '<div id="lines"></div><p class="hint" id="skipHint">押すと全文を出します</p>'
       + '<div class="foot"><p class="hl">' + e(r.highlight || r.summary || "") + '</p>'
-      + (r.readStampAt ? '<div class="hanko"><div>読了<b>' + L.stampDate(r.readStampAt) + '</b></div></div>' : '<button class="stamp-btn" id="stampBtn" disabled>読了の判を押す</button>')
+      + (r.readStampAt ? '<div class="hanko">' + KIKKO + '<div>読了<b>' + L.stampDate(r.readStampAt) + '</b></div></div>' : '<button class="stamp-btn" id="stampBtn" disabled>読了の判を押す</button>')
       + '</div></div>' };
   };
+  (function () {
+    var key = document.documentElement.getAttribute("data-font") || "";
+    var names = { zen: "Zen Antique", dela: "Dela Gothic One", yuji: "Yuji Syuku" };
+    document.getElementById("fontNote").textContent = names[key] ? "（見出し：" + names[key] + "）" : "";
+    document.querySelectorAll(".fontsw a").forEach(function (a) {
+      var m = a.getAttribute("href").match(/font=(\w+)/);
+      if ((m ? m[1] : (a.getAttribute("href") === "a-paper.html" ? "" : null)) === key) a.classList.add("on");
+    });
+  })();
 </script>
 </body>
 </html>
