@@ -668,8 +668,8 @@ jobs:
               log(f"Haiku：{n_calls} 回に分けて渡す（1回 {CHUNK_CHARS:,} 字まで）")
               fixes, failed = ask_haiku(recs, bracket_ids)
               if n_calls and failed == n_calls:
-              raise SystemExit(f"Haiku の呼び出しが {n_calls} 回すべて失敗しました（ログの「呼び出しに失敗」を見てください）。PR は作りません")
-          applied, ai_table, dropped = apply_fixes(recs, fixes)
+                  raise SystemExit(f"Haiku の呼び出しが {n_calls} 回すべて失敗しました（ログの「呼び出しに失敗」を見てください）。PR は作りません")
+              applied, ai_table, dropped = apply_fixes(recs, fixes)
               log(f"変更 {len(applied)} 件／Haiku の判断待ち {len(ai_table)} 件／捨てた {dropped} 件")
               body, pending, cost = build_body(files, recs, applied, machine, ai_table, dropped, failed, n_calls)
               summary = os.environ.get("GITHUB_STEP_SUMMARY")
