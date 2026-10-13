@@ -254,6 +254,30 @@ jobs:
               return [(0, len(raw))], None
 
 
+          SEP = " ／ "   # 別々の文字列の間（三項演算子・配列・引数など）
+
+
+          def join_pieces(raw, spans):
+              """1行の文字列の部品をつなぐ。差し込み（${...}・+ での連結）の所は GAP、別々の文字列の間は SEP。"""
+              out, prev_right = "", False
+              for i, (s, e) in enumerate(spans):
+                  left = (s > 0 and raw[s - 1] == "}") or raw[:max(0, s - 1)].rstrip().endswith("+")
+                  right = raw.startswith("${", e) or raw[e + 1:].lstrip().startswith("+")
+                  piece = raw[s:e]
+                  if i == 0:
+                      out = (GAP if left else "") + piece
+                  elif prev_right:
+                      out += GAP + piece                         # 同じ文の続き（差し込みの後ろ）
+                  elif left:
+                      out += SEP + GAP + piece                   # 別の文字列で、頭に差し込みがある
+                  else:
+                      out += SEP + piece
+                  prev_right = right
+              if spans and prev_right:
+                  out += GAP
+              return out
+
+
           def extract():
               """画面に出そうな文章（日本語を含む行）を、ファイル・行つきで返す。1行の中の文字列の部品は GAP でつなぐ。"""
               recs = []      # {"id", "path", "line", "state", "text"}
@@ -267,7 +291,7 @@ jobs:
                   for no, raw in enumerate(lines, 1):
                       st0 = state
                       spans, state = line_spans(path, raw, state)
-                      text = GAP.join(raw[s:e] for s, e in spans)
+                      text = join_pieces(raw, spans)
                       if JP_RE.search(text):
                           recs.append({"id": str(len(recs) + 1), "path": path, "line": no, "state": st0,
                                        "text": text})
@@ -403,7 +427,9 @@ jobs:
 
           SYSTEM = """あなたはゲームの画面に出る日本語の文章の校正係です。
           渡すのはゲームのファイルから抜き出した文字列で、1行が「ID<TAB>ファイル:行<TAB>印<TAB>文章」です。
-          文章の中の 〓 は、変数の差し込みやコードが入る所です（〓 の前後で文が続いていることがあります）。
+          文章の中の 〓 は、変数の差し込み（人や物の名前・数など）が入る所です。〓 の前後で1つの文が続いています。
+          「 ／ 」は別々の文字列の区切りです（場面によって出し分ける別の文。似た文が並んでいても重複ではありません）。
+          主語や目的語が無い文は、前の 〓 や前後の文字列から補われるので、脱字にしないでください。
           拾うのは次の3つだけです。
           - 誤字：変換の誤り・打ち間違い（文脈から誤りが明らかなもの）
           - 脱字：文字や助詞の抜け
