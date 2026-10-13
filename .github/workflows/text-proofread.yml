@@ -36,6 +36,8 @@ env:
   # ▼ 企画ごとに変える所（ここだけ）
   # 文章の場所（カンマ区切り。リポジトリの根からのパスを fnmatch の書き方で：* は / もまたいでどの文字にも合う。例 data/*,index.html）
   PROOFREAD_PATHS: "data-*.js,app.js,index.html"
+  # true なら直しを変更に入れず、すべて表に回す（文章の正本が Notion など別の場所にある企画）
+  PROOFREAD_TABLE_ONLY: ""
   # ▲ 企画ごとに変える所（ここまで）
 
 concurrency:
@@ -85,6 +87,7 @@ jobs:
 
 
           PATHS = env_list("PROOFREAD_PATHS")
+          TABLE_ONLY = os.environ.get("PROOFREAD_TABLE_ONLY", "").strip().lower() == "true"   # 文章の正本が別の場所にある企画は、変更に入れず表だけ
           ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
           GH_TOKEN = os.environ.get("GH_TOKEN", "")
           REPO = os.environ.get("REPO", "")
@@ -553,6 +556,8 @@ jobs:
                   return "drop", "原文に1回だけ現れない"
               if (set(before) | set(after)) & FORBIDDEN_IN_EDIT:
                   return "table", "記号・差し込みに触れる"
+              if TABLE_ONLY:
+                  return "table", "この企画の文章は別の場所が正本のため、変更に入れない"
               if kind == "閉じ忘れ":
                   return ("apply", "") if only_brackets_added(before, after) else ("table", "括弧以外も変わる")
               if kind in ("誤字", "脱字") and fix.get("certain") is True:
