@@ -15,7 +15,7 @@ const { freshPage } = require("../helpers/app");
 test("フックを必ず引く設定にしても、動くのは本文の1行だけ（結末・報酬・配分は基準と同じ）", async () => {
   const baseline = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
   const baseRows = baseline.rows.filter((r) => !r.supplies);
-  const rows = await sweep({
+  const both = await sweep({
     axes: { party: allParties(), seed: SEEDS },
     // ★ probe はページの中で走る（閉包なし）。比較する項目は基準の probe と同じ書き方にしてある。
     probe: (r, ctx) => {
@@ -30,18 +30,27 @@ test("フックを必ず引く設定にしても、動くのは本文の1行だ�
         grow: (r.hiddenTags && r.hiddenTags.growthStats) ?? null,
         days: getQuestDurationDays(quest),
         tens: r.tensionLevel ?? null,
-        hook: (r.hiddenTags && r.hiddenTags.fieldwork && r.hiddenTags.fieldwork.hook) ?? null
+        hook: (r.hiddenTags && r.hiddenTags.fieldwork && r.hiddenTags.fieldwork.hook) ?? null,
+        // ★ 裏の値（報酬・配分・成長の材料）も動かない。フックの印と、行数に比例する recordDensityGain だけは除く
+        ht: JSON.stringify(r.hiddenTags, (k, v) => (k === "hook" || k === "recordDensityGain" ? undefined : v))
       };
     },
-    variants: { 必ず引く: () => { FIELDWORK_TUNING.hookChance = 1; } },
+    variants: { 無し: () => { FIELDWORK_TUNING.hookChance = 0; }, 必ず引く: () => { FIELDWORK_TUNING.hookChance = 1; } },
     quiet: true
   });
-  const failed = rows.filter((r) => r.error);
+  const off = both.filter((r) => r.variant === "無し");
+  const rows = both.filter((r) => r.variant === "必ず引く");
+  const failed = both.filter((r) => r.error);
   expect(failed.map((r) => `${r.quest}/${r.seed}: ${r.error}`), "生成に失敗した組がある").toEqual([]);
   expect(rows.length).toBe(baseRows.length);
+  expect(off.filter((r) => r.hook), "確率0なのに引かれた").toEqual([]);
+  // 裏の値（hiddenTags）は、引いた回も引かない回も同じ
+  const offHt = new Map(off.map((r) => [`${r.quest}|${r.partyIndex}|${r.seed}`, r.ht]));
+  const htMoved = rows.filter((r) => offHt.get(`${r.quest}|${r.partyIndex}|${r.seed}`) !== r.ht).map((r) => `${r.quest}/${r.partyIndex}/${r.seed}`);
+  expect(htMoved, "フックを引いただけで hiddenTags が動いた").toEqual([]);
 
   const fields = ["res", "sum", "obs", "tier", "hl", "grow", "days", "tens"];
-  const r = compare(baseRows, rows.map(({ hook, n, variant, ...rest }) => rest), {
+  const r = compare(baseRows, rows.map(({ hook, n, variant, ht, ...rest }) => rest), {
     fields, keyFields: ["quest", "partyIndex", "seed"], by: (row) => row.quest
   });
   const moved = fields.filter((f) => r.diff[f] > 0).map((f) => `${f}: ${r.diff[f]}件`);
