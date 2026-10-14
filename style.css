@@ -1434,3 +1434,111 @@ hr.soft {
 .past-stage { margin-top: 8px; }
 .past-heading { margin: 0; font-size: 0.85em; opacity: 0.75; }
 .past-text { margin: 2px 0 0; line-height: 1.7; }
+
+/* ══ 見た目：「書類そのもの」（2026-10-14・EX-154。DECISION_LOG「見た目の方向は A」）══════════════
+   紙と打たれた文字と朱の判子。外部の書体は使わない（端末の明朝だけ）。
+   ★ 見た目だけ。★ Unity で UI は全面に差し替える前提なので、作り込まない（移るのは方向で、この CSS ではない）。
+   ★ body[data-look="paper"] のときだけ効く（app.js の PAPER_LOOK_ROUTES）。画面ごとに足していく。 */
+body[data-look="paper"] {
+  --paper-sheet: #f3ecdc;
+  --paper-edge: #e4d8bf;
+  --paper-bg: #d9cfba;
+  --paper-ink: #2b2620;
+  --paper-soft: #6d6355;
+  --paper-rule: #cdbf9f;
+  --paper-shu: #b8322a;
+  --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
+  color: var(--paper-ink);
+  font-family: var(--mincho);
+  background: var(--paper-bg);
+}
+
+/* 枠（サイドバー・上の帯）も紙の色にそろえる。ボタンは見本の「報告書／拠点」の札に寄せる */
+body[data-look="paper"] .sidebar { background: #cfc3aa; border-color: var(--paper-rule); backdrop-filter: none; }
+body[data-look="paper"] .brand-mark { color: var(--paper-sheet); background: var(--paper-ink); box-shadow: none; }
+body[data-look="paper"] .brand p,
+body[data-look="paper"] .asset-version { color: var(--paper-soft); }
+body[data-look="paper"] .nav-button { color: var(--paper-ink); border: 1px solid var(--paper-soft); border-radius: 3px; letter-spacing: .2em; }
+body[data-look="paper"] .nav-button.active { color: var(--paper-sheet); background: var(--paper-ink); border-color: var(--paper-ink); }
+body[data-look="paper"] .sidebar-note { background: rgba(255, 255, 255, .3); border-color: var(--paper-rule); border-radius: 3px; }
+body[data-look="paper"] .sidebar-note p { color: var(--paper-soft); }
+body[data-look="paper"] .label,
+body[data-look="paper"] .eyebrow,
+body[data-look="paper"] .meta-label { color: var(--paper-soft); }
+body[data-look="paper"] .topbar h2 { color: var(--paper-ink); font-weight: 600; letter-spacing: .15em; }
+body[data-look="paper"] .ghost-button { color: var(--paper-ink); border-color: var(--paper-soft); border-radius: 3px; }
+body[data-look="paper"] .primary-button { color: var(--paper-sheet); background: var(--paper-ink); border-radius: 3px; font-weight: 600; letter-spacing: .1em; }
+body[data-look="paper"] .secondary-button { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 3px; }
+body[data-look="paper"] .recorder-badge { color: var(--paper-soft); background: var(--paper-sheet); border-color: var(--paper-rule); }
+body[data-look="paper"] .recorder-badge:hover { color: var(--paper-ink); border-color: var(--paper-soft); }
+
+/* 報告書を読む画面（紙の1枚） */
+.paper-sheet {
+  position: relative;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 18px 28px;
+  color: var(--paper-ink);
+  background: var(--paper-sheet);
+  border: 1px solid var(--paper-edge);
+  box-shadow: 0 2px 0 var(--paper-edge), 0 8px 20px rgba(60, 40, 10, .18);
+}
+.paper-sheet::before { content: ""; position: absolute; inset: 8px; border: 1px solid var(--paper-rule); pointer-events: none; }
+.paper-docno { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--paper-soft); letter-spacing: .1em; }
+.paper-title { margin: 14px 0 4px; font-size: 20px; font-weight: 600; letter-spacing: .25em; text-align: center; }
+.paper-sub { margin: 0 0 14px; font-size: 13px; color: var(--paper-soft); text-align: center; }
+.paper-fields { margin: 0 0 14px; font-size: 13px; border-top: 1px solid var(--paper-ink); border-bottom: 1px solid var(--paper-ink); }
+.paper-fields div { display: flex; padding: 5px 2px; border-bottom: 1px dotted var(--paper-rule); }
+.paper-fields div:last-child { border-bottom: 0; }
+.paper-fields dt { width: 5.5em; margin: 0; color: var(--paper-soft); letter-spacing: .2em; flex: none; }
+.paper-fields dd { flex: 1; margin: 0; min-width: 0; }
+
+/* 本文：15px／行間 1.95（スマホでちょうどよいと作者が確かめた値。変えない） */
+.paper-lines { min-height: 8em; font-size: 15px; line-height: 1.95; }
+.paper-sheet .log-line {
+  margin: 0 0 .6em;
+  padding: 0;
+  text-indent: 1em;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+/* 色分けは紙の上で読める濃さにする（交戦の傷の段・回復だけ） */
+.paper-sheet .log-line.battle-start,
+.paper-sheet .log-line.status-grave { color: #a8281d; }
+.paper-sheet .log-line.status-hurt { color: #8f5400; }
+.paper-sheet .log-line.battle-heal { color: #3f6b32; }
+/* まだ出していない分は透明（場所は取ったまま） */
+.paper-sheet .log-line .untyped { color: transparent; }
+.paper-sheet .log-line.typing .typed::after {
+  content: ""; display: inline-block; width: 0; height: 1em; margin-right: -2px;
+  border-right: 2px solid var(--paper-soft); vertical-align: text-bottom;
+}
+.paper-hint { margin: 6px 0 0; font-size: 12px; color: var(--paper-soft); text-align: right; }
+
+/* 観察記録票（報告書の下） */
+.paper-sheet hr.soft { border-top-color: var(--paper-rule); }
+.paper-sheet .obs-note-card { background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
+.paper-sheet .obs-note-author { color: var(--paper-soft); }
+.paper-sheet .obs-note-text { color: var(--paper-ink); }
+
+/* 足：ハイライトと判子 */
+.paper-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.paper-hl { flex: 1; margin: 0; padding-left: 8px; font-size: 13px; line-height: 1.8; color: var(--paper-soft); border-left: 3px solid var(--paper-shu); }
+.paper-hl:empty { border-left: 0; }
+.paper-stamp-btn { flex: none; padding: 10px 12px; color: var(--paper-shu); background: transparent; border: 2px dashed var(--paper-shu); font: inherit; }
+.paper-stamp-btn:disabled { opacity: .35; cursor: default; }
+/* 判子は亀甲（六角）の枠。★ 仮：将来ギルドの紋に差し替える */
+.paper-hanko {
+  position: relative; flex: none; width: 84px; height: 84px; display: grid; place-items: center;
+  color: var(--paper-shu); font-size: 12px; line-height: 1.2; font-weight: 700; text-align: center; transform: rotate(-8deg);
+}
+.paper-hanko svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.paper-hanko div { position: relative; }
+.paper-hanko b { display: block; margin-top: 2px; font-size: 16px; font-weight: inherit; letter-spacing: 0; }
+.paper-nav { max-width: 640px; width: 100%; margin: 16px auto 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-sheet .log-line.typing .typed::after { display: none; }
+}
