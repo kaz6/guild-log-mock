@@ -9191,7 +9191,7 @@ const FIELDWORK_TUNING = {
   setbacksForFailMin: 2,
   // ★ 特殊裁定のフック（2026-10-14・EX-148 段階2）。候補が1本でもある遠征で、この確率で**1本だけ**引く。
   //   **仮の値**（制作の最後に調整する）。頻度は段階2の実測で見る。
-  hookChance: 0.12
+  hookChance: 0.35
 };
 
 // 依頼で使う stat の平均力量。★ その stat を一番持っている者が担当する、という読み方（最大値を採る）。
@@ -9693,12 +9693,13 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
 // 特殊裁定のフックを引く（2026-10-14・EX-148 段階2。裁定: DECISION_LOG 2026-09-29「取引」＋EX148-Q1〜Q3）。
 //   - 器は `obsession.triggerTags`（各人のフック定義）。引き金＝工程の語（行為×対象）＋依頼の属性。
 //   - ★ 引けるのは**その工程の担い手だけ**（stepLeads の持ち主）。同じ〈手当て×人〉をミナとエルネが持っていても、
-//     担い手は1人なので重ならない。`anyStep`＝どれかの工程の担い手であればよい（依頼の tags だけで決めるフック）。
+//     担い手は1人なので重ならない。`anyStep`＝どれかの工程の行を見る（依頼の tags だけで決めるフック）。
+//     `inParty`（エルシー・Q4＝A）＝担い手でなくても編成にいれば引ける。語・属性の条件は同じ。
 //   - ★ 1遠征につき最大1本。候補があれば hookChance で1回だけ抽選し、当たったら候補から1本選ぶ。
 //   - ★ 乱数は**専用の乱数**（出発時のシードを混ぜて作る）。報告書の乱数を1回も引かないので、
 //     結末・本文の並び・配分は同じシードで動かない。
 //   - ★ 工程エンジンを通らない依頼（畑・納屋・護衛・夜道）には届かない（DECISION_LOG 2026-09-13 の制約）。
-//   - 同じフックを2度引いたら、前回と違う行にする（`state.reports`＝新しい順の本文から直近を探す）。
+//   - 文面2通りのどちらかは種で選ぶ（報告書の履歴は読まない＝EX-138 の例外を作らない）。
 function drawFieldworkHook(quest, party, fw, expedition) {
   if (!fw || !Array.isArray(fw.stepLeads) || fw.stepLeads.length === 0) return null;
   const steps = window.masterVocab?.questSteps?.[quest?.id];
@@ -9711,7 +9712,9 @@ function drawFieldworkHook(quest, party, fw, expedition) {
       if (!h || typeof h !== "object") return;
       if (h.questTags && !h.questTags.some((t) => questTags.includes(t))) return;
       if (h.questCategory && quest.category !== h.questCategory) return;
-      const carried = fw.stepLeads.filter((lead) => lead.id === adv.id);
+      // ★ inParty（EX-148 Q4＝A）：その場にいて反応するフック（エルシー）は担い手でなくてよい。
+      //   工程の語・依頼の属性の条件は同じ（読まれた工程の行を見る）。
+      const carried = h.inParty ? fw.stepLeads : fw.stepLeads.filter((lead) => lead.id === adv.id);
       if (carried.length === 0) return;
       if (h.anyStep) { candidates.push({ adv, h }); return; }
       if (!Array.isArray(steps)) return;
@@ -9736,12 +9739,8 @@ function drawFieldworkHook(quest, party, fw, expedition) {
   const pick = candidates[Math.floor(hookRng() * candidates.length)];
   const name = getDisplayName(pick.adv);
   const lines = pick.h.lines.map((text) => text.replaceAll("{名前}", name));
-  let text = lines[Math.floor(hookRng() * lines.length)];
-  const reports = state.reports ?? [];
-  for (let i = 0; i < reports.length; i++) { // state.reports は新しい順（unshift）
-    const prev = (reports[i].logs ?? []).find((l) => lines.includes(l.text));
-    if (prev) { text = lines.find((l) => l !== prev.text) ?? text; break; }
-  }
+  // 2通りのどちらかは種で選ぶ（EX-138：報告書の履歴は読まない）
+  const text = lines[Math.floor(hookRng() * lines.length)];
   return { id: pick.h.id, text };
 }
 
