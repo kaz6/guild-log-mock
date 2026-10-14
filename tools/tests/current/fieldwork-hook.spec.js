@@ -12,7 +12,7 @@ const { sweep, compare } = require("../../sweep");
 const { allParties, SEEDS, BASELINE_PATH } = require("../helpers/axes");
 const { freshPage } = require("../helpers/app");
 
-test("フックを必ず引く設定にしても、動くのは本文の1行だけ（結末・報酬・配分は基準と同じ）", async () => {
+test("フックを必ず引く設定にしても、動くのは本文の1行だけ（取引を切れば）／取引はミナ①・ロウ①が成立した組だけを一段動かす", async () => {
   const baseline = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
   const baseRows = baseline.rows.filter((r) => !r.supplies);
   const both = await sweep({
@@ -20,6 +20,7 @@ test("フックを必ず引く設定にしても、動くのは本文の1行だ�
     // ★ probe はページの中で走る（閉包なし）。比較する項目は基準の probe と同じ書き方にしてある。
     probe: (r, ctx) => {
       const quest = getQuest(ctx.quest);
+      const fwk = (r.hiddenTags && r.hiddenTags.fieldwork) || {};
       return {
         res: r.result ?? null,
         sum: r.summary ?? "",
@@ -30,44 +31,76 @@ test("フックを必ず引く設定にしても、動くのは本文の1行だ�
         grow: (r.hiddenTags && r.hiddenTags.growthStats) ?? null,
         days: getQuestDurationDays(quest),
         tens: r.tensionLevel ?? null,
-        hook: (r.hiddenTags && r.hiddenTags.fieldwork && r.hiddenTags.fieldwork.hook) ?? null,
-        // ★ 裏の値（報酬・配分・成長の材料）も動かない。フックの印と、行数に比例する recordDensityGain だけは除く
-        ht: JSON.stringify(r.hiddenTags, (k, v) => (k === "hook" || k === "recordDensityGain" ? undefined : v))
+        hook: fwk.hook ?? null,
+        trade: fwk.hookTrade === true,
+        ftier: fwk.tier ?? null,
+        hr: JSON.stringify(r.hiddenTags && r.hiddenTags.battleHpRatios),
+        // ★ 裏の値（報酬・配分・成長の材料）も動かない。フックの印・取引の印・行数に比例する recordDensityGain は除く
+        ht: JSON.stringify(r.hiddenTags, (k, v) => (k === "hook" || k === "hookTrade" || k === "recordDensityGain" ? undefined : v))
       };
     },
-    variants: { 無し: () => { FIELDWORK_TUNING.hookChance = 0; }, 必ず引く: () => { FIELDWORK_TUNING.hookChance = 1; } },
+    variants: {
+      無し: () => { FIELDWORK_TUNING.hookChance = 0; },
+      取引なし: () => { FIELDWORK_TUNING.hookChance = 1; FIELDWORK_TUNING.hookTradeEnabled = false; },
+      取引あり: () => { FIELDWORK_TUNING.hookChance = 1; FIELDWORK_TUNING.hookTradeEnabled = true; }
+    },
     quiet: true
   });
-  const off = both.filter((r) => r.variant === "無し");
-  const rows = both.filter((r) => r.variant === "必ず引く");
   const failed = both.filter((r) => r.error);
   expect(failed.map((r) => `${r.quest}/${r.seed}: ${r.error}`), "生成に失敗した組がある").toEqual([]);
-  expect(rows.length).toBe(baseRows.length);
+  const off = both.filter((r) => r.variant === "無し");
+  const stage2 = both.filter((r) => r.variant === "取引なし");
+  const stage3 = both.filter((r) => r.variant === "取引あり");
+  expect(stage2.length).toBe(baseRows.length);
   expect(off.filter((r) => r.hook), "確率0なのに引かれた").toEqual([]);
-  // 裏の値（hiddenTags）は、引いた回も引かない回も同じ
-  const offHt = new Map(off.map((r) => [`${r.quest}|${r.partyIndex}|${r.seed}`, r.ht]));
-  const htMoved = rows.filter((r) => offHt.get(`${r.quest}|${r.partyIndex}|${r.seed}`) !== r.ht).map((r) => `${r.quest}/${r.partyIndex}/${r.seed}`);
-  expect(htMoved, "フックを引いただけで hiddenTags が動いた").toEqual([]);
+  expect(stage2.filter((r) => r.trade), "取引を切ったのに成立した").toEqual([]);
 
+  // ── 段階2（取引なし）：基準と比べて、動くのは本文の1行だけ ──
+  const key = (row) => `${row.quest}|${row.partyIndex}|${row.seed}`;
+  const offHt = new Map(off.map((r) => [key(r), r.ht]));
+  expect(stage2.filter((r) => offHt.get(key(r)) !== r.ht).map(key), "フックを引いただけで hiddenTags が動いた").toEqual([]);
   const fields = ["res", "sum", "obs", "tier", "hl", "grow", "days", "tens"];
-  const r = compare(baseRows, rows.map(({ hook, n, variant, ht, ...rest }) => rest), {
+  const r = compare(baseRows, stage2.map(({ hook, trade, ftier, hr, n, variant, ht, ...rest }) => rest), {
     fields, keyFields: ["quest", "partyIndex", "seed"], by: (row) => row.quest
   });
   const moved = fields.filter((f) => r.diff[f] > 0).map((f) => `${f}: ${r.diff[f]}件`);
   expect(moved, "フックを引いただけで動いてはいけない項目が動いた").toEqual([]);
-
-  // 行数：引かれた回だけ +1。引かれなかった回は同じ
-  const key = (row) => `${row.quest}|${row.partyIndex}|${row.seed}`;
   const baseN = new Map(baseRows.map((row) => [key(row), row.n]));
-  let drawn = 0;
   const wrong = [];
-  rows.forEach((row) => {
+  let drawn = 0;
+  stage2.forEach((row) => {
     const delta = row.n - baseN.get(key(row));
     if (row.hook) drawn += 1;
     if (delta !== (row.hook ? 1 : 0)) wrong.push(`${key(row)} hook=${row.hook} 行数の差=${delta}`);
   });
   expect(wrong, "行数の差が「引かれた回だけ+1」になっていない").toEqual([]);
-  expect(drawn, "必ず引く設定なのに1本も引かれない（候補が一つも成り立たない）").toBeGreaterThan(0);
+  expect(drawn, "必ず引く設定なのに1本も引かれない").toBeGreaterThan(0);
+
+  // ── 段階3（取引あり）：成立した組だけが動き、それはミナ①・ロウ①に限る ──
+  const s2 = new Map(stage2.map((x) => [key(x), x]));
+  const tradedRows = stage3.filter((x) => x.trade);
+  expect(tradedRows.length, "取引が1件も成立しない").toBeGreaterThan(0);
+  expect(tradedRows.filter((x) => x.hook !== "mina_deliver" && x.hook !== "row_check").map(key), "ミナ①・ロウ①以外が成立した").toEqual([]);
+  const untouched = stage3.filter((x) => !x.trade);
+  expect(untouched.filter((x) => { const y = s2.get(key(x)); return y.res !== x.res || y.ht !== x.ht || y.n !== x.n || y.hr !== x.hr; }).map(key), "取引が成立していない組が動いた").toEqual([]);
+  const order = { fail: 0, partial: 1, full: 2 };
+  const badStep = [];
+  const badInjury = [];
+  tradedRows.forEach((x) => {
+    const y = s2.get(key(x));
+    const d = order[x.ftier] - order[y.ftier];
+    if (x.hook === "mina_deliver" && d !== 1) badStep.push(`${key(x)} ミナ① ${y.ftier}→${x.ftier}`);
+    if (x.hook === "row_check" && d !== -1) badStep.push(`${key(x)} ロウ① ${y.ftier}→${x.ftier}`);
+    // 負傷は軽症まで：どの率も 0.5 未満（＝重症の側）にならない。ミナは取引前より重く、ロウは取引前より軽い
+    const a = JSON.parse(x.hr); const b = JSON.parse(y.hr);
+    Object.keys(a).forEach((id) => { if (a[id] < 0.5) badInjury.push(`${key(x)} ${id}=${a[id]}`); });
+    const heavier = Object.keys(a).some((id) => a[id] < b[id]);
+    const lighter = Object.keys(a).some((id) => a[id] > b[id]);
+    if (x.hook === "mina_deliver" && !(heavier && !lighter)) badInjury.push(`${key(x)} ミナ①なのに負傷が重くなっていない`);
+    if (x.hook === "row_check" && !(lighter && !heavier)) badInjury.push(`${key(x)} ロウ①なのに負傷が軽くなっていない`);
+  });
+  expect(badStep, "結末が一段ずつ動いていない").toEqual([]);
+  expect(badInjury, "負傷の動きが取引の向きと違う／軽症を超えた").toEqual([]);
 });
 
 test("引けるのは担い手だけ（エルシーは編成にいれば引ける）／履歴を読まない／同じ種なら同じ行", async ({ page }) => {
@@ -111,5 +144,46 @@ test("引けるのは担い手だけ（エルシーは編成にいれば引け�
   expect(r.elsie, "エルシーのフックが編成にいても引かれない").toBeGreaterThan(0);
   expect(r.historyDependent, "報告書の履歴で行が変わった（EX-138 の例外）").toBe(0);
   expect(r.lineKinds, "2通りの文面が両方出ない").toBeGreaterThan(1);
+  expect(errors).toEqual([]);
+});
+
+test("取引の成立条件：両側に意味があるときだけ（ミナ①・ロウ①）／負傷は軽症まで", async ({ page }) => {
+  const errors = await freshPage(page);
+  const r = await page.evaluate(() => {
+    const mina = getAdventurer("adv_mina").obsession.triggerTags.find((h) => h.id === "mina_deliver");
+    const row = getAdventurer("adv_row").obsession.triggerTags.find((h) => h.id === "row_check");
+    const run = (h, owner, fw) => {
+      const hook = { id: h.id, adv: getAdventurer(owner), trade: h.trade, tradeText: "取引の一行" };
+      return { line: applyHookTrade(hook, fw), fw };
+    };
+    const out = {};
+    out.minaUp = run(mina, "adv_mina", { tier: "fail", hpRatios: { adv_mina: 1, adv_row: 1 } });
+    out.minaFull = run(mina, "adv_mina", { tier: "full", hpRatios: { adv_mina: 1 } }).line;          // 上げる余地なし
+    out.minaHurt = run(mina, "adv_mina", { tier: "partial", hpRatios: { adv_mina: 0.6 } }).line;     // 負傷を重くできない（上限＝軽症）
+    out.rowDown = run(row, "adv_row", { tier: "partial", hpRatios: { adv_row: 1, adv_mina: 0.6, adv_elne: 0.5 } });
+    out.rowFail = run(row, "adv_row", { tier: "fail", hpRatios: { adv_row: 1, adv_mina: 0.6 } }).line; // 下げる余地なし
+    out.rowNoInjury = run(row, "adv_row", { tier: "full", hpRatios: { adv_row: 1, adv_mina: 1 } }).line; // 誰も負傷していない
+    out.rowOneStep = run(row, "adv_row", { tier: "full", hpRatios: { adv_row: 1, adv_mina: 0.6, adv_elne: 0 } }).fw.hpRatios; // 戦闘不能は一段だけ（軽症へ）
+    FIELDWORK_TUNING.hookTradeEnabled = false;
+    out.disabled = run(mina, "adv_mina", { tier: "fail", hpRatios: { adv_mina: 1 } }).line;
+    FIELDWORK_TUNING.hookTradeEnabled = true;
+    out.level = injuryLevelFromHpRatio(out.minaUp.fw.hpRatios.adv_mina, false);
+    return JSON.parse(JSON.stringify(out));
+  });
+  expect(r.minaUp.line).toBe("取引の一行");
+  expect(r.minaUp.fw.tier).toBe("partial");
+  expect(r.level, "ミナ①の負傷は軽症まで").toBe("軽症");
+  expect(r.minaUp.fw.hpRatios.adv_row, "他の人の負傷は動かない").toBe(1);
+  expect(r.minaFull).toBeNull();
+  expect(r.minaHurt).toBeNull();
+  expect(r.rowDown.line).toBe("取引の一行");
+  expect(r.rowDown.fw.tier).toBe("fail");
+  expect(r.rowDown.fw.turnedBack).toBe(true);
+  expect(Object.values(r.rowDown.fw.hpRatios).every((v) => v > 0.7), "全員の負傷が一段軽くなる").toBe(true);
+  expect(r.rowOneStep.adv_elne, "一段だけ軽くなる（0→軽症）").toBeLessThanOrEqual(0.7);
+  expect(r.rowOneStep.adv_mina).toBeGreaterThan(0.7);
+  expect(r.rowFail).toBeNull();
+  expect(r.rowNoInjury).toBeNull();
+  expect(r.disabled).toBeNull();
   expect(errors).toEqual([]);
 });

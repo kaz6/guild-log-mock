@@ -9191,7 +9191,9 @@ const FIELDWORK_TUNING = {
   setbacksForFailMin: 2,
   // ★ 特殊裁定のフック（2026-10-14・EX-148 段階2）。候補が1本でもある遠征で、この確率で**1本だけ**引く。
   //   **仮の値**（制作の最後に調整する）。頻度は段階2の実測で見る。
-  hookChance: 0.35
+  hookChance: 0.35,
+  // ★ 段階3の試行（2026-10-14・EX-148）。false にすると取引は成立せず、段階2と同じ（文面だけ）になる。測定と試験で切り替える。
+  hookTradeEnabled: true
 };
 
 // 依頼で使う stat の平均力量。★ その stat を一番持っている者が担当する、という読み方（最大値を採る）。
@@ -9682,11 +9684,21 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   //   ★ 「初回か」は出発時に確定した旗を優先する（2026-09-20・EX-138）。
   const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest, expedition);
   const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail });
+  // ★ 特殊裁定のフック（段階2＝文面／段階3の試行＝ミナ①・ロウ①だけ取引）。
+  //   取引は結末の段と帰還時の負傷を動かすので、結末を選ぶ前に当てる。乱数は引かない（結末を選ぶ乱数の消費は変わらない）。
+  const hook = drawFieldworkHook(quest, party, fw, expedition);
+  let tradeLine = null;
+  if (hook) {
+    fw.hook = hook.id;
+    tradeLine = applyHookTrade(hook, fw);
+    fw.hookTrade = tradeLine != null;
+  }
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   const logLines = fieldworkLogLines(fw, rng);
-  // ★ 特殊裁定のフック（段階2）。文面を1行足すだけで、結末・報酬・配分は動かさない。
-  const hook = drawFieldworkHook(quest, party, fw, expedition);
-  if (hook) { fw.hook = hook.id; logLines.push({ kind: "action", text: hook.text }); }
+  if (hook) {
+    logLines.push({ kind: "action", text: hook.text });
+    if (tradeLine) logLines.push({ kind: "action", text: tradeLine });
+  }
   return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines };
 }
 
@@ -9741,7 +9753,46 @@ function drawFieldworkHook(quest, party, fw, expedition) {
   const lines = pick.h.lines.map((text) => text.replaceAll("{名前}", name));
   // 2通りのどちらかは種で選ぶ（EX-138：報告書の履歴は読まない）
   const text = lines[Math.floor(hookRng() * lines.length)];
-  return { id: pick.h.id, text };
+  // 段階3の一行（取引が成立したときだけ使う）。2通りのどちらかは種で選ぶ
+  const tradeText = pick.h.trade
+    ? pick.h.trade.lines.map((t) => t.replaceAll("{名前}", name))[Math.floor(hookRng() * pick.h.trade.lines.length)]
+    : null;
+  return { id: pick.h.id, text, adv: pick.adv, trade: pick.h.trade ?? null, tradeText };
+}
+
+// 段階3の取引（試行・2026-10-14・EX-148）。ミナ①＝結末を一段上げる／本人の負傷を一段重く。ロウ①＝結末を一段下げる／全員の負傷を一段軽く。
+//   ★ 取引は両側に意味があるときだけ成立する。片側が動かせないとき（既に完遂／既に未達／負傷の上限／誰も負傷していない）は
+//     段階2と同じ文面だけで、結果は動かさない。
+//   ★ 「一段軽く」は一段だけ（戦闘不能の0→軽症の側へ、軽症→無傷）。
+//   ★ 負傷は「軽症」までしか上げない（体験版では行方不明・死亡を起こさない＝EX-101。非戦闘は軽症までという既存の上限とも揃う）。
+//   ★ 負傷の段は帰還時の個人HP率で決まる（injuryLevelFromHpRatio）。ここでは率を動かすだけで、新しい値は持たない。
+//   成立したら fw を書き換えて、段階3の一行を返す。成立しなければ null。
+const HOOK_RATIO_LIGHT = 0.69; // ≤0.70＝軽症
+const HOOK_RATIO_HEALTHY = 0.71; // >0.70＝無傷
+function applyHookTrade(hook, fw) {
+  if (!hook.trade || !FIELDWORK_TUNING.hookTradeEnabled) return null;
+  const ratios = fw.hpRatios ?? {};
+  const injured = (id) => injuryLevelFromHpRatio(ratios[id] ?? 1, false) != null;
+  const feasible = {
+    tierUp: fw.tier !== "full",
+    tierDown: fw.tier !== "fail",
+    selfInjuryUp: ratios[hook.adv.id] != null && !injured(hook.adv.id),
+    injuryDown: Object.keys(ratios).some(injured)
+  };
+  const { gain, cost } = hook.trade;
+  if (!feasible[gain] || !feasible[cost]) return null;
+  const apply = {
+    tierUp: () => { fw.tier = fw.tier === "fail" ? "partial" : "full"; },
+    tierDown: () => { fw.tier = fw.tier === "full" ? "partial" : "fail"; },
+    selfInjuryUp: () => { fw.hpRatios = { ...fw.hpRatios, [hook.adv.id]: Math.min(ratios[hook.adv.id], HOOK_RATIO_LIGHT) }; },
+    injuryDown: () => {
+      fw.hpRatios = Object.fromEntries(Object.entries(ratios).map(([id, r]) => [id, injured(id) ? (r <= 0 ? HOOK_RATIO_LIGHT : Math.max(r, HOOK_RATIO_HEALTHY)) : r]));
+    }
+  };
+  apply[gain]();
+  apply[cost]();
+  fw.turnedBack = fw.tier === "fail";
+  return hook.tradeText;
 }
 
 // 報告書の裏に残す値。battleHpRatios は戦闘と同じ鍵で、負傷の確定は同じ経路に乗る。
@@ -9757,7 +9808,7 @@ function fieldworkHiddenTags(fw) {
       stats: fw.statKeys,
       weatherLoad: fw.weatherLoad,
       fatigue: fw.fatigue,
-      ...(fw.hook ? { hook: fw.hook } : {})
+      ...(fw.hook ? { hook: fw.hook, hookTrade: fw.hookTrade === true } : {})
     },
     battleHpRatios: fieldworkHpRatiosOf(fw)
   };
