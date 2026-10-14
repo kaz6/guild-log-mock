@@ -9805,6 +9805,7 @@ function applyHookTrade(hook, fw) {
   const apply = {
     tierUp: () => { fw.tier = fw.tier === "fail" ? "partial" : "full"; },
     tierDown: () => { fw.tier = fw.tier === "full" ? "partial" : "fail"; },
+    // 【体験版のみ】ここで本人の負傷を軽症止まりにしている（製品版では重症まで上げてよい）
     selfInjuryUp: () => { fw.hpRatios = { ...fw.hpRatios, [hook.adv.id]: Math.min(ratios[hook.adv.id], HOOK_RATIO_LIGHT) }; },
     injuryDown: () => {
       fw.hpRatios = Object.fromEntries(Object.entries(ratios).map(([id, r]) => [id, injured(id) ? (r <= 0 ? HOOK_RATIO_LIGHT : Math.max(r, HOOK_RATIO_HEALTHY)) : r]));
