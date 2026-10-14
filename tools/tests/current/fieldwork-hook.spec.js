@@ -70,35 +70,46 @@ test("フックを必ず引く設定にしても、動くのは本文の1行だ�
   expect(drawn, "必ず引く設定なのに1本も引かれない（候補が一つも成り立たない）").toBeGreaterThan(0);
 });
 
-test("同じフックを2度引いたら前回と違う行／引けるのは担い手だけ", async ({ page }) => {
+test("引けるのは担い手だけ（エルシーは編成にいれば引ける）／履歴を読まない／同じ種なら同じ行", async ({ page }) => {
   const errors = await freshPage(page);
   const r = await page.evaluate(() => {
     FIELDWORK_TUNING.hookChance = 1;
-    const quest = getQuest("quest_missing_herbalist"); // 手当て×人・察する×人・進む＋帰還／足跡。工程に4種の語がある
-    const party = ["adv_mina", "adv_elne", "adv_row"].map(getAdventurer);
-    const out = { repeatDifferent: true, drawn: 0, notCarrier: [], seen: {} };
-    for (let seed = 1; seed <= 400; seed++) {
-      const exp = { seed };
-      const fw = simulateFieldwork(quest, party, [], makeRng(seed), { weather: "晴れ" });
-      if (!fw) continue;
-      state.reports = [];
-      const a = drawFieldworkHook(quest, party, fw, exp);
-      if (!a) continue;
-      out.drawn += 1;
-      // 担い手だけ：フックの持ち主は stepLeads に居る
-      const owner = party.find((adv) => (adv.obsession.triggerTags ?? []).some((h) => h.id === a.id));
-      if (!fw.stepLeads.some((l) => l.id === owner.id)) out.notCarrier.push(a.id);
-      // 2度目は前回と違う行
-      state.reports = [{ logs: [{ kind: "action", text: a.text }] }];
-      const b = drawFieldworkHook(quest, party, fw, exp);
-      if (b && b.id === a.id && b.text === a.text) out.repeatDifferent = false;
-      out.seen[a.id] = (out.seen[a.id] ?? 0) + 1;
+    const out = { drawn: 0, notCarrier: [], historyDependent: 0, elsie: 0, lines: {} };
+    const sets = [
+      { q: "quest_missing_herbalist", ids: ["adv_mina", "adv_elne", "adv_row"] },
+      { q: "quest_missing_herbalist", ids: ["adv_mina", "adv_elsie"] },
+      { q: "quest_wedding_support", ids: ["adv_gadd", "adv_elsie"] }
+    ];
+    for (const set of sets) {
+      const quest = getQuest(set.q);
+      const party = set.ids.map(getAdventurer);
+      for (let seed = 1; seed <= 300; seed++) {
+        const exp = { seed };
+        const fw = simulateFieldwork(quest, party, [], makeRng(seed), { weather: "晴れ" });
+        if (!fw) continue;
+        state.reports = [];
+        const a = drawFieldworkHook(quest, party, fw, exp);
+        if (!a) continue;
+        out.drawn += 1;
+        const owner = party.find((adv) => (adv.obsession.triggerTags ?? []).some((h) => h.id === a.id));
+        const hook = owner.obsession.triggerTags.find((h) => h.id === a.id);
+        if (owner.id === "adv_elsie") out.elsie += 1;
+        else if (!hook.inParty && !fw.stepLeads.some((l) => l.id === owner.id)) out.notCarrier.push(a.id);
+        // 履歴を入れても同じ行
+        state.reports = [{ logs: [{ kind: "action", text: a.text }] }];
+        const b = drawFieldworkHook(quest, party, fw, exp);
+        if (!b || b.text !== a.text) out.historyDependent += 1;
+        out.lines[a.text] = 1;
+      }
     }
     state.reports = [];
+    out.lineKinds = Object.keys(out.lines).length;
     return out;
   });
   expect(r.drawn, "必ず引く設定で1本も引かれない").toBeGreaterThan(0);
   expect(r.notCarrier, "担い手でない者のフックが引かれた").toEqual([]);
-  expect(r.repeatDifferent, "同じフックの2度目が同じ行になった").toBe(true);
+  expect(r.elsie, "エルシーのフックが編成にいても引かれない").toBeGreaterThan(0);
+  expect(r.historyDependent, "報告書の履歴で行が変わった（EX-138 の例外）").toBe(0);
+  expect(r.lineKinds, "2通りの文面が両方出ない").toBeGreaterThan(1);
   expect(errors).toEqual([]);
 });

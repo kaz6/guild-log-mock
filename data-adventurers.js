@@ -250,10 +250,10 @@ window.masterAdventurers = [
       // ★死蔵（参照ゼロ）
       lie: "置いていかれると、もう呼んでもらえない",
       triggerTags: [
-        { id: "elsie_trail", label: "足音を追う", steps: [{ acts: ["察する"], targets: ["人"] }],
+        { id: "elsie_trail", label: "足音を追う", inParty: true, steps: [{ acts: ["察する"], targets: ["人"] }],
           lines: ["{名前}は急に鼻を地面に寄せ、ひとりで茂みのほうへ数歩進んで、振り返った。", "{名前}の耳が、同じ方角へ何度も立った。"] },
-        // ★ 引き金が依頼の tags（工程の語ではない）。担い手＝どれかの工程の担い手になった回に限る。
-        { id: "elsie_lead", label: "帰り道を引く", anyStep: true, questTags: ["帰還"],
+        // ★ 引き金が依頼の tags（工程の語ではない）。エルシーのフックは inParty＝編成にいれば引ける（担い手でなくてよい）。
+        { id: "elsie_lead", label: "帰り道を引く", inParty: true, anyStep: true, questTags: ["帰還"],
           lines: ["帰り道、{名前}は一行の先に立ち、ときどき振り返って全員がついてくるのを確かめた。", "寄り道しかけた者の袖を、{名前}がそっと咥えて引いた。"] }
       ],
       positiveLine: "エルシーは門を出る前から、しっぽを大きく振っていた。",
