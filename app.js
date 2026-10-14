@@ -3670,6 +3670,7 @@ function renderReportDetail(reportId) {
       done: !!report.readStampAt || prefersReducedMotion() || report.logs.length === 0
     };
   }
+  if (report.readStampAt && !reportTyping.done) finishReportTypingState(); // 押印済みなら（どの経路で押されても）全文を出す
   const typingDone = reportTyping.done;
   const fieldRows = [
     ["地域", quest?.area],
@@ -3794,6 +3795,12 @@ function stepReportTyping() {
   st.ch = 0;
   if (st.line >= report.logs.length) { finishReportTyping(); return; }
   st.timer = setTimeout(stepReportTyping, REPORT_TYPE_LINE_PAUSE_MS);
+}
+
+// 進みだけを「済み」にする（DOM には触れない。描画前に使う）
+function finishReportTypingState() {
+  clearTimeout(reportTyping.timer);
+  reportTyping.done = true;
 }
 
 function finishReportTyping() {
