@@ -163,6 +163,7 @@ test("取引の成立条件：両側に意味があるときだけ（ミナ①�
     out.rowDown = run(row, "adv_row", { tier: "partial", hpRatios: { adv_row: 1, adv_mina: 0.6, adv_elne: 0.5 } });
     out.rowFail = run(row, "adv_row", { tier: "fail", hpRatios: { adv_row: 1, adv_mina: 0.6 } }).line; // 下げる余地なし
     out.rowNoInjury = run(row, "adv_row", { tier: "full", hpRatios: { adv_row: 1, adv_mina: 1 } }).line; // 誰も負傷していない
+    out.rowOneStep = run(row, "adv_row", { tier: "full", hpRatios: { adv_row: 1, adv_mina: 0.6, adv_elne: 0 } }).fw.hpRatios; // 戦闘不能は一段だけ（軽症へ）
     FIELDWORK_TUNING.hookTradeEnabled = false;
     out.disabled = run(mina, "adv_mina", { tier: "fail", hpRatios: { adv_mina: 1 } }).line;
     FIELDWORK_TUNING.hookTradeEnabled = true;
@@ -179,6 +180,8 @@ test("取引の成立条件：両側に意味があるときだけ（ミナ①�
   expect(r.rowDown.fw.tier).toBe("fail");
   expect(r.rowDown.fw.turnedBack).toBe(true);
   expect(Object.values(r.rowDown.fw.hpRatios).every((v) => v > 0.7), "全員の負傷が一段軽くなる").toBe(true);
+  expect(r.rowOneStep.adv_elne, "一段だけ軽くなる（0→軽症）").toBeLessThanOrEqual(0.7);
+  expect(r.rowOneStep.adv_mina).toBeGreaterThan(0.7);
   expect(r.rowFail).toBeNull();
   expect(r.rowNoInjury).toBeNull();
   expect(r.disabled).toBeNull();

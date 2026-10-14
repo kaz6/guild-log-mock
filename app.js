@@ -9763,6 +9763,7 @@ function drawFieldworkHook(quest, party, fw, expedition) {
 // 段階3の取引（試行・2026-10-14・EX-148）。ミナ①＝結末を一段上げる／本人の負傷を一段重く。ロウ①＝結末を一段下げる／全員の負傷を一段軽く。
 //   ★ 取引は両側に意味があるときだけ成立する。片側が動かせないとき（既に完遂／既に未達／負傷の上限／誰も負傷していない）は
 //     段階2と同じ文面だけで、結果は動かさない。
+//   ★ 「一段軽く」は一段だけ（戦闘不能の0→軽症の側へ、軽症→無傷）。
 //   ★ 負傷は「軽症」までしか上げない（体験版では行方不明・死亡を起こさない＝EX-101。非戦闘は軽症までという既存の上限とも揃う）。
 //   ★ 負傷の段は帰還時の個人HP率で決まる（injuryLevelFromHpRatio）。ここでは率を動かすだけで、新しい値は持たない。
 //   成立したら fw を書き換えて、段階3の一行を返す。成立しなければ null。
@@ -9785,7 +9786,7 @@ function applyHookTrade(hook, fw) {
     tierDown: () => { fw.tier = fw.tier === "full" ? "partial" : "fail"; },
     selfInjuryUp: () => { fw.hpRatios = { ...fw.hpRatios, [hook.adv.id]: Math.min(ratios[hook.adv.id], HOOK_RATIO_LIGHT) }; },
     injuryDown: () => {
-      fw.hpRatios = Object.fromEntries(Object.entries(ratios).map(([id, r]) => [id, injured(id) ? Math.max(r, HOOK_RATIO_HEALTHY) : r]));
+      fw.hpRatios = Object.fromEntries(Object.entries(ratios).map(([id, r]) => [id, injured(id) ? (r <= 0 ? HOOK_RATIO_LIGHT : Math.max(r, HOOK_RATIO_HEALTHY)) : r]));
     }
   };
   apply[gain]();
