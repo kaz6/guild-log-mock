@@ -1542,3 +1542,39 @@ body[data-look="paper"] .recorder-badge:hover { color: var(--paper-ink); border-
 @media (prefers-reduced-motion: reduce) {
   .paper-sheet .log-line.typing .typed::after { display: none; }
 }
+
+/* 拠点（home）の紙の見た目（EX-154 段階2）。★ 中身・並びは変えず、見た目だけ紙にそろえる */
+body[data-look="paper"] {
+  --line: var(--paper-rule);
+  --muted: var(--paper-soft);
+  --text: var(--paper-ink);
+  --accent: var(--paper-shu);
+  --shadow: rgba(60, 40, 10, .18);
+}
+.paper-signboard { padding: 10px 8px 8px; text-align: center; background: var(--paper-sheet, #f3ecdc); border: 3px double var(--paper-ink, #2b2620); box-shadow: 0 2px 0 var(--paper-edge, #e4d8bf); }
+.paper-signboard .name { margin-right: -.25em; font-size: 34px; font-weight: 700; letter-spacing: .25em; line-height: 1.3; }
+.paper-signboard .kana { font-size: 11px; letter-spacing: .4em; color: var(--paper-soft, #6d6355); }
+.paper-meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.paper-meter { padding: 6px 4px; text-align: center; background: var(--paper-sheet, #f3ecdc); border: 1px solid var(--paper-ink, #2b2620); }
+.paper-meter span { display: block; font-size: 11px; letter-spacing: .2em; color: var(--paper-soft, #6d6355); }
+.paper-meter strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+body[data-look="paper"] .card { color: var(--paper-ink); background: var(--paper-sheet); border: 1px solid var(--paper-edge); border-radius: 0; box-shadow: 0 2px 0 var(--paper-edge), 0 8px 20px rgba(60, 40, 10, .18); }
+body[data-look="paper"] .card-title h3 { font-weight: 600; letter-spacing: .15em; }
+body[data-look="paper"] .speech { background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .reception-portrait { border-radius: 0; border: 1px solid var(--paper-soft); }
+body[data-look="paper"] .status-pill { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; font-weight: 600; }
+body[data-look="paper"] .status-pill.danger { color: var(--paper-shu); border-color: var(--paper-shu); }
+body[data-look="paper"] .weather-bar { background: rgba(255, 255, 255, .35); border-color: var(--paper-rule); border-radius: 0; }
+body[data-look="paper"] .progress-shell { background: rgba(60, 40, 10, .14); border-radius: 0; }
+body[data-look="paper"] .progress-bar { background: var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .small-button { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .empty { border-radius: 0; }
+/* 報告書棚の札：紙の上にもう1枚。押した札には朱の丸い印だけ（数は出さない） */
+body[data-look="paper"] .report-card { color: var(--paper-ink); background: #ede2c8; border: 1px solid var(--paper-edge); border-radius: 0; box-shadow: 0 4px 10px rgba(60, 40, 10, .18); }
+body[data-look="paper"] .report-card p { color: var(--paper-soft); }
+body[data-look="paper"] .report-card.unopened::before { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .report-card.stamped::after {
+  display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
+  color: var(--paper-shu); border: 1.5px solid var(--paper-shu); border-radius: 50%; font-size: 11px; letter-spacing: 0; opacity: 1; transform: rotate(-10deg);
+}
