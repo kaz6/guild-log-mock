@@ -9188,7 +9188,10 @@ const FIELDWORK_TUNING = {
   // ★ 未達には最低2件が要る＝**一度のつまずきでは未達にしない**。丸めの都合ではなく設計判断そのもの
   //   なので式に残す。効くのは2工程のときだけ（3工程以上は ceil(0.5×n) が既に2以上）。
   //   ★ 部分側に同じ下限は要らない（ceil(0.25×n) は n>=1 で常に1以上）。
-  setbacksForFailMin: 2
+  setbacksForFailMin: 2,
+  // ★ 特殊裁定のフック（2026-10-14・EX-148 段階2）。候補が1本でもある遠征で、この確率で**1本だけ**引く。
+  //   **仮の値**（制作の最後に調整する）。頻度は段階2の実測で見る。
+  hookChance: 0.12
 };
 
 // 依頼で使う stat の平均力量。★ その stat を一番持っている者が担当する、という読み方（最大値を採る）。
@@ -9680,7 +9683,66 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest, expedition);
   const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail });
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
-  return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines: fieldworkLogLines(fw, rng) };
+  const logLines = fieldworkLogLines(fw, rng);
+  // ★ 特殊裁定のフック（段階2）。文面を1行足すだけで、結末・報酬・配分は動かさない。
+  const hook = drawFieldworkHook(quest, party, fw, expedition);
+  if (hook) { fw.hook = hook.id; logLines.push({ kind: "action", text: hook.text }); }
+  return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines };
+}
+
+// 特殊裁定のフックを引く（2026-10-14・EX-148 段階2。裁定: DECISION_LOG 2026-09-29「取引」＋EX148-Q1〜Q3）。
+//   - 器は `obsession.triggerTags`（各人のフック定義）。引き金＝工程の語（行為×対象）＋依頼の属性。
+//   - ★ 引けるのは**その工程の担い手だけ**（stepLeads の持ち主）。同じ〈手当て×人〉をミナとエルネが持っていても、
+//     担い手は1人なので重ならない。`anyStep`＝どれかの工程の担い手であればよい（依頼の tags だけで決めるフック）。
+//   - ★ 1遠征につき最大1本。候補があれば hookChance で1回だけ抽選し、当たったら候補から1本選ぶ。
+//   - ★ 乱数は**専用の乱数**（出発時のシードを混ぜて作る）。報告書の乱数を1回も引かないので、
+//     結末・本文の並び・配分は同じシードで動かない。
+//   - ★ 工程エンジンを通らない依頼（畑・納屋・護衛・夜道）には届かない（DECISION_LOG 2026-09-13 の制約）。
+//   - 同じフックを2度引いたら、前回と違う行にする（`state.reports`＝新しい順の本文から直近を探す）。
+function drawFieldworkHook(quest, party, fw, expedition) {
+  if (!fw || !Array.isArray(fw.stepLeads) || fw.stepLeads.length === 0) return null;
+  const steps = window.masterVocab?.questSteps?.[quest?.id];
+  const questTags = Array.isArray(quest?.tags) ? quest.tags : [];
+  const candidates = [];
+  party.forEach((adv) => {
+    const hooks = adv?.obsession?.triggerTags;
+    if (!Array.isArray(hooks)) return;
+    hooks.forEach((h) => {
+      if (!h || typeof h !== "object") return;
+      if (h.questTags && !h.questTags.some((t) => questTags.includes(t))) return;
+      if (h.questCategory && quest.category !== h.questCategory) return;
+      const carried = fw.stepLeads.filter((lead) => lead.id === adv.id);
+      if (carried.length === 0) return;
+      if (h.anyStep) { candidates.push({ adv, h }); return; }
+      if (!Array.isArray(steps)) return;
+      const hit = carried.some((lead) => {
+        const row = steps[fieldworkStepIndex(steps.length, lead.phase, fw.phases)];
+        if (!row) return false;
+        return (h.steps ?? []).some((cond) =>
+          (!cond.acts || cond.acts.some((a) => (row.acts ?? []).includes(a))) &&
+          (!cond.targets || cond.targets.some((t) => (row.targets ?? []).includes(t))));
+      });
+      if (hit) candidates.push({ adv, h });
+    });
+  });
+  if (candidates.length === 0) return null;
+  // 専用の乱数：シードを混ぜて、報告書の乱数（makeRng(seed)）と相関させない
+  const seed = (expedition?.seed ?? 1) | 0;
+  let mixed = Math.imul(seed ^ 0x2f6b9a37, 0x45d9f3b) >>> 0;
+  mixed = Math.imul(mixed ^ (mixed >>> 15), 0x2c1b3c6d) >>> 0;
+  const hookRng = makeRng((mixed % 2147483646) + 1);
+  hookRng();
+  if (hookRng() >= FIELDWORK_TUNING.hookChance) return null;
+  const pick = candidates[Math.floor(hookRng() * candidates.length)];
+  const name = getDisplayName(pick.adv);
+  const lines = pick.h.lines.map((text) => text.replaceAll("{名前}", name));
+  let text = lines[Math.floor(hookRng() * lines.length)];
+  const reports = state.reports ?? [];
+  for (let i = 0; i < reports.length; i++) { // state.reports は新しい順（unshift）
+    const prev = (reports[i].logs ?? []).find((l) => lines.includes(l.text));
+    if (prev) { text = lines.find((l) => l !== prev.text) ?? text; break; }
+  }
+  return { id: pick.h.id, text };
 }
 
 // 報告書の裏に残す値。battleHpRatios は戦闘と同じ鍵で、負傷の確定は同じ経路に乗る。
@@ -9695,7 +9757,8 @@ function fieldworkHiddenTags(fw) {
       capability: fw.capability,
       stats: fw.statKeys,
       weatherLoad: fw.weatherLoad,
-      fatigue: fw.fatigue
+      fatigue: fw.fatigue,
+      ...(fw.hook ? { hook: fw.hook } : {})
     },
     battleHpRatios: fieldworkHpRatiosOf(fw)
   };
