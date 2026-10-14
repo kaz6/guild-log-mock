@@ -2130,6 +2130,8 @@ function renderHome() {
   const returnedQuest = returnedReport ? getQuest(returnedReport.questId) : null;
 
   app.innerHTML = `
+    ${paperSignboardHtml()}
+    ${paperMetersHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
     ${returnedReports.length > 1 ? `
@@ -2184,7 +2186,6 @@ function renderHome() {
               <p class="eyebrow">Reports</p>
               <h3>報告書棚</h3>
             </div>
-            <span class="status-pill">未開封 ${unopened.length}</span>
           </div>
           <div class="content">
             ${latestReports.length === 0 ? `<div class="empty">まだ報告書は届いていません。</div>` : latestReports.map(reportCardHtml).join("")}
@@ -3718,12 +3719,29 @@ function renderReportDetail(reportId) {
 // ── 見た目：「書類そのもの」（2026-10-14・EX-154。DECISION_LOG「見た目の方向は A」）──────────
 //   紙と打たれた文字と朱の判子。★ 見た目だけ（遊びの仕組み・データ・報告書の文面は変えない）。
 //   ★ Unity で UI は全面に差し替える前提（2026-09-21）。作り込みすぎない＝移るのは方向で、この実装ではない。
-//   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。まず報告書を読む画面、次に拠点。
-const PAPER_LOOK_ROUTES = ["report"];
+//   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。報告書を読む画面（段階1）→ 拠点＝home（段階2）。
+const PAPER_LOOK_ROUTES = ["report", "home"];
 
 // 亀甲（六角）の枠の判子。★ 仮：将来ギルドの紋を作って差し替える（2026-10-14 の裁定）。
 const HANKO_KIKKO_SVG = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
   + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
+
+// 拠点（home）の看板と計器。★ 計器は所持金・棚・在席の3つだけ（今の画面にもう出ている値）。
+//   性格値・親愛・未読件数は計器にしない（数値で出さない方針）。
+function paperSignboardHtml() {
+  return `<div class="paper-signboard"><div class="name">西端ギルド</div><div class="kana">遠征報告受付</div></div>`;
+}
+
+function paperMetersHtml() {
+  const present = state.adventurers.filter((adv) => adv.status === "待機中").length;
+  const money = Number.isFinite(state.money) ? state.money : 0;
+  const gauges = [
+    ["所持金", formatMoneyAmount(money)],
+    ["棚", `${stockOwnedTotal()}／${STOCK_LIMIT}`],
+    ["在席", `${present}／${state.adventurers.length}`]
+  ];
+  return `<div class="paper-meters">${gauges.map(([label, value]) => `<div class="paper-meter"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>`;
+}
 
 // 日付は現実の日付を見出しの文字として出すだけ（ゲーム内の暦は画面に出さない仕様のまま。計器にもしない）
 function todayLabelText() {
