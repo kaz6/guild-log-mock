@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>見出しの書体を比べる</title>
-<!-- EX-153：見本A の見出し・看板・判子に使う書体の候補を、同じ画面で並べる比較表。
+<title>却下した書体の候補（記録）</title>
+<!-- ★ 記録用（EX-154・2026-10-14）：外部の書体は使わないと裁定されたので、この3候補は却下。見本A（a-paper.html）はもう読まない。
+     以下は EX-153 の比較表のまま（候補を見直すときの材料）。
+     EX-153：見本A の見出し・看板・判子に使う書体の候補を、同じ画面で並べる比較表。
      ★ この比較表だけは候補3つを同時に読む（選ぶための表なので）。見本そのもの（a-paper.html?font=…）が読む外部の書体は1つだけ。
      ★ 本文は比べない（本文は候補に関係なく端末の明朝のまま）。下の一文は本文との釣り合いを見るための見本 -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -40,6 +42,7 @@
 </head>
 <body>
 <div class="wrap">
+  <p class="intro" style="border:1px solid var(--shu);padding:8px 10px;color:var(--shu)">★ 却下した候補の記録です（2026-10-14 の裁定：外部の書体は使わない。世界観に合わない）。見本Aはこれらを読みません。</p>
   <p class="intro">見本A の<b>看板（ギルド名）・報告書の題・判子</b>に使う書体の候補です。本文は、どの候補でも端末の明朝のままにします（各段の下の一文が本文の大きさ）。<a href="index.html">見本の一覧へ</a></p>
   <div id="list"></div>
   <p class="note">※ この比較表だけは候補3つを同時に読み込みます。見本そのもの（各段の「見本で開く」）が読む外部の書体は1つだけです。読み込めないときは、看板と題は各段の代わりの書体（明朝／ゴシック／行書体）で出ます。</p>
@@ -49,12 +52,12 @@
     + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
   var C = [
     { cls: "f-none", name: "（比べる元）端末の明朝", aim: "外部の書体なし。今の見本A", href: "a-paper.html" },
-    { cls: "f-zen", name: "Zen Antique", aim: "大正〜昭和の活字。古い印刷物の明朝", href: "a-paper.html?font=zen" },
-    { cls: "f-dela", name: "Dela Gothic One", aim: "昭和の看板の太いゴシック", href: "a-paper.html?font=dela" },
-    { cls: "f-yuji", name: "Yuji Syuku", aim: "筆文字（楷書寄りの毛筆）", href: "a-paper.html?font=yuji" }
+    { cls: "f-zen", name: "Zen Antique", aim: "大正〜昭和の活字。古い印刷物の明朝", href: "#" },
+    { cls: "f-dela", name: "Dela Gothic One", aim: "昭和の看板の太いゴシック", href: "#" },
+    { cls: "f-yuji", name: "Yuji Syuku", aim: "筆文字（楷書寄りの毛筆）", href: "#" }
   ];
   document.getElementById("list").innerHTML = C.map(function (c) {
-    return '<section class="cand"><h2><span>' + c.name + '　―　' + c.aim + '</span><a href="' + c.href + '">見本で開く</a></h2>'
+    return '<section class="cand"><h2><span>' + c.name + '　―　' + c.aim + '</span>' + (c.href === "#" ? '<span>却下</span>' : '<a href="' + c.href + '">見本Aを開く</a>') + '</h2>'
       + '<div class="board ' + c.cls + '"><div class="name">西端ギルド</div></div>'
       + '<div class="row"><div class="title ' + c.cls + '">街道の外れを行く隊商の護衛</div>'
       + '<div class="hanko ' + c.cls + '">' + KIKKO + '<div>読了<b>10/13</b></div></div></div>'

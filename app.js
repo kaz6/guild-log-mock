@@ -1874,6 +1874,10 @@ function render() {
     return;
   }
 
+  // 見た目の「書類そのもの」を当てる画面（EX-154）。画面ごとに足していく。
+  document.body.dataset.look = PAPER_LOOK_ROUTES.includes(route) ? "paper" : "";
+  if (route !== "report") resetReportTyping(); // 報告書を離れたら文字送りの進みを捨てる（開き直したら最初から）
+
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.route === route));
 
   const titles = {
@@ -3658,55 +3662,170 @@ function renderReportDetail(reportId) {
       }).filter(Boolean).join(" / ") || "なし"
     : report.itemIds?.map(getItem).filter(Boolean).map((i) => i.name).join(" / ") || "なし";
 
+  // 文字送りの進み。★ 毎秒の再描画（遠征中）で DOM が作り直されても、続きから出す。
+  if (reportTyping.id !== report.id) {
+    clearTimeout(reportTyping.timer);
+    reportTyping = {
+      id: report.id, line: 0, ch: 0, timer: null,
+      done: !!report.readStampAt || prefersReducedMotion() || report.logs.length === 0
+    };
+  }
+  if (report.readStampAt && !reportTyping.done) finishReportTypingState(); // 押印済みなら（どの経路で押されても）全文を出す
+  const typingDone = reportTyping.done;
+  const fieldRows = [
+    ["地域", quest?.area],
+    ["分類", quest?.category ?? "遠征"],
+    ["編成", party],
+    ["支給品", items],
+    ...(report.departConditions ? [["出発時", `${report.departConditions.timeOfDay} / ${report.departConditions.weather}`]] : []),
+    ...(report.tensionLevel != null ? [["緊張度", `${report.tensionLevel}/5`]] : []),
+    [quest?.category === "生活" ? "作業結果" : "結果", report.result]
+  ];
+
   app.innerHTML = `
-    <section class="card">
-      <div class="card-body">
-        <div class="card-title">
-          <div>
-            <p class="eyebrow">Opened Report</p>
-            <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
-          </div>
-          <span class="status-pill good">開封済み</span>
-        </div>
-        <div class="kv">
-          <span>地域</span><strong>${escapeHtml(quest?.area)}</strong>
-          <span>分類</span><strong>${escapeHtml(quest?.category ?? "遠征")}</strong>
-          <span>編成</span><strong>${escapeHtml(party)}</strong>
-          <span>支給品</span><strong>${escapeHtml(items)}</strong>
-          ${report.departConditions ? `<span>出発時</span><strong>${escapeHtml(report.departConditions.timeOfDay)} / ${escapeHtml(report.departConditions.weather)}</strong>` : ""}
-          ${report.tensionLevel != null ? `<span>緊張度</span><strong>${report.tensionLevel}/5</strong>` : ""}
-          <span>${quest?.category === "生活" ? "作業結果" : "結果"}</span><strong>${escapeHtml(report.result)}</strong>
-        </div>
-        ${report.highlight ? `
-        <div class="highlight-box">
-          <p class="eyebrow">今回のハイライト</p>
-          <p class="highlight-text">「${escapeHtml(report.highlight)}」</p>
-        </div>` : ""}
-        <hr class="soft" />
-        <p class="meta-label">${quest?.category === "生活" ? "作業報告" : "遠征ログ"}</p>
-        <div class="log-list">
-          ${report.logs.map((entry) => `<div class="log-line ${entry.kind}">${escapeHtml(entry.text)}</div>`).join("")}
-        </div>
-        ${report.observationNotes?.notes?.length > 0 ? observationNotesHtml(report.observationNotes) : ""}
+    <section class="paper-sheet" data-report-id="${escapeHtml(report.id)}">
+      <div class="paper-docno"><span>遠征報告書　開封済み</span><span>${todayLabelText()}</span></div>
+      <h3 class="paper-title">${escapeHtml(quest?.title ?? "報告書")}</h3>
+      <p class="paper-sub">記録係 ${escapeHtml(state.player?.name ?? "")}</p>
+      <dl class="paper-fields">
+        ${fieldRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}
+      </dl>
+      <div class="paper-lines" aria-live="off">
+        ${report.logs.map((entry, i) => reportLogLineHtml(entry, reportTypedCount(entry, i))).join("")}
+      </div>
+      <p class="paper-hint" id="reportSkipHint"${typingDone ? " hidden" : ""}>押すと全文を出します</p>
+      ${report.observationNotes?.notes?.length > 0 ? observationNotesHtml(report.observationNotes) : ""}
+      <div class="paper-foot">
+        <p class="paper-hl">${report.highlight ? `「${escapeHtml(report.highlight)}」` : ""}</p>
         ${report.readStampAt ? `
-        <div class="read-stamp-row">
-          <span class="read-stamp" aria-label="読了">読<br />了</span>
-          <span class="muted">${escapeHtml(readStampDateText(report))}</span>
-        </div>` : `
-        <div class="read-stamp-row">
-          <button class="secondary-button" onclick="stampReport('${escapeJsArg(report.id)}')">読了のハンコを押す</button>
-        </div>`}
-        <div class="button-row" style="margin-top: 18px;">
-          <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
-          <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
-          <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
-          ${quest?.observationTarget && quest.observationTarget !== "なし" && findEcologyRecordByTarget(quest.observationTarget)
-            ? `<button class="secondary-button" onclick="openEcologyRecordByTarget('${escapeJsArg(quest.observationTarget)}')">生態目録を編集</button>`
-            : ""}
-        </div>
+        <div class="paper-hanko" aria-label="読了" title="${escapeHtml(readStampDateText(report))}">${HANKO_KIKKO_SVG}<div>読了<b>${stampMonthDay(report.readStampAt)}</b></div></div>` : `
+        <button class="paper-stamp-btn" id="reportStampBtn"${typingDone ? "" : " disabled"} onclick="stampReport('${escapeJsArg(report.id)}')">読了の判子を押す</button>`}
       </div>
     </section>
+    <div class="button-row paper-nav">
+      <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
+      <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
+      <button class="secondary-button" onclick="setRoute('adventurers')">名簿にメモする</button>
+      ${quest?.observationTarget && quest.observationTarget !== "なし" && findEcologyRecordByTarget(quest.observationTarget)
+        ? `<button class="secondary-button" onclick="openEcologyRecordByTarget('${escapeJsArg(quest.observationTarget)}')">生態目録を編集</button>`
+        : ""}
+    </div>
   `;
+  bindReportTypingSkip();
+  scheduleReportTyping();
+}
+
+// ── 見た目：「書類そのもの」（2026-10-14・EX-154。DECISION_LOG「見た目の方向は A」）──────────
+//   紙と打たれた文字と朱の判子。★ 見た目だけ（遊びの仕組み・データ・報告書の文面は変えない）。
+//   ★ Unity で UI は全面に差し替える前提（2026-09-21）。作り込みすぎない＝移るのは方向で、この実装ではない。
+//   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。まず報告書を読む画面、次に拠点。
+const PAPER_LOOK_ROUTES = ["report"];
+
+// 亀甲（六角）の枠の判子。★ 仮：将来ギルドの紋を作って差し替える（2026-10-14 の裁定）。
+const HANKO_KIKKO_SVG = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
+  + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
+
+// 日付は現実の日付を見出しの文字として出すだけ（ゲーム内の暦は画面に出さない仕様のまま。計器にもしない）
+function todayLabelText() {
+  const d = new Date();
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function stampMonthDay(timestamp) {
+  const d = new Date(timestamp);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+// 文字送り（一行ずつ出す）。★ どこを押しても飛ばせる／既読（読了の判子あり）は最初から全部出す。
+//   ★ 行の文字は最初から全部 DOM に置き、まだ出していない分を透明にする（行の折り返しが送りの途中で動かない）。
+let reportTyping = { id: null, line: 0, ch: 0, done: true, timer: null };
+const REPORT_TYPE_CHARS = 2;
+const REPORT_TYPE_STEP_MS = 28;
+const REPORT_TYPE_LINE_PAUSE_MS = 260;
+let reportTypingSkipBound = false;
+
+function resetReportTyping() {
+  clearTimeout(reportTyping.timer);
+  reportTyping = { id: null, line: 0, ch: 0, done: true, timer: null };
+}
+
+function reportTypedCount(entry, index) {
+  const total = Array.from(entry.text).length;
+  if (reportTyping.done || index < reportTyping.line) return total;
+  return index === reportTyping.line ? Math.min(total, reportTyping.ch) : 0;
+}
+
+function reportLogLineHtml(entry, typedCount) {
+  const chars = Array.from(entry.text);
+  return `<div class="log-line ${entry.kind}"><span class="typed">${escapeHtml(chars.slice(0, typedCount).join(""))}</span><span class="untyped">${escapeHtml(chars.slice(typedCount).join(""))}</span></div>`;
+}
+
+function paintReportLine(lineEl, entry, typedCount, typing) {
+  const chars = Array.from(entry.text);
+  lineEl.querySelector(".typed").textContent = chars.slice(0, typedCount).join("");
+  lineEl.querySelector(".untyped").textContent = chars.slice(typedCount).join("");
+  lineEl.classList.toggle("typing", typing);
+}
+
+function scheduleReportTyping() {
+  clearTimeout(reportTyping.timer);
+  if (!reportTyping.done) reportTyping.timer = setTimeout(stepReportTyping, REPORT_TYPE_STEP_MS);
+}
+
+function stepReportTyping() {
+  const st = reportTyping;
+  if (st.done || route !== "report" || st.id !== state.activeReportId) return; // 画面を離れたら止める
+  const report = state.reports.find((r) => r.id === st.id);
+  const lineEls = app.querySelectorAll(".paper-lines .log-line");
+  if (!report || lineEls.length !== report.logs.length) { finishReportTyping(); return; }
+  const entry = report.logs[st.line];
+  const total = Array.from(entry.text).length;
+  st.ch = Math.min(total, st.ch + REPORT_TYPE_CHARS);
+  const finishedLine = st.ch >= total;
+  paintReportLine(lineEls[st.line], entry, st.ch, !finishedLine);
+  if (!finishedLine) {
+    st.timer = setTimeout(stepReportTyping, REPORT_TYPE_STEP_MS);
+    return;
+  }
+  st.line += 1;
+  st.ch = 0;
+  if (st.line >= report.logs.length) { finishReportTyping(); return; }
+  st.timer = setTimeout(stepReportTyping, REPORT_TYPE_LINE_PAUSE_MS);
+}
+
+// 進みだけを「済み」にする（DOM には触れない。描画前に使う）
+function finishReportTypingState() {
+  clearTimeout(reportTyping.timer);
+  reportTyping.done = true;
+}
+
+function finishReportTyping() {
+  const st = reportTyping;
+  clearTimeout(st.timer);
+  st.done = true;
+  const report = state.reports.find((r) => r.id === st.id);
+  const lineEls = app.querySelectorAll(".paper-lines .log-line");
+  if (report && lineEls.length === report.logs.length) {
+    report.logs.forEach((entry, i) => paintReportLine(lineEls[i], entry, Array.from(entry.text).length, false));
+  }
+  const hint = document.getElementById("reportSkipHint");
+  if (hint) hint.hidden = true;
+  const stampBtn = document.getElementById("reportStampBtn");
+  if (stampBtn) stampBtn.disabled = false;
+}
+
+function bindReportTypingSkip() {
+  if (reportTypingSkipBound) return;
+  reportTypingSkipBound = true;
+  app.addEventListener("click", (event) => {
+    if (route !== "report" || reportTyping.done) return;
+    if (event.target.closest("button, a")) return;
+    finishReportTyping();
+  });
 }
 
 function renderResult(reportId) {

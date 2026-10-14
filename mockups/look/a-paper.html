@@ -5,33 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>見本A 書類そのもの</title>
 <!-- 見本A：書類そのもの。紙・打たれた文字・朱の判子だけで画面を作る。
-     EX-153：本文を大きく／見出し・看板・判子だけレトロな書体を試す（?font= で候補を1つだけ読む。無指定なら外部の書体は読まない）／判子を亀甲（六角）の枠に。
-     ★ 本文はどの候補でも端末の明朝のまま（読み返す文章は読みやすさを優先） -->
-<script>
-  // 書体の候補（★ 1ページで読む外部の書体は1つまで）。読めないときは fallback に落ちる
-  (function () {
-    var FONTS = {
-      zen:  { family: "Zen Antique",     q: "Zen+Antique",     fallback: '"Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif' },
-      dela: { family: "Dela Gothic One", q: "Dela+Gothic+One", fallback: '"Hiragino Sans", "Yu Gothic", "YuGothic", "Noto Sans JP", sans-serif' },
-      yuji: { family: "Yuji Syuku",      q: "Yuji+Syuku",      fallback: '"HGGyoshotai", "HG行書体", "Hiragino Mincho ProN", "Yu Mincho", serif' }
-    };
-    var key = new URLSearchParams(location.search).get("font");
-    var f = FONTS[key];
-    if (!f) return;
-    var link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=" + f.q + "&display=swap";
-    document.head.appendChild(link);
-    document.documentElement.style.setProperty("--sign", '"' + f.family + '", ' + f.fallback);
-    document.documentElement.setAttribute("data-font", key);
-  })();
-</script>
+     ★ 確定形（EX-154・2026-10-14 の裁定）：外部の書体は読まない（端末の明朝だけ）／本文 15px／行間 1.95／判子は亀甲（仮。将来ギルドの紋に差し替える）。
+     ★ 書体の候補（Zen Antique／Dela Gothic One／Yuji Syuku）は世界観に合わず却下。記録は fonts.html -->
 <style>
   :root {
     --paper: #f3ecdc; --paper-edge: #e4d8bf; --ink: #2b2620; --ink-soft: #6d6355;
     --rule: #cdbf9f; --shu: #b8322a; --bg: #d9cfba;
     --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
-    --sign: var(--mincho); /* 見出し・看板・判子の書体。?font= で差し替わる */
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--mincho); }
@@ -42,8 +22,7 @@
   .sheet { background: var(--paper); border: 1px solid var(--paper-edge); box-shadow: 0 2px 0 var(--paper-edge), 0 8px 20px rgba(60,40,10,.18); padding: 20px 18px 28px; position: relative; }
   .sheet::before { content: ""; position: absolute; inset: 8px; border: 1px solid var(--rule); pointer-events: none; }
   .docno { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); letter-spacing: .1em; }
-  h1 { font-family: var(--sign); font-size: 24px; letter-spacing: .2em; text-align: center; margin: 14px 0 6px; font-weight: 600; line-height: 1.4; }
-  [data-font] h1 { font-weight: 400; }
+  h1 { font-size: 20px; letter-spacing: .25em; text-align: center; margin: 14px 0 4px; font-weight: 600; }
   .sub { text-align: center; font-size: 13px; color: var(--ink-soft); margin: 0 0 14px; }
   .fields { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); margin: 0 0 14px; font-size: 13px; }
   .fields div { display: flex; border-bottom: 1px dotted var(--rule); padding: 5px 2px; }
@@ -58,11 +37,10 @@
   .hint { font-size: 12px; color: var(--ink-soft); text-align: right; margin: 6px 0 0; }
   .foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 18px; }
   .hl { font-size: 13px; border-left: 3px solid var(--shu); padding-left: 8px; color: var(--ink-soft); flex: 1; margin-right: 12px; }
-  .hanko { width: 84px; height: 84px; position: relative; color: var(--shu); display: grid; place-items: center; text-align: center; font-family: var(--sign); font-size: 12px; line-height: 1.2; transform: rotate(-8deg); font-weight: 700; flex: none; }
+  .hanko { width: 84px; height: 84px; position: relative; color: var(--shu); display: grid; place-items: center; text-align: center; font-size: 12px; line-height: 1.2; transform: rotate(-8deg); font-weight: 700; flex: none; }
   .hanko svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .hanko div { position: relative; }
   .hanko b { display: block; font-size: 16px; letter-spacing: 0; font-weight: inherit; margin-top: 2px; }
-  [data-font] .hanko { font-weight: 400; }
   .stamp-btn { font: inherit; border: 2px dashed var(--shu); color: var(--shu); background: transparent; padding: 10px 12px; flex: none; }
   .stamp-btn:disabled { opacity: .35; }
   /* 状態は書類の欄外の「受付印」の枠に3つだけ */
@@ -78,10 +56,7 @@
   .muted { color: var(--ink-soft); font-size: 12px; }
   /* 拠点の看板（ギルド名）。東の町で流行りの看板文字、という体で見出しにだけ使う */
   .signboard { background: var(--paper); border: 3px double var(--ink); padding: 10px 8px 8px; margin-bottom: 12px; text-align: center; box-shadow: 0 2px 0 var(--paper-edge); }
-  .signboard .name { font-family: var(--sign); font-size: 34px; letter-spacing: .25em; line-height: 1.3; font-weight: 700; margin-right: -.25em; }
-  [data-font] .signboard .name { font-weight: 400; }
-  .fontsw a { color: var(--ink); }
-  .fontsw a.on { color: var(--shu); font-weight: 700; text-decoration: none; }
+  .signboard .name { font-size: 34px; letter-spacing: .25em; line-height: 1.3; font-weight: 700; margin-right: -.25em; }
   .signboard .kana { font-size: 11px; letter-spacing: .4em; color: var(--ink-soft); }
 </style>
 </head>
@@ -89,8 +64,7 @@
 <div class="wrap">
   <div class="tabs"><button data-screen="report">報告書</button><button data-screen="base">拠点</button></div>
   <div id="look"></div>
-  <p class="muted fontsw">見出しの書体：<a href="a-paper.html">端末の明朝</a>／<a href="a-paper.html?font=zen">Zen Antique</a>／<a href="a-paper.html?font=dela">Dela Gothic One</a>／<a href="a-paper.html?font=yuji">Yuji Syuku</a>（<a href="fonts.html">並べて比べる</a>）</p>
-  <p class="muted">見本A「書類そのもの」<span id="fontNote"></span>。画面のどこを押しても文字送りを飛ばせます。読了ハンコを押した報告書は、次に開くと最初から全部出ます（この画面の中だけ。保存はしません）。</p>
+  <p class="muted">見本A「書類そのもの」。画面のどこを押しても文字送りを飛ばせます。読了ハンコを押した報告書は、次に開くと最初から全部出ます（この画面の中だけ。保存はしません）。</p>
 </div>
 <script src="sample.js"></script>
 <script src="look.js"></script>
@@ -123,15 +97,6 @@
       + (r.readStampAt ? '<div class="hanko">' + KIKKO + '<div>読了<b>' + L.stampDate(r.readStampAt) + '</b></div></div>' : '<button class="stamp-btn" id="stampBtn" disabled>読了の判を押す</button>')
       + '</div></div>' };
   };
-  (function () {
-    var key = document.documentElement.getAttribute("data-font") || "";
-    var names = { zen: "Zen Antique", dela: "Dela Gothic One", yuji: "Yuji Syuku" };
-    document.getElementById("fontNote").textContent = names[key] ? "（見出し：" + names[key] + "）" : "";
-    document.querySelectorAll(".fontsw a").forEach(function (a) {
-      var m = a.getAttribute("href").match(/font=(\w+)/);
-      if ((m ? m[1] : (a.getAttribute("href") === "a-paper.html" ? "" : null)) === key) a.classList.add("on");
-    });
-  })();
 </script>
 </body>
 </html>
