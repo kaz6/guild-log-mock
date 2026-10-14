@@ -12,7 +12,7 @@ const { sweep, compare } = require("../../sweep");
 const { allParties, SEEDS, BASELINE_PATH } = require("../helpers/axes");
 const { freshPage } = require("../helpers/app");
 
-test("フックを必ず引く設定にしても、動くのは本文の1行だけ（取引を切れば）／取引はミナ①・ロウ①が成立した組だけを一段動かす", async () => {
+test("フックを必ず引く設定にしても、動くのは本文の1行だけ（取引を切れば）／取引はミナ①が成立した組だけを一段動かす", async () => {
   const baseline = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
   const baseRows = baseline.rows.filter((r) => !r.supplies);
   const both = await sweep({
@@ -80,7 +80,7 @@ test("フックを必ず引く設定にしても、動くのは本文の1行だ�
   const s2 = new Map(stage2.map((x) => [key(x), x]));
   const tradedRows = stage3.filter((x) => x.trade);
   expect(tradedRows.length, "取引が1件も成立しない").toBeGreaterThan(0);
-  expect(tradedRows.filter((x) => x.hook !== "mina_deliver" && x.hook !== "row_check").map(key), "ミナ①・ロウ①以外が成立した").toEqual([]);
+  expect(tradedRows.filter((x) => x.hook !== "mina_deliver").map(key), "ミナ①以外が成立した（ロウ①の取引は2026-10-14に外した）").toEqual([]);
   const untouched = stage3.filter((x) => !x.trade);
   expect(untouched.filter((x) => { const y = s2.get(key(x)); return y.res !== x.res || y.ht !== x.ht || y.n !== x.n || y.hr !== x.hr; }).map(key), "取引が成立していない組が動いた").toEqual([]);
   const order = { fail: 0, partial: 1, full: 2 };
@@ -147,16 +147,18 @@ test("引けるのは担い手だけ（エルシーは編成にいれば引け�
   expect(errors).toEqual([]);
 });
 
-test("取引の成立条件：両側に意味があるときだけ（ミナ①・ロウ①）／負傷は軽症まで", async ({ page }) => {
+test("取引の成立条件：両側に意味があるときだけ（ミナ①。ロウ①の同じ形は仕組みの確認）／負傷は軽症まで", async ({ page }) => {
   const errors = await freshPage(page);
   const r = await page.evaluate(() => {
     const mina = getAdventurer("adv_mina").obsession.triggerTags.find((h) => h.id === "mina_deliver");
-    const row = getAdventurer("adv_row").obsession.triggerTags.find((h) => h.id === "row_check");
+    // ロウ①の取引は外した（Q6＝C）が、「結末を下げる／負傷を軽くする」の仕組みは残してあるので、同じ形の定義を直に渡して確かめる
+    const row = { id: "row_check", trade: { gain: "injuryDown", cost: "tierDown" } };
+    const rowHasNoTrade = !getAdventurer("adv_row").obsession.triggerTags.find((h) => h.id === "row_check").trade;
     const run = (h, owner, fw) => {
       const hook = { id: h.id, adv: getAdventurer(owner), trade: h.trade, tradeText: "取引の一行" };
       return { line: applyHookTrade(hook, fw), fw };
     };
-    const out = {};
+    const out = { rowHasNoTrade };
     out.minaUp = run(mina, "adv_mina", { tier: "fail", hpRatios: { adv_mina: 1, adv_row: 1 } });
     out.minaFull = run(mina, "adv_mina", { tier: "full", hpRatios: { adv_mina: 1 } }).line;          // 上げる余地なし
     out.minaHurt = run(mina, "adv_mina", { tier: "partial", hpRatios: { adv_mina: 0.6 } }).line;     // 負傷を重くできない（上限＝軽症）
@@ -170,6 +172,7 @@ test("取引の成立条件：両側に意味があるときだけ（ミナ①�
     out.level = injuryLevelFromHpRatio(out.minaUp.fw.hpRatios.adv_mina, false);
     return JSON.parse(JSON.stringify(out));
   });
+  expect(r.rowHasNoTrade, "ロウ①は段階2（文面だけ）に戻した").toBe(true);
   expect(r.minaUp.line).toBe("取引の一行");
   expect(r.minaUp.fw.tier).toBe("partial");
   expect(r.level, "ミナ①の負傷は軽症まで").toBe("軽症");
@@ -185,5 +188,32 @@ test("取引の成立条件：両側に意味があるときだけ（ミナ①�
   expect(r.rowFail).toBeNull();
   expect(r.rowNoInjury).toBeNull();
   expect(r.disabled).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test("Mock用の「必ず引く」：出発時に遠征へ書いた旗が立つ遠征だけ確率1／本番の値は変えない", async ({ page }) => {
+  const errors = await freshPage(page);
+  const r = await page.evaluate(() => {
+    const quest = getQuest("quest_missing_herbalist");
+    const party = ["adv_mina", "adv_elne", "adv_row"].map(getAdventurer);
+    const count = (expedition) => {
+      let n = 0;
+      for (let seed = 1; seed <= 400; seed++) {
+        const fw = simulateFieldwork(quest, party, [], makeRng(seed), { weather: "晴れ" });
+        if (fw && drawFieldworkHook(quest, party, fw, { ...expedition, seed })) n += 1;
+      }
+      return n;
+    };
+    const before = FIELDWORK_TUNING.hookChance;
+    const out = { normal: count({}), forced: count({ mockForceHooks: true }), chanceKept: before };
+    setMockForceHooks(true);
+    out.bar = document.body.innerText.includes("特殊裁定");
+    setMockForceHooks(false);
+    out.after = FIELDWORK_TUNING.hookChance;
+    return out;
+  });
+  expect(r.chanceKept, "本番の値は35%のまま").toBe(0.35);
+  expect(r.after, "切り替えても本番の値は変わらない").toBe(0.35);
+  expect(r.forced, "必ず引く旗の遠征で、候補のある回はすべて引かれる").toBeGreaterThan(r.normal * 2);
   expect(errors).toEqual([]);
 });

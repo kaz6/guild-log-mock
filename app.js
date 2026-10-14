@@ -416,6 +416,9 @@ let interviewDraft = { name: "", personality: null };
 let recorderBadgeOpen = false;
 let recorderBadgeGlow = false;
 let mockWeather = null;  // Mock検証用: null の場合は totalExpeditions ベースで自動生成
+// Mock用：特殊裁定のフックを必ず引く（2026-10-14・EX-148）。時間加速と同じ扱いで、本番の値（hookChance）は変えない。
+//   ミナ①の取引は1周に0.13回しか成立せず、実機で遊んでも出会えないため。出発時に遠征へ書く（報告書の乱数と同じく出発時に確定）。
+let mockForceHooks = false;
 
 function createInitialState() {
   return {
@@ -2336,6 +2339,11 @@ function setMockWeather(w) {
   render();
 }
 
+function setMockForceHooks(on) {
+  mockForceHooks = on === true;
+  render();
+}
+
 // 依頼の解放判定（体験版②-3）。`unlockedBy` が指す依頼へ一度でも遠征していれば解放。
 // 成否は問わない（失敗で行き止まりにすると「失敗も物語として進む」設計と矛盾するため）。
 // ★ 解放状態は state.reports から都度導出している。将来「報告書を削除できる」ようにすると
@@ -2539,6 +2547,11 @@ function renderQuests() {
       <span class="mock-time-label">🔧 天候：</span>
       ${weatherOptions.map((w) => `<button class="mock-time-btn${mockWeather === w ? " active" : ""}" onclick="setMockWeather('${w}')">${w}</button>`).join("")}
       ${mockWeather ? `<button class="mock-time-btn" onclick="setMockWeather(null)">自動</button>` : `<button class="mock-time-btn active" onclick="setMockWeather(null)">自動</button>`}
+    </div>
+    <div class="mock-time-bar">
+      <span class="mock-time-label">🔧 特殊裁定：</span>
+      <button class="mock-time-btn${mockForceHooks ? "" : " active"}" onclick="setMockForceHooks(false)">本番（約35%）</button>
+      <button class="mock-time-btn${mockForceHooks ? " active" : ""}" onclick="setMockForceHooks(true)">必ず引く</button>
     </div>
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間加速：</span>
@@ -4061,7 +4074,9 @@ function startExpedition() {
     // ★ エルシーがギルドにいるか（2026-09-21・EX-140【1】）。掃除の定型報告書が読む。
     //   ここは status を「遠征中」に変えた**あと**なので、この遠征に連れ出した回は false になる
     //   （その回は報告書側が「編成に入っている」で拾う）。
-    elsieAtGuild: isElsieAtGuild()
+    elsieAtGuild: isElsieAtGuild(),
+    // ★ Mock用の「フックを必ず引く」は出発時に確定して書く（切り替えても出発済みの遠征は動かない）
+    mockForceHooks
   };
   // ★ 遠征費は出発した瞬間に引く（2026-09-23・EX-144）。**同時遠征は1本ずつ引いて判定する**（細則4）
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
@@ -9747,7 +9762,9 @@ function drawFieldworkHook(quest, party, fw, expedition) {
   mixed = Math.imul(mixed ^ (mixed >>> 15), 0x2c1b3c6d) >>> 0;
   const hookRng = makeRng((mixed % 2147483646) + 1);
   hookRng();
-  if (hookRng() >= FIELDWORK_TUNING.hookChance) return null;
+  // Mock用の切り替え（出発時に遠征へ書いた旗）が立っている遠征だけ確率1。本番の値は変えない
+  const chance = expedition?.mockForceHooks === true ? 1 : FIELDWORK_TUNING.hookChance;
+  if (hookRng() >= chance) return null;
   const pick = candidates[Math.floor(hookRng() * candidates.length)];
   const name = getDisplayName(pick.adv);
   const lines = pick.h.lines.map((text) => text.replaceAll("{名前}", name));
