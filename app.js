@@ -3726,19 +3726,21 @@ const PAPER_LOOK_ROUTES = ["report", "home"];
 const HANKO_KIKKO_SVG = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
   + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
 
-// 拠点（home）の看板と計器。★ 計器は所持金・棚・在席の3つだけ（今の画面にもう出ている値）。
+// 拠点（home）の看板と計器。★ 計器は所持金・持ち物・在席の3つだけ（今の画面にもう出ている値）。
 //   性格値・親愛・未読件数は計器にしない（数値で出さない方針）。
 function paperSignboardHtml() {
   return `<div class="paper-signboard"><div class="name">西端ギルド</div><div class="kana">遠征報告受付</div></div>`;
 }
 
 function paperMetersHtml() {
-  const present = state.adventurers.filter((adv) => adv.status === "待機中").length;
+  // 在席の分母：★ 死亡は外し、行方不明は残す（2026-10-14・EX-155。体験版は死亡も行方不明も起きないので表示は変わらない）
+  const roster = state.adventurers.filter((adv) => adv.status !== "死亡");
+  const present = roster.filter((adv) => adv.status === "待機中").length;
   const money = Number.isFinite(state.money) ? state.money : 0;
   const gauges = [
     ["所持金", formatMoneyAmount(money)],
-    ["棚", `${stockOwnedTotal()}／${STOCK_LIMIT}`],
-    ["在席", `${present}／${state.adventurers.length}`]
+    ["持ち物", `${stockOwnedTotal()}／${STOCK_LIMIT}`], // ★ 値は持ち出し中も含めた総数（上限5）。ラベルだけ「棚」から改めた
+    ["在席", `${present}／${roster.length}`]
   ];
   return `<div class="paper-meters">${gauges.map(([label, value]) => `<div class="paper-meter"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>`;
 }
