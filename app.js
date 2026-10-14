@@ -144,6 +144,7 @@ function questReward(quest, result, fee) {
 // ★ 支給品は**ギルドの買い物として購入し、在庫を持つ**。出撃時は在庫から持たせるだけ（★ その画面に金額を出さない）。
 //   節約したければ買い物の段階でする（設計ページ）。★ 在庫は最初は空——**隊商護衛をクリアして買い出しが開くまで、
 //   支給品は持たせられない**（CURRENT_SPEC 2026-07-25「隊商護衛達成までは支給品をつけられません」）。
+//   【体験版のみ】解禁を隊商護衛のあとに置くのは体験版の制限（製品版では図書館のイベント後の予定）。製品版で変えるときはここと `data-items.js` の `unlockedBy`・買い出しクエストの `unlockedBy`。
 // ★ 上限は**ギルドの持ち物の総数**で数える（棚にある分＋遠征に持ち出している分）。
 //   持ち出した分で棚が空いたように見えると、買い足して上限を越えられてしまう。
 const STOCK_LIMIT = MONEY_RULES.stockLimit;
@@ -201,6 +202,7 @@ function selectedItemCount(itemId) {
 }
 
 // 個人の品（記録票）が持たせられるか。★ 解禁の時期は変えない（体験版＝隊商護衛のあと）
+// 【体験版のみ】解禁が隊商護衛のあとなのは体験版の制限。製品版では図書館のイベント後の予定（`data-items.js` の `unlockedBy`）。
 function isPersonalItemUnlocked(item) {
   return Boolean(item?.personal) && (!item.unlockedBy || getClearedQuestIds().has(item.unlockedBy));
 }
@@ -1293,6 +1295,7 @@ function battleCritIdsOf(battle) {
 // ★ エルシー同行時は発生しない（全員連れ帰る。撤退保証と同じ層＝「深い失敗を浅くする犬」の延長）。
 // ★ 致命（人間全員 downed）は当面対象外＝現行の重症帰還のまま（報告者不在の文面設計が要るため、
 //   対象に含めるかは実例が出てから再裁定）。
+// 【体験版のみ】体験版では行方不明・死亡を起こさない前提（EX-101。経路は塞がず、起きる確率が極めて低いだけ）。製品版を縛らない。
 function battleMissingIds(battle, party) {
   if (!battle) return [];
   if (battle.outcome !== "defeat" && battle.outcome !== "stalemate") return [];
@@ -9782,6 +9785,7 @@ function drawFieldworkHook(quest, party, fw, expedition) {
 //     段階2と同じ文面だけで、結果は動かさない。
 //   ★ 「一段軽く」は一段だけ（戦闘不能の0→軽症の側へ、軽症→無傷）。
 //   ★ 負傷は「軽症」までしか上げない（体験版では行方不明・死亡を起こさない＝EX-101。非戦闘は軽症までという既存の上限とも揃う）。
+//     【体験版のみ】軽症止まりは体験版の制限。製品版では重症まで上げてよい（`selfInjuryUp` と `HOOK_RATIO_LIGHT`）。
 //   ★ 負傷の段は帰還時の個人HP率で決まる（injuryLevelFromHpRatio）。ここでは率を動かすだけで、新しい値は持たない。
 //   成立したら fw を書き換えて、段階3の一行を返す。成立しなければ null。
 const HOOK_RATIO_LIGHT = 0.69; // ≤0.70＝軽症
@@ -9801,6 +9805,7 @@ function applyHookTrade(hook, fw) {
   const apply = {
     tierUp: () => { fw.tier = fw.tier === "fail" ? "partial" : "full"; },
     tierDown: () => { fw.tier = fw.tier === "full" ? "partial" : "fail"; },
+    // 【体験版のみ】ここで本人の負傷を軽症止まりにしている（製品版では重症まで上げてよい）
     selfInjuryUp: () => { fw.hpRatios = { ...fw.hpRatios, [hook.adv.id]: Math.min(ratios[hook.adv.id], HOOK_RATIO_LIGHT) }; },
     injuryDown: () => {
       fw.hpRatios = Object.fromEntries(Object.entries(ratios).map(([id, r]) => [id, injured(id) ? (r <= 0 ? HOOK_RATIO_LIGHT : Math.max(r, HOOK_RATIO_HEALTHY)) : r]));
