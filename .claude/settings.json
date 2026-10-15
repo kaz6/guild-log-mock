@@ -30,6 +30,16 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-guard.js\" stop"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "^mcp__.*__notion-(update-page|create-pages)$",

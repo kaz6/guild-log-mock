@@ -59,6 +59,7 @@
 1. **書き込み直後の確かめ**：Notion に書き込んで（`notion-update-page`／`notion-create-pages`）まだ `notion-fetch` していないうちに `notion-search` を呼ぶと**止まり**、「notion-fetch で読み直すこと」と返す（印は fetch で消え、30分で切れる）。`notion-update-page` で `old_str` と `new_str` が同じ置換（単発 probe）を投げても**止まる**。
 2. **全角数字**：Notion に書いた文（`new_str` など。`old_str` は見ない）に `０-９` があると、書き込みのあとに**警告だけ**返す（止めない。日本語の文には正当に入る）。
 3. **DECISION_LOG をページ名で検索**：`notion-search` の検索語に「DECISION_LOG」「設計判断の記録」があると**止まり**、遠征の ID `3a9a8a5dfd4581e3a8cfc3872a300766` を返す。
+4. **読み直す前にターンを終えない**（2026-10-15）：Notion に書き込んだページを `notion-fetch` で読み直していない（印が残っている・30分で切れる）まま**ターンを終えようとすると止まり**、読み直していないページの ID を返す（Stop フック）。契機は Stop であって PR のマージではない（session-end は「マージ→Notion」の順）。止められた続きの停止は通す（`stop_hook_active`）。ページごとに印を持つので、別のページを読んでも消えない
 
 ※ 企画横断の決定（全企画に効くもの）は遠征の DECISION_LOG ではなく `02_operations`（運用系）または `00_shared`（世界設定など）配下に書く。遠征の DECISION_LOG には**遠征固有の判断だけ**を書く。
 

@@ -8,6 +8,8 @@ const os = require("os");
 const path = require("path");
 const { REPO } = require("../helpers/app");
 
+const PAGE_A = "3a9a8a5dfd4581e3a8cfc3872a300766";
+const PAGE_B = "3b8a8a5dfd4581fbabb3ebcf6676c0aa";
 const HOOK = path.join(REPO, ".claude/hooks/notion-guard.js");
 const SETTINGS = JSON.parse(fs.readFileSync(path.join(REPO, ".claude/settings.json"), "utf8"));
 
@@ -50,17 +52,17 @@ test.describe("規則1：書き込み直後の確かめに search や単発 prob
     const dir = freshState();
     const sid = "s1";
     expect(runHook("pre-search", { session_id: sid, tool_input: { query: "掲示板" } }, dir).code, "書き込み前は通る").toBe(0);
-    runHook("post-write", { session_id: sid, tool_input: { page_id: "abc", command: "update_content" } }, dir);
+    runHook("post-write", { session_id: sid, tool_input: { page_id: PAGE_A, command: "update_content" } }, dir);
     const blocked = runHook("pre-search", { session_id: sid, tool_input: { query: "掲示板" } }, dir);
     expect(blocked.code).toBe(2);
     expect(blocked.err).toContain("notion-fetch");
-    runHook("post-fetch", { session_id: sid, tool_input: { id: "abc" } }, dir);
+    runHook("post-fetch", { session_id: sid, tool_input: { id: PAGE_A } }, dir);
     expect(runHook("pre-search", { session_id: sid, tool_input: { query: "掲示板" } }, dir).code, "読み直したあとは通る").toBe(0);
   });
 
   test("別のセッションの書き込みでは止まらない", () => {
     const dir = freshState();
-    runHook("post-write", { session_id: "other", tool_input: { page_id: "abc" } }, dir);
+    runHook("post-write", { session_id: "other", tool_input: { page_id: PAGE_A } }, dir);
     expect(runHook("pre-search", { session_id: "mine", tool_input: { query: "x" } }, dir).code).toBe(0);
   });
 
@@ -73,6 +75,39 @@ test.describe("規則1：書き込み直後の確かめに search や単発 prob
     const real = runHook("pre-update", { session_id: "s", tool_input: { command: "update_content",
       content_updates: [{ old_str: "古い", new_str: "新しい" }] } }, dir);
     expect(real.code).toBe(0);
+  });
+});
+
+test.describe("規則4：読み直していないままターンを終えない（Stop）", () => {
+  test("登録されている（Stop に stop モード）", () => {
+    expect((SETTINGS.hooks.Stop || []).flatMap((h) => h.hooks.map((x) => x.command.split(" ").pop()))).toEqual(["stop"]);
+  });
+
+  test("書き込んだあと読み直していなければ止まり、残りのページを返す。読み直せば通る", () => {
+    const dir = freshState();
+    const sid = "st1";
+    expect(runHook("stop", { session_id: sid }, dir).code, "書き込み前は通る").toBe(0);
+    runHook("post-write", { session_id: sid, tool_input: { page_id: PAGE_A } }, dir);
+    runHook("post-write", { session_id: sid, tool_input: { page_id: PAGE_B } }, dir);
+    const blocked = runHook("stop", { session_id: sid }, dir);
+    expect(blocked.code).toBe(2);
+    expect(blocked.err).toContain(PAGE_A);
+    expect(blocked.err).toContain(PAGE_B);
+    // 片方だけ読み直すと、もう片方だけが残る（★ 別のページを読んでも消えない）
+    runHook("post-fetch", { session_id: sid, tool_input: { id: `https://www.notion.so/${PAGE_A}` } }, dir);
+    const rest = runHook("stop", { session_id: sid }, dir);
+    expect(rest.code).toBe(2);
+    expect(rest.err).not.toContain(PAGE_A);
+    expect(rest.err).toContain(PAGE_B);
+    runHook("post-fetch", { session_id: sid, tool_input: { id: PAGE_B } }, dir);
+    expect(runHook("stop", { session_id: sid }, dir).code, "全部読み直したあとは通る").toBe(0);
+  });
+
+  test("止められて続行中（stop_hook_active）なら通す。別のセッションの書き込みでは止まらない", () => {
+    const dir = freshState();
+    runHook("post-write", { session_id: "a", tool_input: { page_id: PAGE_A } }, dir);
+    expect(runHook("stop", { session_id: "a", stop_hook_active: true }, dir).code).toBe(0);
+    expect(runHook("stop", { session_id: "b" }, dir).code).toBe(0);
   });
 });
 
