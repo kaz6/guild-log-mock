@@ -7,7 +7,8 @@
 //   pre-search   … PreToolUse（notion-search）：規則1（書き込み直後の search）と規則3（DECISION_LOG を名前で検索）
 //   pre-update   … PreToolUse（notion-update-page）：規則1（置換前後が同じ置換）
 //   post-write   … PostToolUse（Notion への書き込み系）：規則2（全角数字の警告）＋「読み直し待ち」を記録
-//   post-fetch   … PostToolUse（notion-fetch）：「読み直し待ち」を消す
+//   post-fetch   … PostToolUse（notion-fetch）：読み直したページの「読み直し待ち」を消す
+//   stop         … Stop：「読み直し待ち」が残っていたら、ターンを終えるのを止めて残りのページを返す（2026-10-15）
 // 入力は stdin の JSON（session_id / tool_name / tool_input）。
 // 終了コード 2 は、PreToolUse なら呼び出しを止め、PostToolUse なら stderr をモデルに返す（＝警告）。0 は何もしない。
 // ★ 外部依存ゼロ（Node の組み込みだけ）。フックの不具合でセッションを止めないよう、想定外の入力は 0 で抜ける。
@@ -34,29 +35,51 @@ function pendingPath(sessionId) {
   return { dir, file: path.join(dir, `${safe}.pending`) };
 }
 
-function markPending(sessionId, pageId) {
-  const { dir, file } = pendingPath(sessionId);
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, String(pageId || ""));
-  } catch { /* 記録できなくても止めない */ }
+// 印の中身は「読み直し待ちのページ ID」を1行1件で持つ（ID は 32桁の16進に正規化する。URL・ダッシュ付きも同じ扱い）
+function normId(v) {
+  const m = String(v || "").replace(/-/g, "").match(/[0-9a-f]{32}/i);
+  return m ? m[0].toLowerCase() : "";
 }
 
 // ★ 30分たった印は無視する（書き込みとは無関係の、あとの検索まで止めないため）
 const PENDING_TTL_MS = 30 * 60 * 1000;
 
-function readPending(sessionId) {
+// ID が取れない書き込み（create-pages など）は "?" で持つ。どの fetch でも消える
+function readPendingList(sessionId) {
   const { file } = pendingPath(sessionId);
   try {
-    if (Date.now() - fs.statSync(file).mtimeMs > PENDING_TTL_MS) return null;
-    return fs.readFileSync(file, "utf8");
+    if (Date.now() - fs.statSync(file).mtimeMs > PENDING_TTL_MS) return [];
+    return fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
   } catch {
-    return null;
+    return [];
   }
 }
 
-function clearPending(sessionId) {
-  try { fs.unlinkSync(pendingPath(sessionId).file); } catch { /* 無ければよい */ }
+function writePendingList(sessionId, list) {
+  const { dir, file } = pendingPath(sessionId);
+  try {
+    if (list.length === 0) { fs.unlinkSync(file); return; }
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, list.join("\n"));
+  } catch { /* 記録できなくても止めない／無ければよい */ }
+}
+
+function markPending(sessionId, pageId) {
+  const id = normId(pageId) || "?";
+  const list = readPendingList(sessionId);
+  if (!list.includes(id)) list.push(id);
+  writePendingList(sessionId, list);
+}
+
+// 読み直したページの印を消す
+// ★ ID 不明の印（"?"）は、どの fetch でも消す（create-pages の直後など。消せないと30分止まり続けるため）
+function clearPending(sessionId, pageId) {
+  const id = normId(pageId);
+  writePendingList(sessionId, readPendingList(sessionId).filter((x) => x !== "?" && x !== id));
+}
+
+function describePending(list) {
+  return list.map((x) => (x === "?" ? "（ID 不明の書き込み）" : x)).join("、");
 }
 
 // 書き込む文だけを集める（★ old_str は置き換え前の文なので見ない。ID も見ない）
@@ -90,9 +113,9 @@ function main() {
       block(`[notion-guard] 「DECISION_LOG」をページ名で検索しないこと（別企画に同名ページがある）。遠征の DECISION_LOG は ID ${DECISION_LOG_ID} を notion-fetch で指定する（CLAUDE.md「Notion ページID」）。`);
     }
     // 規則1：書き込み直後の確かめに search を使わない（索引が古く、直前の値を返さないことがある）
-    const pending = readPending(sid);
-    if (pending !== null) {
-      block(`[notion-guard] Notion に書き込んだあと、まだ notion-fetch で読み直していない${pending ? `（ページ ${pending}）` : ""}。書けたかの確かめに notion-search は使わない（書き込み直後は索引が古い）。notion-fetch でページを取り直して確かめること。`);
+    const pending = readPendingList(sid);
+    if (pending.length > 0) {
+      block(`[notion-guard] Notion に書き込んだあと、まだ notion-fetch で読み直していない（ページ ${describePending(pending)}）。書けたかの確かめに notion-search は使わない（書き込み直後は索引が古い）。notion-fetch でページを取り直して確かめること。`);
     }
     process.exit(0);
   }
@@ -125,7 +148,18 @@ function main() {
   }
 
   if (mode === "post-fetch") {
-    clearPending(sid);
+    clearPending(sid, ti.id);
+    process.exit(0);
+  }
+
+  if (mode === "stop") {
+    // 読み直す前にターンを終えない。★ 契機は Stop（PR のマージではない。session-end は「マージ→Notion」の順なので、マージ時点では書き込み前）
+    // stop_hook_active は「このフックで止められて続行中」。2回目以降は通す（読み直せない事情があっても無限に止めない）
+    if (input.stop_hook_active) process.exit(0);
+    const pending = readPendingList(sid);
+    if (pending.length > 0) {
+      block(`[notion-guard] Notion に書き込んだページを、まだ notion-fetch で読み直していない：${describePending(pending)}。読み直して書けたことを確かめてから終えること（完了報告の前に済ませる）。`);
+    }
     process.exit(0);
   }
 
