@@ -103,6 +103,14 @@ test.describe("規則4：読み直していないままターンを終えない�
     expect(runHook("stop", { session_id: sid }, dir).code, "全部読み直したあとは通る").toBe(0);
   });
 
+  test("ID が取れない書き込み（create-pages など）は、どの fetch でも消える", () => {
+    const dir = freshState();
+    runHook("post-write", { session_id: "n", tool_input: { parent: {} } }, dir);
+    expect(runHook("stop", { session_id: "n" }, dir).code).toBe(2);
+    runHook("post-fetch", { session_id: "n", tool_input: { id: PAGE_A } }, dir);
+    expect(runHook("stop", { session_id: "n" }, dir).code).toBe(0);
+  });
+
   test("止められて続行中（stop_hook_active）なら通す。別のセッションの書き込みでは止まらない", () => {
     const dir = freshState();
     runHook("post-write", { session_id: "a", tool_input: { page_id: PAGE_A } }, dir);

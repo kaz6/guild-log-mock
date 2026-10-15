@@ -44,7 +44,7 @@ function normId(v) {
 // ★ 30分たった印は無視する（書き込みとは無関係の、あとの検索まで止めないため）
 const PENDING_TTL_MS = 30 * 60 * 1000;
 
-// ID が取れない書き込み（create-pages など）は "?" で持つ。fetch では消せないが、30分で切れる
+// ID が取れない書き込み（create-pages など）は "?" で持つ。どの fetch でも消える
 function readPendingList(sessionId) {
   const { file } = pendingPath(sessionId);
   try {
@@ -71,11 +71,11 @@ function markPending(sessionId, pageId) {
   writePendingList(sessionId, list);
 }
 
-// 読み直したページの印だけを消す。ID が取れない fetch は何も消さない（どのページを読んだか分からない）
+// 読み直したページの印を消す
+// ★ ID 不明の印（"?"）は、どの fetch でも消す（create-pages の直後など。消せないと30分止まり続けるため）
 function clearPending(sessionId, pageId) {
   const id = normId(pageId);
-  if (!id) return;
-  writePendingList(sessionId, readPendingList(sessionId).filter((x) => x !== id));
+  writePendingList(sessionId, readPendingList(sessionId).filter((x) => x !== "?" && x !== id));
 }
 
 function describePending(list) {
