@@ -1601,3 +1601,22 @@ body[data-look="paper"] .weather-bar .chip { color: var(--paper-ink); border-rad
 body[data-look="paper"] .highlight-box { background: transparent; border: 0; border-left: 3px solid var(--paper-shu); border-radius: 0; }
 body[data-look="paper"] .highlight-text { color: var(--paper-soft); }
 body[data-look="paper"] .status-pill.good { color: var(--paper-ink); border-color: var(--paper-ink); }
+
+/* 冒険者名簿の紙の見た目（EX-157 段階3）。★ 見た目だけ。詳細欄の文字色は ID 付きの規則で固定されているので、紙の色で上書きする */
+body[data-look="paper"] #adventurerEditor .meta-label { color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .adventurer-detail-intro,
+body[data-look="paper"] #adventurerEditor .adventurer-tale-line { color: var(--paper-ink); }
+body[data-look="paper"] #adventurerEditor .card-title .muted,
+body[data-look="paper"] #adventurerEditor .muted,
+body[data-look="paper"] #adventurerEditor .empty,
+body[data-look="paper"] #adventurerEditor .form-row label { color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .kv { color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .kv strong,
+body[data-look="paper"] #adventurerEditor .adventurer-detail-history .log-line { color: var(--paper-ink); }
+body[data-look="paper"] #adventurerEditor .adventurer-detail-traits .tag { color: var(--paper-ink); background: transparent; border-color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .adventurer-detail-traits .tag.trait-flaw { color: var(--paper-shu); border: 1px dashed var(--paper-shu); }
+body[data-look="paper"] .adventurer-detail-history .log-line { background: transparent; border: 0; border-bottom: 1px dotted var(--paper-rule); border-radius: 0; padding-left: 0; }
+body[data-look="paper"] input,
+body[data-look="paper"] textarea,
+body[data-look="paper"] select { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .form-row label { color: var(--paper-soft); }
