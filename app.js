@@ -3818,6 +3818,10 @@ let reportTyping = { id: null, line: 0, ch: 0, done: true, timer: null };
 const REPORT_TYPE_CHARS = 2;
 const REPORT_TYPE_STEP_MS = 28;
 const REPORT_TYPE_LINE_PAUSE_MS = 260;
+// 行の種類（生成側が付ける tag）。★ 色と振動は種別だけから引く（文面を探さない）。EX-157【2】
+const REPORT_LINE_TAGS = ["battle", "crit", "weather"];
+const REPORT_TYPE_CRIT_PAUSE_MS = 450; // クリティカルの行の前に置く、ほんの少しの間（飛ばしたときは置かない）
+const REPORT_CRIT_VIBRATE_MS = 30;
 let reportTypingSkipBound = false;
 
 function resetReportTyping() {
@@ -3833,7 +3837,8 @@ function reportTypedCount(entry, index) {
 
 function reportLogLineHtml(entry, typedCount) {
   const chars = Array.from(entry.text);
-  return `<div class="log-line ${entry.kind}"><span class="typed">${escapeHtml(chars.slice(0, typedCount).join(""))}</span><span class="untyped">${escapeHtml(chars.slice(typedCount).join(""))}</span></div>`;
+  const tagClass = REPORT_LINE_TAGS.includes(entry.tag) ? ` tag-${entry.tag}` : ""; // 行の種類（EX-157【2】）。無い行・知らない値は墨のまま
+  return `<div class="log-line ${entry.kind}${tagClass}"><span class="typed">${escapeHtml(chars.slice(0, typedCount).join(""))}</span><span class="untyped">${escapeHtml(chars.slice(typedCount).join(""))}</span></div>`;
 }
 
 function paintReportLine(lineEl, entry, typedCount, typing) {
@@ -3856,6 +3861,7 @@ function stepReportTyping() {
   if (!report || lineEls.length !== report.logs.length) { finishReportTyping(); return; }
   const entry = report.logs[st.line];
   const total = Array.from(entry.text).length;
+  if (st.ch === 0 && entry.tag === "crit") vibrateShort(REPORT_CRIT_VIBRATE_MS); // クリティカルの行が出るとき（文字送りで出るときだけ）
   st.ch = Math.min(total, st.ch + REPORT_TYPE_CHARS);
   const finishedLine = st.ch >= total;
   paintReportLine(lineEls[st.line], entry, st.ch, !finishedLine);
@@ -3866,7 +3872,7 @@ function stepReportTyping() {
   st.line += 1;
   st.ch = 0;
   if (st.line >= report.logs.length) { finishReportTyping(); return; }
-  st.timer = setTimeout(stepReportTyping, REPORT_TYPE_LINE_PAUSE_MS);
+  st.timer = setTimeout(stepReportTyping, REPORT_TYPE_LINE_PAUSE_MS + (report.logs[st.line].tag === "crit" ? REPORT_TYPE_CRIT_PAUSE_MS : 0));
 }
 
 // 進みだけを「済み」にする（DOM には触れない。描画前に使う）
@@ -6132,12 +6138,12 @@ function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context 
   ]));
 
   if (weather === "小雨" || weather === "雨") {
-    logs.push(pick([
+    logs.push({ tag: "weather", text: pick([
       `小雨で巡礼路が滑りやすく、鐘楼の足元だけ念入りに確かめた。`,
       `雨に濡れた花壇の縁に、人の足跡は新しく残っていなかった。`
-    ]));
+    ]) });
   } else if (weather === "霧") {
-    logs.push(`霧の向こうで礼拝堂の灯りだけが、いつもより長く見えた。`);
+    logs.push({ tag: "weather", text: `霧の向こうで礼拝堂の灯りだけが、いつもより長く見えた。` });
   }
 
   const work = [];
@@ -6227,12 +6233,12 @@ function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context 
   ]));
 
   if (weather === "小雨" || weather === "雨") {
-    logs.push(pick([
+    logs.push({ tag: "weather", text: pick([
       `小雨で板が滑りやすく、岸のぬかるみも深かった。足場を確かめてから作業を始めた。`,
       `雨で手すりが濡れ、釘の緩みが目立った。急がず、一か所ずつ確認することにした。`
-    ]));
+    ]) });
   } else if (weather === "風が強い") {
-    logs.push(`風で古い手すりがきしむ。板を叩く前に、橋全体の揺れを確かめた。`);
+    logs.push({ tag: "weather", text: `風で古い手すりがきしむ。板を叩く前に、橋全体の揺れを確かめた。` });
   }
 
   const work = [];
@@ -6328,14 +6334,14 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
   ]));
 
   if (weather === "小雨" || weather === "雨") {
-    logs.push(pick([
+    logs.push({ tag: "weather", text: pick([
       `小雨が降り始め、街道の端はぬかるんでいた。包みを胸の高さに抱え、歩幅を狭めた。`,
       `雨で荷紐が湿り、包みの外布に水気が移りやすかった。`
-    ]));
+    ]) });
   } else if (weather === "風が強い") {
-    logs.push(`風で包みの布がはためいた。歩くたびに荷が揺れないよう、手を添えて進んだ。`);
+    logs.push({ tag: "weather", text: `風で包みの布がはためいた。歩くたびに荷が揺れないよう、手を添えて進んだ。` });
   } else if (weather === "霧") {
-    logs.push(`霧で分岐が見えにくかったが、足元の轍を頼りに進んだ。`);
+    logs.push({ tag: "weather", text: `霧で分岐が見えにくかったが、足元の轍を頼りに進んだ。` });
   } else {
     logs.push(pick([
       `街道は乾いていたが、橋の手前だけぬかるみが残っていた。`,
@@ -6371,7 +6377,7 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
 
   if (itemIds.includes("item_oilcase") && canUseItemInQuest(quest, "item_oilcase", weather)) {
     if (weather === "小雨" || weather === "雨") {
-      logs.push(`小雨が降り始めたが、油紙の手紙入れに納品書をしまっていたため、文字は滲まなかった。`);
+      logs.push({ tag: "weather", text: `小雨が降り始めたが、油紙の手紙入れに納品書をしまっていたため、文字は滲まなかった。` });
     } else {
       logs.push(`${holderName("item_oilcase")}は油紙の手紙入れに納品書をしまい、湿気からラベルを守った。`);
     }
@@ -6452,10 +6458,10 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   ]));
 
   if (weather === "小雨" || weather === "霧") {
-    logs.push(pick([
+    logs.push({ tag: "weather", text: pick([
       `霧で視界が悪く、足跡の先が読みにくかった。`,
       `小雨で足跡が滲み、古いものと新しいものの区別に時間がかかった。`
-    ]));
+    ]) });
   }
 
   const work = [];
@@ -6545,10 +6551,10 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   ]));
 
   if (weather === "小雨" || weather === "霧") {
-    logs.push(pick([
+    logs.push({ tag: "weather", text: pick([
       `小雨で石畳が滑りやすく、親は子どもの手を強く握った。`,
       `霧で先の曲がり角が見えにくかったが、人の声はまだ聞こえていた。`
-    ]));
+    ]) });
   }
 
   const work = [];
@@ -6665,7 +6671,9 @@ function generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, context
   ]));
 
   // 末尾の1行は必ず遭遇（戦闘開始）の一文。色分け用に battle-start を付け、他は action。
-  return logs.map((text, i) => ({ kind: i === logs.length - 1 ? "battle-start" : "action", text }));
+  return logs.map((text, i) => (i === logs.length - 1
+    ? { kind: "battle-start", tag: "battle", text } // ★ 交戦の始まりの行（EX-157【2】）。ここから朱の区間
+    : { kind: "action", text }));
 }
 
 // 隊商護衛の交戦を events から「1行1アクション」のドラマログへ翻訳する（案D・スライス2）。
@@ -6722,10 +6730,12 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   // クリティカル（＝深手）の行。赤文字は既に報告書で使っている表現なので、新しい色を増やさない。
   const critDealLine = (ev) => ({
     kind: "status-grave",
+    tag: "crit", // ★ クリティカルの行の印（EX-157【2】）。深手・戦闘不能の行（同じ kind）とはここで分かれる
     text: `${ev.attackerName}が渾身の一撃を叩き込んだ。致命の一撃を与えた！（${enemyN}に${ev.damage}ダメージ！）`
   });
   const critTakeLine = (ev) => ({
     kind: "status-grave",
+    tag: "crit",
     text: `${enemyN}の刃が深く入った。${ev.targetName}が致命の一撃を受けた！（${ev.targetName}に${ev.damage}ダメージ！）`
   });
 
@@ -6912,7 +6922,7 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     else if (ev.type === "supply_out") lines.push({ kind: "action", text: supplyOutLine(ev) });
   });
   if (finisher) lines.push(finisher);
-  return lines;
+  return lines.map((line) => (line.tag ? line : { ...line, tag: "battle" })); // ★ 交戦の区間の行はすべて battle（クリティカルは crit のまま。EX-157【2】）
 }
 
 // 隊商捜索チェーン（護衛失敗の後日談）：斥候かエルシーがいれば手がかりを追える。
@@ -7036,7 +7046,7 @@ function generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, context 
   }
   if (itemIds.includes("item_oilcase") && canUseItemInQuest(quest, "item_oilcase", weather)) {
     if (weather === "小雨" || weather === "雨") {
-      logs.push(`油紙の手紙入れに写しをしまったため、小雨でも紙は濡れずに済んだ。`);
+      logs.push({ tag: "weather", text: `油紙の手紙入れに写しをしまったため、小雨でも紙は濡れずに済んだ。` });
     } else {
       logs.push(`${holderName("item_oilcase")}は油紙の手紙入れに拓本とメモをしまい、湿気から守った。`);
     }
@@ -7684,7 +7694,12 @@ function generateReport(expedition) {
   const tensionLevel = tensionValue != null ? tensionToLevel(tensionValue) : null;
   const tensionMeta = tensionLevel != null ? { tensionValue, tensionLevel } : {};
   const logs = [];
-  const add = (kind, text) => logs.push({ kind, text });
+  // tag＝行の種類（battle／crit／weather。EX-157【2】）。無い行は墨のまま。
+  //   依頼ごとの生成関数が返す文字列の並びには、天候の行だけ { text, tag } の形で混ぜてある（受け側でどちらも受ける）。
+  const add = (kind, text, tag) => {
+    if (text && typeof text === "object") { tag = text.tag ?? tag; text = text.text; }
+    logs.push(tag ? { kind, text, tag } : { kind, text });
+  };
 
   // ── 買い出し（2026-09-23・EX-144）──────────────────────────────────────
   // ★ `shopping` の旗で分岐する。★ 何を買えたか・いくら払ったかは**書かない**——
@@ -7717,7 +7732,7 @@ function generateReport(expedition) {
     //   ★ いない回は**行ごと落とす**（名前だけ消すと文が壊れる）。落ちるのは `needsElsie` の1行だけ。
     template.logs.forEach((line) => {
       if (line.needsElsie && !elsiePresent) return;
-      add(line.kind, fill(line.text));
+      add(line.kind, fill(line.text), line.tag);
     });
 
     const adventurerHistoryLines = {};
@@ -7801,7 +7816,7 @@ function generateReport(expedition) {
     if (battleOutcome === "victory") {
       questLogs.forEach((text, index) => {
         if (index === questLogs.length - 1) {
-          dramaLines.forEach((line) => add(line.kind, line.text));
+          dramaLines.forEach((line) => add(line.kind, line.text, line.tag));
           add("afterglow", text);
         } else {
           add("action", text);
@@ -7809,10 +7824,10 @@ function generateReport(expedition) {
       });
     } else {
       questLogs.forEach((text) => add("action", text));
-      dramaLines.forEach((line) => add(line.kind, line.text));
+      dramaLines.forEach((line) => add(line.kind, line.text, line.tag));
       if (missingIds.length > 0) add("drama", missingLineText(missingIds, party));
       add("action", outcomeInfo.line);
-      add("afterglow", outcomeInfo.after);
+      add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
     }
 
     // ★ 夜は必ず観察記録が残る。**これが v2 の主眼**——v1 は「確認のみ」で生態目録に残っていたのに、
@@ -7884,7 +7899,7 @@ function generateReport(expedition) {
       // 勝ったときの並びは従来どおり（最後の1行が余韻）。交戦記録はその手前に差し込む。
       questLogs.forEach((text, index) => {
         if (index === questLogs.length - 1) {
-          dramaLines.forEach((line) => add(line.kind, line.text));
+          dramaLines.forEach((line) => add(line.kind, line.text, line.tag));
           add("afterglow", text);
         } else {
           add("action", text);
@@ -7892,10 +7907,10 @@ function generateReport(expedition) {
       });
     } else {
       questLogs.forEach((text) => add("action", text));
-      dramaLines.forEach((line) => add(line.kind, line.text));
+      dramaLines.forEach((line) => add(line.kind, line.text, line.tag));
       if (missingIds.length > 0) add("drama", missingLineText(missingIds, party)); // 連れ帰れなかった（EX-070）
       add("action", outcomeInfo.line);
-      add("afterglow", outcomeInfo.after);
+      add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
     }
 
     // 挑まずに引き返したときは相手を観察していない
@@ -7953,13 +7968,13 @@ function generateReport(expedition) {
 
     const patrolLogs = generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     patrolLogs.forEach((text) => add("action", text));
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : churchPatrolOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     return finalizeQuestReport({
       expedition,
@@ -7999,13 +8014,13 @@ function generateReport(expedition) {
 
     const bridgeLogs = generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     bridgeLogs.forEach((text) => add("action", text));
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : bridgeRepairOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
@@ -8060,13 +8075,13 @@ function generateReport(expedition) {
 
     const deliveryLogs = generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     deliveryLogs.forEach((text) => add("action", text));
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : herbDeliveryOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
@@ -8121,7 +8136,7 @@ function generateReport(expedition) {
 
     const rescueLogs = generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, outcome });
     rescueLogs.forEach((text) => add("action", text));
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
@@ -8132,7 +8147,7 @@ function generateReport(expedition) {
         ? `帰り道、エルシーは何度も振り返りながら、保護した村人の歩みに合わせて進んだ。`
         : `帰り道、エルシーは何度も振り返りながら、見つけた村人のそばを離れなかった。`);
     }
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
@@ -8196,17 +8211,17 @@ function generateReport(expedition) {
     add("", `支給品：${caravanSupplyDesc.length > 0 ? caravanSupplyDesc.join(" / ") : "なし"}。`);
 
     const caravanLogs = generateCaravanEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    caravanLogs.forEach((line) => add(line.kind, line.text));
+    caravanLogs.forEach((line) => add(line.kind, line.text, line.tag));
 
     // 交戦ドラマログ（案D・スライス2）：events を1行1アクションで描画。結果ログより前に入れる。
-    generateCaravanBattleDramaLog(battle, party, rng).forEach((line) => add(line.kind, line.text));
+    generateCaravanBattleDramaLog(battle, party, rng).forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = caravanEscortOutcomeText(branch, party, rng);
     if (missingIds.length > 0) add("drama", missingLineText(missingIds, party)); // 連れ帰れなかった（EX-070）
     add("action", outcomeInfo.line);
     if (branch === "bail") add("action", `商人は荷の行方を目で追ったまま、しばらく口を開かなかった。`);
     if (branch === "partial_loss" || branch === "partial_elsie") add("action", `商人は減った荷を数え直し、それでも歩みを止めなかった。`);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     return finalizeQuestReport({
       expedition,
@@ -8266,11 +8281,11 @@ function generateReport(expedition) {
 
     const searchLogs = generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, stage, found });
     searchLogs.forEach((text) => add("action", text));
-    fieldworkLogLines(fw, rng).forEach((line) => add(line.kind, line.text));
+    fieldworkLogLines(fw, rng).forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = questOutcomeText(quest.id, searchOutcome, party, itemIds);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     return finalizeQuestReport({
       expedition,
@@ -8326,13 +8341,13 @@ function generateReport(expedition) {
       // ★ 「使わずに済んだ」と書いてよいかの事実（2026-09-12・EX-082）
       whistleUsed: (field.fw?.events ?? []).some((e) => e.itemId === "item_whistle") });
     escortLogs.forEach((text) => add("action", text));
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : eveningEscortOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
@@ -8386,13 +8401,13 @@ function generateReport(expedition) {
 
     const steleLogs = generateSteleRubbingLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
     steleLogs.forEach((text) => add("action", text));
-    field.logLines.forEach((line) => add(line.kind, line.text));
+    field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : steleRubbingOutcomeText(outcome, party, rng);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
@@ -8488,13 +8503,13 @@ function generateReport(expedition) {
     }
     field.logLines.forEach((line) => {
       if (suppressSupportLine && line.support) return;
-      add(line.kind, line.text);
+      add(line.kind, line.text, line.tag);
     });
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
     if (statsLog) add("drama", statsLog);
     add("action", outcomeInfo.line);
-    add("afterglow", outcomeInfo.after);
+    add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     const adventurerHistoryLines = {};
     party.forEach((adv) => {
@@ -8555,14 +8570,14 @@ function generateReport(expedition) {
     return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
   }).filter(Boolean);
   add("", `編成：${formatNames(party)}。支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
-  add("", generateWeatherLog(quest, party, weather, rng));
+  add("", generateWeatherLog(quest, party, weather, rng), "weather"); // ★ 天候の行の印（EX-157【2】）
   roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng)));
-  field.logLines.forEach((line) => add(line.kind, line.text));
+  field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
   if (statsLog) add("drama", statsLog);
   add("action", outcomeInfo.line);
-  add("afterglow", outcomeInfo.after);
+  add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
   const adventurerHistoryLines = {};
   party.forEach((adv) => {
@@ -9552,13 +9567,16 @@ function fieldworkLogLines(fw, rng) {
     if (ev.type === "item" && ev.itemId === "item_map") {
       lines.push({ kind: "drama", text: `古地図と照らし合わせ、余計な回り道をせずに済んだ。` });
     } else if (ev.type === "item" && ev.itemId === "item_oilcase") {
-      lines.push({ kind: "drama", text: `油紙の包みが${ev.weather}を防ぎ、濡らさずに運べた。` });
+      lines.push({ kind: "drama", tag: "weather", text: `油紙の包みが${ev.weather}を防ぎ、濡らさずに運べた。` });
     } else if (ev.type === "rest") {
       lines.push({ kind: "drama", text: `携帯鍋で湯を沸かし、短い休憩を挟んだ。息が戻った。` });
     } else if (ev.type === "recover") {
       lines.push({ kind: "drama", text: `一度は間が空きかけたが、短い笛の音ですぐ立て直した。` });
     } else if (ev.type === "setback") {
-      lines.push({ kind: "action", text: pickOne(fieldworkSetbackTexts(ev), rng) });
+      // ★ 天候が原因の滞りは天候の行（EX-157【2】）。疲れ・不慣れが原因の行は印なし（墨）
+      lines.push(ev.cause === "weather"
+        ? { kind: "action", tag: "weather", text: pickOne(fieldworkSetbackTexts(ev), rng) }
+        : { kind: "action", text: pickOne(fieldworkSetbackTexts(ev), rng) });
     } else if (ev.type === "care") {
       lines.push({ kind: "drama", text: `${ev.name}の擦り傷に包帯が巻かれ、そのまま作業に戻った。` });
     }
@@ -9886,6 +9904,7 @@ function fieldworkTurnBackOutcomeText(quest, party, fw) {
     summary: `${reason}ため、${quest.area}での作業を途中で切り上げた。`,
     line: `これ以上は続けられないと見て、${partySubject(party)}は道具をまとめ、来た道を引き返した。`,
     after: `報告書には「引き返し。${reason}」と記されている。`,
+    afterTag: fw && fw.mainCause === "weather" ? "weather" : undefined, // ★ 天候が原因の引き返しは天候の行（EX-157【2】）
     history: `${quest.title}：引き返し。${reason}。`
   };
 }
@@ -9900,11 +9919,11 @@ function generateSimpleBattleDramaLog(battle, party, rng) {
   const lines = [];
   battle.events.forEach((ev) => {
     if (ev.type === "deal" && ev.crit) {
-      lines.push({ kind: "status-grave", text: `${ev.attackerName}が渾身の一撃を叩き込んだ！（${enemyN}に${ev.damage}ダメージ！）` });
+      lines.push({ kind: "status-grave", tag: "crit", text: `${ev.attackerName}が渾身の一撃を叩き込んだ！（${enemyN}に${ev.damage}ダメージ！）` });
     } else if (ev.type === "deal" && ev.strong) {
       lines.push({ kind: "action", text: `${ev.attackerName}の一撃が深く入った（${enemyN}に${ev.damage}ダメージ！）` });
     } else if (ev.type === "take" && ev.crit) {
-      lines.push({ kind: "status-grave", text: `${enemyN}の牙が深く入った。${ev.targetName}が致命の一撃を受けた！（${ev.targetName}に${ev.damage}ダメージ！）` });
+      lines.push({ kind: "status-grave", tag: "crit", text: `${enemyN}の牙が深く入った。${ev.targetName}が致命の一撃を受けた！（${ev.targetName}に${ev.damage}ダメージ！）` });
     } else if (ev.type === "status" && ev.recovered) {
       lines.push({ kind: "drama", text: `手当てが間に合い、${ev.targetName}は${ev.to}まで持ち直した。` });
     } else if (ev.type === "status" && (ev.to === "深手" || ev.to === "戦闘不能")) {
@@ -9921,7 +9940,8 @@ function generateSimpleBattleDramaLog(battle, party, rng) {
   });
   // 行数が増えすぎないよう、決定打だけを残す（後ろの節目を優先して残す）
   const cap = 6;
-  return lines.length <= cap ? lines : lines.slice(lines.length - cap);
+  const kept = lines.length <= cap ? lines : lines.slice(lines.length - cap);
+  return kept.map((line) => (line.tag ? line : { ...line, tag: "battle" })); // ★ 交戦の区間の行はすべて battle（EX-157【2】）
 }
 
 // ★ 防げた瞬間（2026-07-31・論点3=A）。
@@ -9983,7 +10003,7 @@ function battleDefenseHighlights(battle, party, rng) {
       `帰ってきた一行に、手当ての要る者はいなかった。`
     ], random) });
   }
-  return lines.slice(0, 2);
+  return lines.slice(0, 2).map((line) => ({ ...line, tag: "battle" })); // ★ 交戦の区間の行（EX-157【2】）
 }
 
 // 帰還後に負傷が1件も付かなかったか（名簿と同じ判定を使う）
