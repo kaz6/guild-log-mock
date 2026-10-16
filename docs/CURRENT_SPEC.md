@@ -1098,7 +1098,7 @@ node scripts/gen-quest-table.js
 - ★ **文字送り（一行ずつ出す）**：**画面のどこを押しても飛ばせます**（ボタンとリンクは除く）。**読了の判子を押してある報告書は最初から全部出ます**（押していない報告書は開き直すと最初から）。まだ出していない分は透明で DOM に置いてあり、折り返しが送りの途中で動きません。遠征中の毎秒の再描画でも続きから出します。
 - ★ **行の色は墨・朱・藍の3色まで**（EX-157【2】）。**戦闘の区間の行＝朱／クリティカル＝朱＋太字／天候の行＝藍／それ以外＝墨**。優先は クリティカル＞戦闘＞天候＞墨。傷つく側（負傷）は朱、回復は墨（戦闘中の回復は戦闘の行なので朱）。**色だけで意味を伝えません**（クリティカルは太字も付く）。
   - ★ **行の種類は、報告書を作るときに行へ付けた `tag`（`battle`／`crit`／`weather`）から引きます。文面を探しません。** `report.logs` の各行は `{ kind, text }` に、**任意の欄 `tag` を足しただけ**（`kind` は変えていません。文面も行数も不変）。`tag` の無い行（旧セーブの報告書を含む）は墨のままです。
-  - 付けている所：`battle`＝交戦の記録の生成（`generateSimpleBattleDramaLog`／`generateCaravanBattleDramaLog`）と「防げた瞬間」、交戦の始まりの行（`generateBattleLogs` の末行）／`crit`＝クリティカルの行（simple の deal・take と caravan の `critDealLine`・`critTakeLine`）／`weather`＝天候の行（`generateWeatherLog`、工程の「油紙が雨を防いだ」と天候が原因の滞り、天候が原因の引き返しの結びの行、依頼ごとの生成関数が混ぜた雨・風・霧の行）。
+  - 付けている所：`battle`＝交戦の記録の生成（`generateSimpleBattleDramaLog`／`generateCaravanBattleDramaLog`）と「防げた瞬間」、交戦の始まりの行（`generateCaravanEscortLogs` の末行）／`crit`＝クリティカルの行（simple の deal・take と caravan の `critDealLine`・`critTakeLine`）／`weather`＝天候の行（`generateWeatherLog`、工程の「油紙が雨を防いだ」と天候が原因の滞り、天候が原因の引き返しの結びの行、依頼ごとの生成関数が混ぜた雨・風・霧の行）。
   - ★ **付け忘れは黙って墨になり、対比較では見えません**ので、`tools/tests/current/report-tags.spec.js` が取りこぼし0を見ています。
   - ★ **振動**：クリティカルの行が**文字送りで出るとき**に短く1回（飛ばしたときは振動も間もない）。クリティカルの行の前には少し長めの間（450ms）を置きます。判子のときの振動は上の「読了ハンコ」の節。
 - ★ **判子は亀甲（六角の枠）で、仮です。** 将来、ギルドの紋を作って差し替えます（2026-10-14 の裁定）。
