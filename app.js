@@ -790,6 +790,10 @@ function appendGrowthLogToReport(report, expedition) {
   const outcomeMult = GROWTH_OUTCOME_TIER[GROWTH_TIER_BY_RESULT[report.result] ?? "full"];
   const mult = survivalMult * outcomeMult;
 
+  // ★ 読了の判子のときに出す「上がった能力」（EX-157【3】）。名簿に出る整数（内部は小数・表示は Math.floor）が
+  //   この遠征で上がった分だけを控える。★ 表示のための控えで、成長の式・値には触れない（成長は今までどおり帰還時に起きる）。
+  const shownBefore = Object.fromEntries(party.map((adv) =>
+    [adv.id, Object.fromEntries(GROWTH_ELIGIBLE_STAT_KEYS.map((key) => [key, Math.floor(adv.stats?.[key] ?? 10)]))]));
   let best = null; // 表示用：最も伸びた「人間」×stat（エルシーも成長するが、成長ログの主語は人間に限る）
   party.forEach((adv) => {
     const isDog = adv.species === "dog";
@@ -803,6 +807,14 @@ function appendGrowthLogToReport(report, expedition) {
       }
     });
   });
+  const shownGains = [];
+  party.forEach((adv) => {
+    GROWTH_ELIGIBLE_STAT_KEYS.forEach((key) => {
+      const delta = Math.floor(adv.stats?.[key] ?? 10) - shownBefore[adv.id][key];
+      if (delta > 0) shownGains.push({ advId: adv.id, statKey: key, delta });
+    });
+  });
+  if (shownGains.length > 0) report.growthShown = shownGains; // 上がらなかった回は持たない（何も出さない）
   if (!best) return;
 
   const rng = makeRng((expedition.seed ?? 1) + 991);
@@ -1883,6 +1895,7 @@ function render() {
   // 見た目の「書類そのもの」を当てる画面（EX-154）。画面ごとに足していく。
   document.body.dataset.look = PAPER_LOOK_ROUTES.includes(route) ? "paper" : "";
   if (route !== "report") resetReportTyping(); // 報告書を離れたら文字送りの進みを捨てる（開き直したら最初から）
+  if (route !== "report") stampedNowReportId = null; // 判子の直後の表示も、画面を離れたら捨てる
 
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.route === route));
 
@@ -2270,8 +2283,30 @@ function stampReport(id) {
   if (!report || report.readStampAt) return; // 一度押したら押し直さない（消す操作は用意しない）
   report.readStampAt = Date.now();
   ensureEcologyRecordFrame(report); // ★ 初遭遇＝読んだ時点。生態目録の枠はここで現れる（2026-09-17 の裁定3）
+  stampedNowReportId = report.id; // ★ 判子を押した瞬間の表示（上がった能力）だけに使う。保存しない
   saveState();
+  vibrateShort(40);
   render();
+}
+
+// 判子を押した直後だけ、その遠征で上がった能力を出す（EX-157【3】）。★ 表示だけ。画面を離れたら消える（保存しない）。
+let stampedNowReportId = null;
+
+// 端末の振動（短く）。★ 振動できない端末（iPhone の Safari など）では何もしない。
+function vibrateShort(ms) {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(ms);
+  } catch (_) { /* 何もしない */ }
+}
+
+function stampGrowthHtml(report) {
+  if (stampedNowReportId !== report.id || !Array.isArray(report.growthShown) || report.growthShown.length === 0) return "";
+  const rows = report.growthShown.map((g) => {
+    const adv = getAdventurer(g.advId);
+    if (!adv) return "";
+    return `<li><span class="who">${escapeHtml(getDisplayName(adv))}</span>　${escapeHtml(ROSTER_STAT_LABELS[g.statKey] ?? g.statKey)} ＋${g.delta}</li>`;
+  }).filter(Boolean);
+  return rows.length === 0 ? "" : `<ul class="paper-growth" aria-label="この遠征で上がった能力">${rows.join("")}</ul>`;
 }
 
 function reportCardHtml(report) {
@@ -3718,6 +3753,7 @@ function renderReportDetail(reportId) {
         <div class="paper-hanko" aria-label="読了" title="${escapeHtml(readStampDateText(report))}">${HANKO_KIKKO_SVG}<div>読了<b>${stampMonthDay(report.readStampAt)}</b></div></div>` : `
         <button class="paper-stamp-btn" id="reportStampBtn"${typingDone ? "" : " disabled"} onclick="stampReport('${escapeJsArg(report.id)}')">読了の判子を押す</button>`}
       </div>
+      ${stampGrowthHtml(report)}
     </section>
     <div class="button-row paper-nav">
       <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
