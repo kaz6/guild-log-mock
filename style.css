@@ -1578,3 +1578,21 @@ body[data-look="paper"] .report-card.stamped::after {
   display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
   color: var(--paper-shu); border: 1.5px solid var(--paper-shu); border-radius: 50%; font-size: 11px; letter-spacing: 0; opacity: 1; transform: rotate(-10deg);
 }
+
+/* 依頼掲示板の紙の見た目（EX-157 段階1）。★ 見た目だけ。冒険者の性格の印は墨と朱だけで出す（緑・橙は使わない） */
+body[data-look="paper"] .quest-card,
+body[data-look="paper"] .adventurer-card,
+body[data-look="paper"] .item-card { color: var(--paper-ink); background: #ede2c8; border: 1px solid var(--paper-edge); border-radius: 0; box-shadow: 0 2px 0 var(--paper-edge); }
+body[data-look="paper"] .quest-card.selected,
+body[data-look="paper"] .adventurer-card.selected,
+body[data-look="paper"] .item-card.selected { background: var(--paper-sheet); border: 2px solid var(--paper-shu); box-shadow: 0 2px 0 var(--paper-edge); }
+body[data-look="paper"] .quest-card p,
+body[data-look="paper"] .adventurer-card p,
+body[data-look="paper"] .item-card p,
+body[data-look="paper"] .muted { color: var(--paper-soft); }
+body[data-look="paper"] .tag { color: var(--paper-soft); background: transparent; border: 1px solid var(--paper-rule); border-radius: 0; }
+body[data-look="paper"] .tag.trait-positive { color: var(--paper-ink); background: transparent; border-color: var(--paper-soft); }
+body[data-look="paper"] .tag.trait-flaw { color: var(--paper-shu); background: transparent; border: 1px dashed var(--paper-shu); }
+body[data-look="paper"] .shared-chip { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .weather-bar button,
+body[data-look="paper"] .weather-bar .chip { color: var(--paper-ink); border-radius: 0; }
