@@ -1447,6 +1447,7 @@ body[data-look="paper"] {
   --paper-soft: #6d6355;
   --paper-rule: #cdbf9f;
   --paper-shu: #b8322a;
+  --paper-ai: #2f4a73;
   --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
   color: var(--paper-ink);
   font-family: var(--mincho);
@@ -1504,11 +1505,16 @@ body[data-look="paper"] .recorder-badge:hover { color: var(--paper-ink); border-
   border: 0;
   border-radius: 0;
 }
-/* 色分けは紙の上で読める濃さにする（交戦の傷の段・回復だけ） */
+/* 行の色は墨・朱・藍の3色まで（EX-157【2】。DECISION_LOG 2026-10-16）。★ 色だけで意味を伝えない（クリティカルは太字も付ける）。
+   優先：クリティカル（朱＋太字）＞戦闘（朱）＞天候（藍）＞墨。傷つく側は朱、回復は墨（戦闘中の回復は戦闘の行なので朱）。
+   行の種類は報告書を作るときに付けた tag（tag-battle／tag-crit／tag-weather）から引く。文面は探さない。 */
 .paper-sheet .log-line.battle-start,
-.paper-sheet .log-line.status-grave { color: #a8281d; }
-.paper-sheet .log-line.status-hurt { color: #8f5400; }
-.paper-sheet .log-line.battle-heal { color: #3f6b32; }
+.paper-sheet .log-line.status-grave,
+.paper-sheet .log-line.status-hurt { color: var(--paper-shu); }
+.paper-sheet .log-line.battle-heal { color: var(--paper-ink); }
+.paper-sheet .log-line.tag-weather { color: var(--paper-ai); }
+.paper-sheet .log-line.tag-battle { color: var(--paper-shu); }
+.paper-sheet .log-line.tag-crit { color: var(--paper-shu); font-weight: 700; }
 /* まだ出していない分は透明（場所は取ったまま） */
 .paper-sheet .log-line .untyped { color: transparent; }
 .paper-sheet .log-line.typing .typed::after {
