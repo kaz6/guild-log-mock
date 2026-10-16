@@ -1635,3 +1635,8 @@ body[data-look="paper"] .er-obs-row select,
 body[data-look="paper"] .er-obs-row textarea { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
 body[data-look="paper"] .er-tag { color: var(--paper-soft); border-color: var(--paper-rule); border-radius: 0; }
 body[data-look="paper"] .er-name-stamp { color: var(--paper-shu); border-color: var(--paper-shu); border-radius: 0; }
+
+/* 報告メモの紙の見た目（EX-157 段階5）。★ 見た目だけ。メモは紙の上の付箋のように、枠を点線にする */
+body[data-look="paper"] .memo-card { color: var(--paper-ink); background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .memo-target-badge { color: var(--paper-shu); background: transparent; border: 1px solid var(--paper-shu); border-radius: 0; }
+body[data-look="paper"] .memo-text { color: var(--paper-ink); }
