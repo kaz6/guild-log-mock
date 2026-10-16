@@ -1640,3 +1640,10 @@ body[data-look="paper"] .er-name-stamp { color: var(--paper-shu); border-color: 
 body[data-look="paper"] .memo-card { color: var(--paper-ink); background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
 body[data-look="paper"] .memo-target-badge { color: var(--paper-shu); background: transparent; border: 1px solid var(--paper-shu); border-radius: 0; }
 body[data-look="paper"] .memo-text { color: var(--paper-ink); }
+
+/* 読了の判子のあと、その遠征で上がった能力（EX-157【3】）。★ 表示だけ。墨で静かに出す（色を足さない） */
+.paper-growth { margin: 14px 0 0; padding: 8px 0 0; list-style: none; border-top: 1px dotted var(--paper-soft); font-size: 14px; letter-spacing: .08em; animation: paper-growth-in .6s ease-out both; }
+.paper-growth li { margin: 2px 0; }
+.paper-growth .who { font-weight: 600; }
+@keyframes paper-growth-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .paper-growth { animation: none; } }
