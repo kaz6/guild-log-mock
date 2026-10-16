@@ -1620,3 +1620,18 @@ body[data-look="paper"] input,
 body[data-look="paper"] textarea,
 body[data-look="paper"] select { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
 body[data-look="paper"] .form-row label { color: var(--paper-soft); }
+
+/* 生態目録の紙の見た目（EX-157 段階4）。★ 見た目だけ。編集ドロワーは紙の上にもう1枚の紙として出す */
+body[data-look="paper"] .ecology-record-card { color: var(--paper-ink); background: #ede2c8; border: 1px solid var(--paper-edge); border-radius: 0; }
+body[data-look="paper"] .ecology-record-overlay { background: rgba(43, 38, 32, .35); }
+body[data-look="paper"] .er-modal-box { color: var(--paper-ink); background: var(--paper-sheet); border-left: 1px solid var(--paper-edge); border-radius: 0; box-shadow: -8px 0 24px rgba(60, 40, 10, .3); }
+body[data-look="paper"] .er-modal-header h3 { color: var(--paper-ink); }
+body[data-look="paper"] .er-ref-section,
+body[data-look="paper"] .er-static { color: var(--paper-ink); background: transparent; border-radius: 0; }
+body[data-look="paper"] .er-form-row select,
+body[data-look="paper"] .er-form-row input,
+body[data-look="paper"] .er-form-row textarea,
+body[data-look="paper"] .er-obs-row select,
+body[data-look="paper"] .er-obs-row textarea { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .er-tag { color: var(--paper-soft); border-color: var(--paper-rule); border-radius: 0; }
+body[data-look="paper"] .er-name-stamp { color: var(--paper-shu); border-color: var(--paper-shu); border-radius: 0; }

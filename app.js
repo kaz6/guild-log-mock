@@ -3735,8 +3735,8 @@ function renderReportDetail(reportId) {
 // ── 見た目：「書類そのもの」（2026-10-14・EX-154。DECISION_LOG「見た目の方向は A」）──────────
 //   紙と打たれた文字と朱の判子。★ 見た目だけ（遊びの仕組み・データ・報告書の文面は変えない）。
 //   ★ Unity で UI は全面に差し替える前提（2026-09-21）。作り込みすぎない＝移るのは方向で、この実装ではない。
-//   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。報告書を読む画面（段階1）→ 拠点＝home（段階2）→ 依頼掲示板＝quests → 帰還報告＝result → 冒険者名簿＝adventurers（EX-157）。
-const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers"];
+//   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。報告書を読む画面（段階1）→ 拠点＝home（段階2）→ 依頼掲示板＝quests → 帰還報告＝result → 冒険者名簿＝adventurers → 生態目録＝ecology（EX-157）。
+const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers", "ecology"];
 
 // 亀甲（六角）の枠の判子。★ 仮：将来ギルドの紋を作って差し替える（2026-10-14 の裁定）。
 const HANKO_KIKKO_SVG = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
