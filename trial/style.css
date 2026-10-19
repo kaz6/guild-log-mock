@@ -1,0 +1,1663 @@
+:root {
+  --bg: #17120f;
+  --panel: #241b16;
+  --panel-2: #2f241d;
+  --paper: #f0dfc3;
+  --paper-2: #d6bf95;
+  --ink: #392719;
+  --text: #f5ead6;
+  --muted: #b6a087;
+  --line: rgba(255, 238, 205, 0.16);
+  --accent: #c9964a;
+  --accent-2: #e0ba75;
+  --danger: #d98a64;
+  --success: #92ba7d;
+  --blue: #7da7ba;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", Meiryo, system-ui, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(201, 150, 74, 0.18), transparent 28%),
+    radial-gradient(circle at 80% 80%, rgba(125, 167, 186, 0.11), transparent 30%),
+    var(--bg);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 28px 22px;
+  border-right: 1px solid var(--line);
+  background: rgba(21, 16, 13, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+.brand {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+  box-shadow: 0 10px 24px var(--shadow);
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.brand p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 配信された app.js の版（2026-09-18・EX-136）。★ 実機で「新しい版が来ているか」を
+   目で確かめるためだけの表示で、file:// では何も出ない（版が取れないため）。
+   中身は index.html の読み込み側が入れる（ETag か Last-Modified の末尾12文字）。 */
+.asset-version {
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.main-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.nav-button,
+.primary-button,
+.secondary-button,
+.ghost-button,
+.small-button,
+.danger-button {
+  border: 0;
+  border-radius: 999px;
+  transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.nav-button:hover,
+.primary-button:hover,
+.secondary-button:hover,
+.ghost-button:hover,
+.small-button:hover,
+.danger-button:hover {
+  transform: translateY(-1px);
+}
+
+.nav-button {
+  width: 100%;
+  padding: 13px 16px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.nav-button.active {
+  color: var(--ink);
+  background: var(--accent-2);
+  border-color: transparent;
+}
+
+.sidebar-note {
+  margin-top: 28px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 238, 205, 0.06);
+}
+
+.label,
+.eyebrow,
+.meta-label {
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sidebar-note p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.main-panel {
+  min-width: 0;
+  padding: 28px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.topbar h2 {
+  margin: 4px 0 0;
+  font-size: 30px;
+}
+
+.eyebrow {
+  margin: 0;
+}
+
+.content {
+  display: grid;
+  gap: 18px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 18px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 238, 205, 0.08), rgba(255, 238, 205, 0.035));
+  box-shadow: 0 18px 40px var(--shadow);
+  overflow: hidden;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.card-title h3,
+.card-title h4 {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.reception {
+  min-height: 320px;
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.reception-portrait {
+  position: relative;
+  height: 244px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 28%, #d1a365 0 20%, transparent 21%),
+    radial-gradient(circle at 50% 42%, #584034 0 27%, transparent 28%),
+    linear-gradient(180deg, #7c6048, #31231c);
+  border: 1px solid rgba(255, 238, 205, 0.2);
+  overflow: hidden;
+}
+
+.reception-portrait::after {
+  content: "受付";
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  color: rgba(255, 238, 205, 0.8);
+  letter-spacing: 0.18em;
+}
+
+.speech {
+  padding: 18px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.8;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.small-button,
+.danger-button {
+  padding: 11px 16px;
+}
+
+.primary-button {
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+  font-weight: 700;
+}
+
+.secondary-button {
+  color: var(--text);
+  background: rgba(255, 238, 205, 0.12);
+  border: 1px solid var(--line);
+}
+
+.ghost-button {
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.small-button {
+  padding: 8px 11px;
+  color: var(--ink);
+  background: var(--paper-2);
+  font-size: 13px;
+}
+
+.danger-button {
+  color: #2b120a;
+  background: var(--danger);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.report-card {
+  position: relative;
+  padding: 18px;
+  color: var(--ink);
+  border-radius: 14px;
+  background:
+    linear-gradient(90deg, rgba(57, 39, 25, 0.08) 0 1px, transparent 1px 100%),
+    var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(57, 39, 25, 0.12), 0 12px 26px var(--shadow);
+}
+
+.report-card.unopened::before {
+  content: "未開封";
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--paper);
+  background: #7f4b32;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-card h3,
+.report-card p {
+  margin: 0;
+}
+
+.report-card p {
+  margin-top: 8px;
+  color: rgba(57, 39, 25, 0.74);
+}
+
+/* 読了ハンコ（2026-08-06）。押した報告書だけに朱印が残る。
+   ★ 未読の数は出さない（急かす表示にしない）ので、印は「押した側」にしか現れない。 */
+.report-card.stamped::after {
+  content: "読了";
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 5px 7px;
+  border: 2px solid #a8412c;
+  border-radius: 6px;
+  color: #a8412c;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0.78;
+  transform: rotate(-8deg);
+}
+
+.read-stamp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.read-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  /* ★ 一覧の印は紙のカードの上、こちらは暗い背景の上に乗るので朱を明るめに取る */
+  border: 3px solid #d05a41;
+  border-radius: 8px;
+  color: #d05a41;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  opacity: 0.92;
+  transform: rotate(-8deg);
+}
+
+.quest-card,
+.adventurer-card,
+.item-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 238, 205, 0.06);
+}
+
+.quest-card.selected,
+.adventurer-card.selected,
+.item-card.selected {
+  border-color: var(--accent-2);
+  background: rgba(201, 150, 74, 0.16);
+}
+
+.quest-card h3,
+.adventurer-card h3,
+.item-card h3 {
+  margin: 0 0 8px;
+}
+
+.adventurer-detail-section {
+  margin-bottom: 16px;
+}
+
+#adventurerEditor .meta-label {
+  color: #e8cfa0;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+
+#adventurerEditor .adventurer-detail-intro,
+#adventurerEditor .adventurer-tale-line {
+  margin: 0;
+  color: #f0e4cc;
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+#adventurerEditor .card-title .muted {
+  color: #cdb896;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+#adventurerEditor .muted {
+  color: #cdb896;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+#adventurerEditor .kv {
+  color: #d4bc98;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+#adventurerEditor .kv strong {
+  color: #f2e6d0;
+  font-weight: 600;
+}
+
+#adventurerEditor .adventurer-detail-stats .kv,
+#adventurerEditor .adventurer-detail-gear .kv,
+#adventurerEditor .adventurer-detail-obsession .kv {
+  margin-top: 0;
+}
+
+#adventurerEditor .adventurer-detail-traits {
+  margin-top: 0;
+}
+
+#adventurerEditor .adventurer-detail-traits .tag {
+  color: #e8dcc4;
+  border-color: rgba(255, 238, 205, 0.34);
+  background: rgba(255, 238, 205, 0.08);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ★ 2026-09-22・EX-142【3】：詳細画面だけのものだった性格の色を、編成カードと名簿カードへ広げた。
+   ★ **欠点の印は点線の枠**（`trait-flaw`）。数字も通知の見た目にもしない。 */
+.tag.trait-positive {
+  border-color: rgba(146, 186, 125, 0.58);
+  color: #e4edd9;
+  background: rgba(146, 186, 125, 0.1);
+}
+
+.tag.trait-flaw {
+  border-style: dashed;
+  border-color: rgba(217, 138, 100, 0.58);
+  color: #f0ddd4;
+  background: rgba(217, 138, 100, 0.08);
+}
+
+.trait-tags {
+  margin-top: 8px;
+}
+
+.trait-legend {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+#adventurerEditor .empty {
+  color: #c9b08a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+#adventurerEditor .form-row label {
+  color: #d9c29a;
+  font-size: 14px;
+}
+
+#adventurerEditor .adventurer-detail-history .log-line {
+  color: #f0e4cc;
+  line-height: 1.8;
+}
+
+.adventurer-detail-history {
+  display: grid;
+  gap: 8px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.tag {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 238, 205, 0.18);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-pill {
+  display: inline-flex;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--paper-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.away {
+  background: var(--blue);
+}
+
+.status-pill.good {
+  background: var(--success);
+}
+
+/* 負傷バッジ（第3段階）。編成では無効化せず、状態だけ見せる。 */
+.status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.status-pill.injury-light {
+  background: #ffa94d;
+}
+
+.status-pill.injury-severe {
+  background: #ff6b5b;
+}
+
+.depart-refusal {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-left: 3px solid #ff6b5b;
+  background: var(--paper-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.form-row {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.form-row label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.18);
+  outline: none;
+}
+
+textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.log-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.log-line {
+  padding: 12px 14px;
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 238, 205, 0.06);
+  line-height: 1.8;
+}
+
+.log-line.action {
+  border-left-color: var(--blue);
+}
+
+/* 戦闘ドラマログの色分け（文字色のみ／ダーク背景での視認性優先）。
+   罫線は action と同じにして、変化が文字色だけに見えるようにする。 */
+.log-line.battle-start,
+.log-line.status-hurt,
+.log-line.status-grave,
+.log-line.battle-heal {
+  border-left-color: var(--blue);
+}
+
+.log-line.battle-start,
+.log-line.status-grave {
+  color: #ff6b5b;
+}
+
+.log-line.status-hurt {
+  color: #ffa94d;
+}
+
+.log-line.battle-heal {
+  color: var(--success);
+}
+
+.log-line.drama {
+  border-left-color: var(--accent-2);
+}
+
+.log-line.afterglow {
+  border-left-color: var(--success);
+}
+
+.progress-shell {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 238, 205, 0.12);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.empty {
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 12px;
+  margin: 12px 0;
+  color: var(--muted);
+}
+
+.kv strong {
+  color: var(--text);
+}
+
+/* ★ 現在どこからも使っていない（2026-09-18・EX-134）。掲示板カードの危険度を
+   生活クエストだけ別色にしていたが、**同じ danger の値を分類で色分けする意味がない**ので外した
+   （値の段（低・中・高）ではなく「生活かどうか」を色にしていた＝分類の行と二重）。
+   ⚠️ 規則は消さずに残す。色を戻すならここを付け直すだけで済む。 */
+.subtle-danger {
+  color: var(--accent);
+}
+
+.assign-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.assign-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slot-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.assign-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assign-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.assign-row:last-child {
+  border-bottom: 0;
+}
+
+.assign-name {
+  min-width: 72px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  padding-top: 5px;
+  flex-shrink: 0;
+}
+
+.assign-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.item-assign-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.item-assign-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.item-assign-btn.selected {
+  border-color: var(--accent-2);
+  background: rgba(201, 150, 74, 0.18);
+  color: var(--text);
+}
+
+.item-assign-btn.taken,
+.item-assign-btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.obs-notes-grid {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.obs-note-card {
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 238, 205, 0.04);
+}
+
+.obs-note-author {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--accent-2);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.obs-note-text {
+  margin: 0;
+  line-height: 1.85;
+  font-style: italic;
+}
+
+hr.soft {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
+
+/* ── 時間帯・天候バー ────────────────────────────────────────── */
+.weather-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.weather-bar-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.weather-bar-text {
+  letter-spacing: 0.03em;
+}
+
+/* ── Mock時間帯選択バー ─────────────────────────────────────── */
+.mock-time-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12px;
+  opacity: 0.85;
+}
+.mock-time-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mock-time-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.mock-time-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* ── 報告メモカード ──────────────────────────────────────────── */
+.memo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.memo-card {
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.memo-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.memo-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.memo-target-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-2);
+  background: rgba(255, 188, 77, 0.1);
+  border: 1px solid rgba(255, 188, 77, 0.25);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.memo-quest {
+  font-size: 12px;
+}
+
+.memo-author {
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.memo-text {
+  font-size: 14px;
+  line-height: 1.85;
+  margin: 0;
+  font-style: italic;
+  color: var(--text);
+}
+
+/* ── 生態目録のカード ─────────────────────────────────────── */
+.ecology-record-card {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ecology-record-card .card-title {
+  margin-bottom: 4px;
+}
+
+/* ── 生態目録の編集ドロワー（右寄せ） ──────────────────────────────── */
+.ecology-record-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 14, 20, 0.30);
+  z-index: 9999;
+}
+
+.ecology-record-overlay.open {
+  display: block;
+}
+
+.er-modal-box {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(100%, 580px);
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  border-radius: 16px 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.er-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.er-modal-header h3 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text);
+}
+
+.er-modal-body {
+  padding: 22px 24px 28px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.er-ref-section {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 238, 205, 0.04);
+}
+
+.er-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.er-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.er-form-row label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.er-form-row select,
+.er-form-row input,
+.er-form-row textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.er-form-row select:focus,
+.er-form-row input:focus,
+.er-form-row textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.er-form-row textarea {
+  min-height: 72px;
+}
+
+/* ── SOAP 構造の生態目録（2026-09-17・EX-117） ───────────────────── */
+/* 標本ラベルの自動欄（名前・遭遇地域）は入力にしない。書けるのは分類と SOAP だけ。 */
+.er-static {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.er-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.er-obs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.er-obs-row {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.er-obs-row select,
+.er-obs-row textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.er-obs-row textarea {
+  min-height: 48px;
+}
+
+.er-obs-remove {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* 命名の確定印（2026-09-17・EX-118）→ 封蝋（2026-10-19・EX-159）。★ 読了の封とは別の封（押す先が違う）。
+   色は朱（陰影は同じ朱の明暗だけ）。丸く垂れた蝋に、確定の2字の押し跡。 */
+.er-name-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: 10px;
+  border: 0;
+  border-radius: 52% 48% 55% 45% / 47% 53% 47% 53%;
+  background: radial-gradient(circle at 38% 32%, #d2594d 0, #b8322a 55%, #8c241d 100%);
+  color: #6f1c16;
+  text-shadow: 0 1px 0 rgba(236, 150, 140, .55);
+  box-shadow: inset 2px 3px 4px rgba(255, 190, 180, .35), inset -2px -3px 4px rgba(90, 20, 15, .45), 0 2px 3px rgba(60, 20, 10, .3);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  transform: rotate(-8deg);
+  vertical-align: middle;
+}
+
+.er-name-stamp.small {
+  width: 32px;
+  height: 32px;
+  font-size: 10px;
+  margin-left: 8px;
+}
+
+.er-static.er-named {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-style: solid;
+}
+
+.er-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.er-card-counts {
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.er-axis-list {
+  margin: 4px 0 6px;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.er-axis-tag {
+  display: inline-block;
+  min-width: 64px;
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .main-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .nav-button {
+    text-align: center;
+  }
+
+  .grid-2,
+  .grid-3,
+  .reception {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-portrait {
+    height: 180px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-panel,
+  .sidebar {
+    padding: 18px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .main-nav {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sidebar-note {
+    display: none;
+  }
+
+  .sidebar {
+    padding: 12px 18px;
+  }
+
+  .brand {
+    margin-bottom: 12px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .brand h1 {
+    font-size: 16px;
+  }
+
+  .brand p {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .main-nav {
+    gap: 8px;
+  }
+
+  .nav-button {
+    padding: 9px 14px;
+  }
+}
+
+/* ハイライトボックス */
+.highlight-box {
+  margin: 14px 0 4px;
+  padding: 14px 18px;
+  background: rgba(255, 188, 77, 0.07);
+  border: 1px solid rgba(255, 188, 77, 0.25);
+  border-radius: 10px;
+}
+
+.highlight-text {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text);
+  font-style: italic;
+}
+
+/* 記録員バッジ（2026-08-09・EX-065）
+   ★ 静かな見た目にする。数字も未読件数も光る通知も付けない（急かす表示にしない方針）。
+   ★ 「光る」のはオープニング再演出のときだけで、今はどこからも .glowing を付けていない。 */
+.recorder-badge-root {
+  position: fixed;
+  left: 22px;
+  bottom: 20px;
+  z-index: 30;
+}
+
+.recorder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(21, 16, 13, 0.9);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.recorder-badge:hover {
+  color: var(--text);
+  border-color: rgba(255, 238, 205, 0.32);
+}
+
+.recorder-badge-mark {
+  color: var(--accent);
+}
+
+/* 再演出用。押せることを意識させるだけで、内容は変えない */
+.recorder-badge.glowing {
+  color: var(--text);
+  border-color: var(--accent);
+  animation: recorder-badge-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes recorder-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(224, 186, 117, 0); }
+  50% { box-shadow: 0 0 14px rgba(224, 186, 117, 0.45); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder-badge.glowing {
+    animation: none;
+    box-shadow: 0 0 12px rgba(224, 186, 117, 0.4);
+  }
+}
+
+/* 押したときに出る小さな紙片。名前と就任日だけを載せる */
+.recorder-badge-card {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  min-width: 210px;
+  padding: 14px 18px 16px;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 14px 28px var(--shadow);
+}
+
+.recorder-badge-role {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: rgba(57, 39, 25, 0.62);
+}
+
+.recorder-badge-name {
+  margin: 6px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.recorder-badge-date {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: rgba(57, 39, 25, 0.72);
+}
+
+/* 行方不明の段階（2026-08-18・EX-070／2026-09-11・EX-072 でピル→行に変更）。
+   ★ 数字は出さず段階の文言だけ。急かす色にしない。 */
+.missing-stage-line {
+  margin: 8px 0 0;
+  padding-left: 9px;
+  border-left: 2px solid rgba(182, 160, 135, 0.45);
+  color: #b6a087;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 段階2・3に添える「目の前にいる人の顔」の行。事実（上の行）より一段弱く出す。 */
+.missing-companion-line {
+  margin: 2px 0 0;
+  padding-left: 9px;
+  border-left: 2px solid rgba(182, 160, 135, 0.2);
+  color: rgba(182, 160, 135, 0.78);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 記録を綴じる（2026-09-21・EX-141）。★ ③⑦の1行は記録係の行為なので地の文の見え方にする。 */
+.bind-notice {
+  margin: 12px 0 0;
+  color: var(--ink);
+}
+.bind-confirm {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(120, 100, 70, 0.35);
+  border-radius: 8px;
+}
+
+/* ギルドの財布（2026-09-23・EX-144）。所持金と直近の出入りだけ。 */
+.status-pill.danger {
+  background: #ff6b5b;
+}
+
+.wallet-ledger {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.wallet-ledger li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line, rgba(0, 0, 0, 0.12));
+}
+
+.wallet-ledger-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.wallet-ledger li.out .wallet-ledger-amount {
+  color: #c0392b;
+}
+
+/* 運営不能（2026-09-23・EX-144）。★ 記録の終わり方の一つ。赤で脅さず、紙の色のまま閉じる。 */
+.game-over-card {
+  border-left: 4px solid var(--ink, #333);
+}
+
+/* 在庫と買い出し（2026-09-23・EX-144）。★ 買い出しの枠は「まだ無い物」なので半透明 */
+.item-assign-btn.item-wish.is-ghost { opacity: 0.55; border-style: dashed; }
+.item-assign-btn.item-wish.is-ghost.selected { opacity: 0.8; }
+.item-left { margin-left: 4px; font-size: 0.85em; opacity: 0.75; }
+.wallet-stock { margin-top: 8px; }
+
+/* 共有の荷と個人の記録票（2026-09-23・EX-144 裁定A）。★ 誰が記録票を持っているかが一目で分かること */
+.shared-load, .obs-sheet-panel { display: grid; gap: 8px; }
+.obs-sheet-panel { margin-top: 16px; padding-top: 12px; border-top: 1px dashed rgba(255, 255, 255, 0.18); }
+.shared-load-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shared-load-note { margin: 0; font-size: 0.85em; }
+.shared-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+.shared-chip { border: 1px solid rgba(233, 196, 120, 0.6); background: rgba(233, 196, 120, 0.14); color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; font: inherit; font-size: 0.9em; }
+.shared-chip.item-wish.is-ghost { opacity: 0.55; border-style: dashed; }
+.obs-sheet-rows { display: grid; gap: 6px; }
+.obs-sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); }
+.obs-sheet-row.holding { border-color: rgba(146, 186, 125, 0.8); background: rgba(146, 186, 125, 0.12); font-weight: 600; }
+.obs-sheet-btn { border: 1px solid rgba(255, 255, 255, 0.25); background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; font: inherit; font-size: 0.85em; }
+.obs-sheet-btn.selected { border-color: rgba(146, 186, 125, 0.9); background: rgba(146, 186, 125, 0.25); }
+.obs-sheet-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.status-pill.obs-holder-pill { background: #92ba7d; color: #1d2417; font-weight: 700; }
+
+/* 冒険者の過去（2026-09-24・EX-146）。最小限（Unity で差し替える前提） */
+.past-stage { margin-top: 8px; }
+.past-heading { margin: 0; font-size: 0.85em; opacity: 0.75; }
+.past-text { margin: 2px 0 0; line-height: 1.7; }
+
+/* ══ 見た目：「書類そのもの」（2026-10-14・EX-154。DECISION_LOG「見た目の方向は A」）══════════════
+   紙と打たれた文字と朱の判子。外部の書体は使わない（端末の明朝だけ）。
+   ★ 見た目だけ。★ Unity で UI は全面に差し替える前提なので、作り込まない（移るのは方向で、この CSS ではない）。
+   ★ body[data-look="paper"] のときだけ効く（app.js の PAPER_LOOK_ROUTES）。画面ごとに足していく。 */
+body[data-look="paper"] {
+  --paper-sheet: #f3ecdc;
+  --paper-edge: #e4d8bf;
+  --paper-bg: #d9cfba;
+  --paper-ink: #2b2620;
+  --paper-soft: #6d6355;
+  --paper-rule: #cdbf9f;
+  --paper-shu: #b8322a;
+  --paper-ai: #2f4a73;
+  --mincho: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "Noto Serif CJK JP", serif;
+  color: var(--paper-ink);
+  font-family: var(--mincho);
+  background: var(--paper-bg);
+}
+
+/* 枠（サイドバー・上の帯）も紙の色にそろえる。ボタンは見本の「報告書／拠点」の札に寄せる */
+body[data-look="paper"] .sidebar { background: #cfc3aa; border-color: var(--paper-rule); backdrop-filter: none; }
+body[data-look="paper"] .brand-mark { color: var(--paper-sheet); background: var(--paper-ink); box-shadow: none; }
+body[data-look="paper"] .brand p,
+body[data-look="paper"] .asset-version { color: var(--paper-soft); }
+body[data-look="paper"] .nav-button { color: var(--paper-ink); border: 1px solid var(--paper-soft); border-radius: 3px; letter-spacing: .2em; }
+body[data-look="paper"] .nav-button.active { color: var(--paper-sheet); background: var(--paper-ink); border-color: var(--paper-ink); }
+body[data-look="paper"] .sidebar-note { background: rgba(255, 255, 255, .3); border-color: var(--paper-rule); border-radius: 3px; }
+body[data-look="paper"] .sidebar-note p { color: var(--paper-soft); }
+body[data-look="paper"] .label,
+body[data-look="paper"] .eyebrow,
+body[data-look="paper"] .meta-label { color: var(--paper-soft); }
+body[data-look="paper"] .topbar h2 { color: var(--paper-ink); font-weight: 600; letter-spacing: .15em; }
+body[data-look="paper"] .ghost-button { color: var(--paper-ink); border-color: var(--paper-soft); border-radius: 3px; }
+body[data-look="paper"] .primary-button { color: var(--paper-sheet); background: var(--paper-ink); border-radius: 3px; font-weight: 600; letter-spacing: .1em; }
+body[data-look="paper"] .secondary-button { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 3px; }
+body[data-look="paper"] .recorder-badge { color: var(--paper-soft); background: var(--paper-sheet); border-color: var(--paper-rule); }
+body[data-look="paper"] .recorder-badge:hover { color: var(--paper-ink); border-color: var(--paper-soft); }
+
+/* 報告書を読む画面（紙の1枚） */
+.paper-sheet {
+  position: relative;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 18px 28px;
+  color: var(--paper-ink);
+  background: var(--paper-sheet);
+  border: 1px solid var(--paper-edge);
+  box-shadow: 0 2px 0 var(--paper-edge), 0 8px 20px rgba(60, 40, 10, .18);
+}
+.paper-sheet::before { content: ""; position: absolute; inset: 8px; border: 1px solid var(--paper-rule); pointer-events: none; }
+.paper-docno { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--paper-soft); letter-spacing: .1em; }
+.paper-title { margin: 14px 0 4px; font-size: 20px; font-weight: 600; letter-spacing: .25em; text-align: center; }
+.paper-sub { margin: 0 0 14px; font-size: 13px; color: var(--paper-soft); text-align: center; }
+.paper-fields { margin: 0 0 14px; font-size: 13px; border-top: 1px solid var(--paper-ink); border-bottom: 1px solid var(--paper-ink); }
+.paper-fields div { display: flex; padding: 5px 2px; border-bottom: 1px dotted var(--paper-rule); }
+.paper-fields div:last-child { border-bottom: 0; }
+.paper-fields dt { width: 5.5em; margin: 0; color: var(--paper-soft); letter-spacing: .2em; flex: none; }
+.paper-fields dd { flex: 1; margin: 0; min-width: 0; }
+
+/* 本文：15px／行間 1.95（スマホでちょうどよいと作者が確かめた値。変えない） */
+.paper-lines { min-height: 8em; font-size: 15px; line-height: 1.95; }
+.paper-sheet .log-line {
+  margin: 0 0 .6em;
+  padding: 0;
+  text-indent: 1em;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+/* 行の色は墨・朱・藍の3色まで（EX-157【2】。DECISION_LOG 2026-10-16）。★ 色だけで意味を伝えない（クリティカルは太字も付ける）。
+   優先：クリティカル（朱＋太字）＞戦闘（朱）＞天候（藍）＞墨。傷つく側は朱、回復は墨（戦闘中の回復は戦闘の行なので朱）。
+   行の種類は報告書を作るときに付けた tag（tag-battle／tag-crit／tag-weather）から引く。文面は探さない。 */
+.paper-sheet .log-line.battle-start,
+.paper-sheet .log-line.status-grave,
+.paper-sheet .log-line.status-hurt { color: var(--paper-shu); }
+.paper-sheet .log-line.battle-heal { color: var(--paper-ink); }
+.paper-sheet .log-line.tag-weather { color: var(--paper-ai); }
+.paper-sheet .log-line.tag-battle { color: var(--paper-shu); }
+.paper-sheet .log-line.tag-crit { color: var(--paper-shu); font-weight: 700; }
+/* まだ出していない分は透明（場所は取ったまま） */
+.paper-sheet .log-line .untyped { color: transparent; }
+.paper-sheet .log-line.typing .typed::after {
+  content: ""; display: inline-block; width: 0; height: 1em; margin-right: -2px;
+  border-right: 2px solid var(--paper-soft); vertical-align: text-bottom;
+}
+.paper-hint { margin: 6px 0 0; font-size: 12px; color: var(--paper-soft); text-align: right; }
+
+/* 観察記録票（報告書の下） */
+.paper-sheet hr.soft { border-top-color: var(--paper-rule); }
+.paper-sheet .obs-note-card { background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
+.paper-sheet .obs-note-author { color: var(--paper-soft); }
+.paper-sheet .obs-note-text { color: var(--paper-ink); }
+
+/* 足：ハイライトと判子 */
+.paper-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.paper-hl { flex: 1; margin: 0; padding-left: 8px; font-size: 13px; line-height: 1.8; color: var(--paper-soft); border-left: 3px solid var(--paper-shu); }
+.paper-hl:empty { border-left: 0; }
+.paper-stamp-btn { flex: none; padding: 10px 12px; color: var(--paper-shu); background: transparent; border: 2px dashed var(--paper-shu); font: inherit; }
+.paper-stamp-btn:disabled { opacity: .35; cursor: default; }
+/* 封蝋（EX-159）。丸く垂れた蝋に、亀甲（六角）の押し跡。★ 仮：将来ギルドの紋に差し替える。色は朱（インクの3色は崩さない） */
+.paper-hanko {
+  position: relative; flex: none; width: 96px; height: 96px; display: grid; place-items: center;
+  color: #6f1c16; font-size: 11px; line-height: 1.2; font-weight: 700; text-align: center; transform: rotate(-8deg);
+  text-shadow: 0 1px 0 rgba(236, 150, 140, .6); filter: drop-shadow(0 2px 2px rgba(60, 20, 10, .35));
+}
+.paper-hanko svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.paper-hanko div { position: relative; top: -3px; }
+.paper-hanko b { display: block; margin-top: 1px; font-size: 13px; font-weight: inherit; letter-spacing: 0; }
+.paper-nav { max-width: 640px; width: 100%; margin: 16px auto 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-sheet .log-line.typing .typed::after { display: none; }
+}
+
+/* 拠点（home）の紙の見た目（EX-154 段階2）。★ 中身・並びは変えず、見た目だけ紙にそろえる */
+body[data-look="paper"] {
+  --line: var(--paper-rule);
+  --muted: var(--paper-soft);
+  --text: var(--paper-ink);
+  --accent: var(--paper-shu);
+  --shadow: rgba(60, 40, 10, .18);
+}
+.paper-signboard { padding: 10px 8px 8px; text-align: center; background: var(--paper-sheet, #f3ecdc); border: 3px double var(--paper-ink, #2b2620); box-shadow: 0 2px 0 var(--paper-edge, #e4d8bf); }
+.paper-signboard .name { margin-right: -.25em; font-size: 34px; font-weight: 700; letter-spacing: .25em; line-height: 1.3; }
+.paper-signboard .kana { font-size: 11px; letter-spacing: .4em; color: var(--paper-soft, #6d6355); }
+.paper-meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.paper-meter { padding: 6px 4px; text-align: center; background: var(--paper-sheet, #f3ecdc); border: 1px solid var(--paper-ink, #2b2620); }
+.paper-meter span { display: block; font-size: 11px; letter-spacing: .2em; color: var(--paper-soft, #6d6355); }
+.paper-meter strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+body[data-look="paper"] .card { color: var(--paper-ink); background: var(--paper-sheet); border: 1px solid var(--paper-edge); border-radius: 0; box-shadow: 0 2px 0 var(--paper-edge), 0 8px 20px rgba(60, 40, 10, .18); }
+body[data-look="paper"] .card-title h3 { font-weight: 600; letter-spacing: .15em; }
+body[data-look="paper"] .speech { background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .reception-portrait { border-radius: 0; border: 1px solid var(--paper-soft); }
+body[data-look="paper"] .status-pill { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; font-weight: 600; }
+body[data-look="paper"] .status-pill.danger { color: var(--paper-shu); border-color: var(--paper-shu); }
+body[data-look="paper"] .weather-bar { background: rgba(255, 255, 255, .35); border-color: var(--paper-rule); border-radius: 0; }
+body[data-look="paper"] .progress-shell { background: rgba(60, 40, 10, .14); border-radius: 0; }
+body[data-look="paper"] .progress-bar { background: var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .small-button { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .empty { border-radius: 0; }
+/* 報告書棚の札：紙の上にもう1枚。押した札には朱の丸い印だけ（数は出さない） */
+body[data-look="paper"] .report-card { color: var(--paper-ink); background: #ede2c8; border: 1px solid var(--paper-edge); border-radius: 0; box-shadow: 0 4px 10px rgba(60, 40, 10, .18); }
+body[data-look="paper"] .report-card p { color: var(--paper-soft); }
+body[data-look="paper"] .report-card.unopened::before { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .report-card.stamped::after {
+  display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
+  color: #6f1c16; border: 0; border-radius: 52% 48% 55% 45% / 47% 53% 47% 53%; font-size: 11px; letter-spacing: 0; opacity: 1; transform: rotate(-10deg);
+  background: radial-gradient(circle at 38% 32%, #d2594d 0, #b8322a 55%, #8c241d 100%); text-shadow: 0 1px 0 rgba(236, 150, 140, .55);
+  box-shadow: inset 2px 3px 4px rgba(255, 190, 180, .35), inset -2px -3px 4px rgba(90, 20, 15, .45), 0 2px 3px rgba(60, 20, 10, .3); /* 封蝋（EX-159） */
+}
+
+/* 依頼掲示板の紙の見た目（EX-157 段階1）。★ 見た目だけ。冒険者の性格の印は墨と朱だけで出す（緑・橙は使わない） */
+body[data-look="paper"] .quest-card,
+body[data-look="paper"] .adventurer-card,
+body[data-look="paper"] .item-card { color: var(--paper-ink); background: #ede2c8; border: 1px solid var(--paper-edge); border-radius: 0; box-shadow: 0 2px 0 var(--paper-edge); }
+body[data-look="paper"] .quest-card.selected,
+body[data-look="paper"] .adventurer-card.selected,
+body[data-look="paper"] .item-card.selected { background: var(--paper-sheet); border: 2px solid var(--paper-shu); box-shadow: 0 2px 0 var(--paper-edge); }
+body[data-look="paper"] .quest-card p,
+body[data-look="paper"] .adventurer-card p,
+body[data-look="paper"] .item-card p,
+body[data-look="paper"] .muted { color: var(--paper-soft); }
+body[data-look="paper"] .tag { color: var(--paper-soft); background: transparent; border: 1px solid var(--paper-rule); border-radius: 0; }
+body[data-look="paper"] .tag.trait-positive { color: var(--paper-ink); background: transparent; border-color: var(--paper-soft); }
+body[data-look="paper"] .tag.trait-flaw { color: var(--paper-shu); background: transparent; border: 1px dashed var(--paper-shu); }
+body[data-look="paper"] .shared-chip { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .weather-bar button,
+body[data-look="paper"] .weather-bar .chip { color: var(--paper-ink); border-radius: 0; }
+
+/* 帰還報告の紙の見た目（EX-157 段階2）。★ 見た目だけ。ハイライトは報告書の足と同じ「朱の縦線」 */
+body[data-look="paper"] .highlight-box { background: transparent; border: 0; border-left: 3px solid var(--paper-shu); border-radius: 0; }
+body[data-look="paper"] .highlight-text { color: var(--paper-soft); }
+body[data-look="paper"] .status-pill.good { color: var(--paper-ink); border-color: var(--paper-ink); }
+
+/* 冒険者名簿の紙の見た目（EX-157 段階3）。★ 見た目だけ。詳細欄の文字色は ID 付きの規則で固定されているので、紙の色で上書きする */
+body[data-look="paper"] #adventurerEditor .meta-label { color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .adventurer-detail-intro,
+body[data-look="paper"] #adventurerEditor .adventurer-tale-line { color: var(--paper-ink); }
+body[data-look="paper"] #adventurerEditor .card-title .muted,
+body[data-look="paper"] #adventurerEditor .muted,
+body[data-look="paper"] #adventurerEditor .empty,
+body[data-look="paper"] #adventurerEditor .form-row label { color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .kv { color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .kv strong,
+body[data-look="paper"] #adventurerEditor .adventurer-detail-history .log-line { color: var(--paper-ink); }
+body[data-look="paper"] #adventurerEditor .adventurer-detail-traits .tag { color: var(--paper-ink); background: transparent; border-color: var(--paper-soft); }
+body[data-look="paper"] #adventurerEditor .adventurer-detail-traits .tag.trait-flaw { color: var(--paper-shu); border: 1px dashed var(--paper-shu); }
+body[data-look="paper"] .adventurer-detail-history .log-line { background: transparent; border: 0; border-bottom: 1px dotted var(--paper-rule); border-radius: 0; padding-left: 0; }
+body[data-look="paper"] input,
+body[data-look="paper"] textarea,
+body[data-look="paper"] select { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .form-row label { color: var(--paper-soft); }
+
+/* 生態目録の紙の見た目（EX-157 段階4）。★ 見た目だけ。編集ドロワーは紙の上にもう1枚の紙として出す */
+body[data-look="paper"] .ecology-record-card { color: var(--paper-ink); background: #ede2c8; border: 1px solid var(--paper-edge); border-radius: 0; }
+body[data-look="paper"] .ecology-record-overlay { background: rgba(43, 38, 32, .35); }
+body[data-look="paper"] .er-modal-box { color: var(--paper-ink); background: var(--paper-sheet); border-left: 1px solid var(--paper-edge); border-radius: 0; box-shadow: -8px 0 24px rgba(60, 40, 10, .3); }
+body[data-look="paper"] .er-modal-header h3 { color: var(--paper-ink); }
+body[data-look="paper"] .er-ref-section,
+body[data-look="paper"] .er-static { color: var(--paper-ink); background: transparent; border-radius: 0; }
+body[data-look="paper"] .er-form-row select,
+body[data-look="paper"] .er-form-row input,
+body[data-look="paper"] .er-form-row textarea,
+body[data-look="paper"] .er-obs-row select,
+body[data-look="paper"] .er-obs-row textarea { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .er-tag { color: var(--paper-soft); border-color: var(--paper-rule); border-radius: 0; }
+
+/* 報告メモの紙の見た目（EX-157 段階5）。★ 見た目だけ。メモは紙の上の付箋のように、枠を点線にする */
+body[data-look="paper"] .memo-card { color: var(--paper-ink); background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
+body[data-look="paper"] .memo-target-badge { color: var(--paper-shu); background: transparent; border: 1px solid var(--paper-shu); border-radius: 0; }
+body[data-look="paper"] .memo-text { color: var(--paper-ink); }
+
+/* 読了の判子のあと、その遠征で上がった能力（EX-157【3】）。★ 表示だけ。墨で静かに出す（色を足さない） */
+.paper-growth { margin: 14px 0 0; padding: 8px 0 0; list-style: none; border-top: 1px dotted var(--paper-soft); font-size: 14px; letter-spacing: .08em; animation: paper-growth-in .6s ease-out both; }
+.paper-growth li { margin: 2px 0; }
+.paper-growth .who { font-weight: 600; }
+@keyframes paper-growth-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .paper-growth { animation: none; } }
+
+/* Mock の道具は既定では隠す（EX-158）。`hidden` は author の display 指定に負けるので、印のついたものだけ強制する */
+[data-dev-only][hidden] { display: none !important; }
