@@ -15,7 +15,7 @@
         <div class="brand-mark">✦</div>
         <div>
           <h1>遠征ギルドログ</h1>
-          <p>HTML Mock v0.1.2 <span id="assetVersion" class="asset-version"></span></p>
+          <p data-dev-only hidden>HTML Mock v0.1.2 <span id="assetVersion" class="asset-version"></span></p>
         </div>
       </div>
 
@@ -27,7 +27,7 @@
         <button data-route="ecology" class="nav-button">生態目録</button>
       </nav>
 
-      <div class="sidebar-note">
+      <div class="sidebar-note" data-dev-only hidden>
         <span class="label">今回の検証</span>
         <p>同じ依頼でも変化する報告書を読む</p>
       </div>
@@ -40,7 +40,7 @@
           <h2 id="viewTitle">ギルド</h2>
         </div>
         <div class="topbar-actions">
-          <button id="resetButton" class="ghost-button">Mock初期化</button>
+          <button id="resetButton" class="ghost-button" data-dev-only hidden>Mock初期化</button>
         </div>
       </header>
 

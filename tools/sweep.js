@@ -188,7 +188,7 @@ async function sweep(opts = {}) {
   const all = [];
   try {
     for (const [name, patch] of Object.entries(variants)) {
-      await page.goto(`file://${dir}/index.html`);
+      await page.goto(`file://${dir}/index.html?dev=1`); // ★ Mock の道具を使う検証用（EX-158）
       await page.waitForTimeout(opts.settleMs ?? 400);
       if (!axes.quest) {
         axes.quest = await page.evaluate(() => window.masterQuests.map((q) => q.id));

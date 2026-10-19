@@ -1,3 +1,12 @@
+// ★ Mock の道具（時間加速・時間帯／天候の切り替え・「特殊裁定」・Mock初期化・版の表示）は**既定では出さない**（2026-10-19・EX-158）。
+//   外部のテスターに渡す版で、作者の検証用の道具が見えないようにする。URL に `?dev=1` を付けたときだけ出す。
+//   ⚠️ 隠すだけでなく**効かせない**：保存に加速（`state.demoSpeed`）が残っていても、`?dev=1` なしでは等倍で動く。
+const DEV_MODE = (() => {
+  try { return new URLSearchParams(location.search).get("dev") === "1"; } catch (_) { return false; }
+})();
+if (DEV_MODE) document.querySelectorAll("[data-dev-only]").forEach((el) => { el.hidden = false; });
+else document.title = "遠征ギルドログ";
+
 const STORAGE_KEY = "expeditionGuildLogMockV011";
 // ★ 手動セーブ＝「記録を綴じる」（2026-09-21・EX-141）。**オートセーブとは別のキー**に置く。
 //   ★ 別にする理由：同じキーに入れると、世代不一致の初期化（`loadState`）と「Mock初期化」が
@@ -341,6 +350,7 @@ function returnItemsToStock(expedition, report) {
 }
 
 function getDemoSpeed() {
+  if (!DEV_MODE) return 1; // ★ ?dev=1 なしでは常に等倍（保存に加速が残っていても効かせない。EX-158）
   const saved = state?.demoSpeed;
   return DEMO_SPEED_OPTIONS.some((option) => option.value === saved) ? saved : 1;
 }
@@ -2576,6 +2586,7 @@ function renderQuests() {
       <span class="weather-bar-icon">🕗</span>
       <span class="weather-bar-text">${escapeHtml(questDisplayTitle(quest))}の件は、まだ次の話が来ていない。</span>
     </div>`).join("")}
+    ${DEV_MODE ? `
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間帯：</span>
       ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
@@ -2595,6 +2606,7 @@ function renderQuests() {
       <span class="mock-time-label">🔧 時間加速：</span>
       ${DEMO_SPEED_OPTIONS.map((option) => `<button class="mock-time-btn${getDemoSpeed() === option.value ? " active" : ""}" onclick="setDemoSpeed(${option.value})">${option.label}</button>`).join("")}
     </div>
+    ` : ""}
     <section class="card">
       <div class="card-body">
         <div class="card-title">
@@ -8635,7 +8647,7 @@ if (state.player?.interviewDone && typeof state.player.appointedAt !== "number")
 }
 
 resetButton.addEventListener("click", () => {
-  const ok = confirm("Mockの保存データを初期化しますか？");
+  const ok = confirm("保存データを消して、最初からやり直しますか？");
   if (!ok) return;
   localStorage.removeItem(STORAGE_KEY);
   // ★ 綴じた記録も消す（2026-09-21・EX-141）。残すと、面接からやり直した直後に**前の人生の記録へ戻れて**しまう。
