@@ -1088,7 +1088,8 @@ hr.soft {
   font-size: 12px;
 }
 
-/* 命名の確定印（2026-09-17・EX-118）。★ 読了ハンコと同じ朱の角印だが、押す判子は別物。 */
+/* 命名の確定印（2026-09-17・EX-118）→ 封蝋（2026-10-19・EX-159）。★ 読了の封とは別の封（押す先が違う）。
+   色は朱（陰影は同じ朱の明暗だけ）。丸く垂れた蝋に、確定の2字の押し跡。 */
 .er-name-stamp {
   display: inline-flex;
   align-items: center;
@@ -1096,22 +1097,24 @@ hr.soft {
   width: 38px;
   height: 38px;
   margin-left: 10px;
-  border: 2px solid #d05a41;
-  border-radius: 6px;
-  color: #d05a41;
+  border: 0;
+  border-radius: 52% 48% 55% 45% / 47% 53% 47% 53%;
+  background: radial-gradient(circle at 38% 32%, #d2594d 0, #b8322a 55%, #8c241d 100%);
+  color: #6f1c16;
+  text-shadow: 0 1px 0 rgba(236, 150, 140, .55);
+  box-shadow: inset 2px 3px 4px rgba(255, 190, 180, .35), inset -2px -3px 4px rgba(90, 20, 15, .45), 0 2px 3px rgba(60, 20, 10, .3);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.05;
   text-align: center;
-  opacity: 0.92;
   transform: rotate(-8deg);
   vertical-align: middle;
 }
 
 .er-name-stamp.small {
-  width: 30px;
-  height: 30px;
-  font-size: 9px;
+  width: 32px;
+  height: 32px;
+  font-size: 10px;
   margin-left: 8px;
 }
 
@@ -1535,14 +1538,15 @@ body[data-look="paper"] .recorder-badge:hover { color: var(--paper-ink); border-
 .paper-hl:empty { border-left: 0; }
 .paper-stamp-btn { flex: none; padding: 10px 12px; color: var(--paper-shu); background: transparent; border: 2px dashed var(--paper-shu); font: inherit; }
 .paper-stamp-btn:disabled { opacity: .35; cursor: default; }
-/* 判子は亀甲（六角）の枠。★ 仮：将来ギルドの紋に差し替える */
+/* 封蝋（EX-159）。丸く垂れた蝋に、亀甲（六角）の押し跡。★ 仮：将来ギルドの紋に差し替える。色は朱（インクの3色は崩さない） */
 .paper-hanko {
-  position: relative; flex: none; width: 84px; height: 84px; display: grid; place-items: center;
-  color: var(--paper-shu); font-size: 12px; line-height: 1.2; font-weight: 700; text-align: center; transform: rotate(-8deg);
+  position: relative; flex: none; width: 96px; height: 96px; display: grid; place-items: center;
+  color: #6f1c16; font-size: 11px; line-height: 1.2; font-weight: 700; text-align: center; transform: rotate(-8deg);
+  text-shadow: 0 1px 0 rgba(236, 150, 140, .6); filter: drop-shadow(0 2px 2px rgba(60, 20, 10, .35));
 }
 .paper-hanko svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.paper-hanko div { position: relative; }
-.paper-hanko b { display: block; margin-top: 2px; font-size: 16px; font-weight: inherit; letter-spacing: 0; }
+.paper-hanko div { position: relative; top: -3px; }
+.paper-hanko b { display: block; margin-top: 1px; font-size: 13px; font-weight: inherit; letter-spacing: 0; }
 .paper-nav { max-width: 640px; width: 100%; margin: 16px auto 0; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1582,7 +1586,9 @@ body[data-look="paper"] .report-card p { color: var(--paper-soft); }
 body[data-look="paper"] .report-card.unopened::before { color: var(--paper-ink); background: transparent; border: 1px solid var(--paper-soft); border-radius: 0; }
 body[data-look="paper"] .report-card.stamped::after {
   display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
-  color: var(--paper-shu); border: 1.5px solid var(--paper-shu); border-radius: 50%; font-size: 11px; letter-spacing: 0; opacity: 1; transform: rotate(-10deg);
+  color: #6f1c16; border: 0; border-radius: 52% 48% 55% 45% / 47% 53% 47% 53%; font-size: 11px; letter-spacing: 0; opacity: 1; transform: rotate(-10deg);
+  background: radial-gradient(circle at 38% 32%, #d2594d 0, #b8322a 55%, #8c241d 100%); text-shadow: 0 1px 0 rgba(236, 150, 140, .55);
+  box-shadow: inset 2px 3px 4px rgba(255, 190, 180, .35), inset -2px -3px 4px rgba(90, 20, 15, .45), 0 2px 3px rgba(60, 20, 10, .3); /* 封蝋（EX-159） */
 }
 
 /* 依頼掲示板の紙の見た目（EX-157 段階1）。★ 見た目だけ。冒険者の性格の印は墨と朱だけで出す（緑・橙は使わない） */
@@ -1640,7 +1646,6 @@ body[data-look="paper"] .er-form-row textarea,
 body[data-look="paper"] .er-obs-row select,
 body[data-look="paper"] .er-obs-row textarea { color: var(--paper-ink); background: rgba(255, 255, 255, .4); border: 1px solid var(--paper-soft); border-radius: 0; }
 body[data-look="paper"] .er-tag { color: var(--paper-soft); border-color: var(--paper-rule); border-radius: 0; }
-body[data-look="paper"] .er-name-stamp { color: var(--paper-shu); border-color: var(--paper-shu); border-radius: 0; }
 
 /* 報告メモの紙の見た目（EX-157 段階5）。★ 見た目だけ。メモは紙の上の付箋のように、枠を点線にする */
 body[data-look="paper"] .memo-card { color: var(--paper-ink); background: transparent; border: 1px dotted var(--paper-soft); border-radius: 0; }
