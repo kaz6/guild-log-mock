@@ -3355,7 +3355,7 @@ function renderEcologyRecord() {
         </div>
         <p class="muted" style="margin-bottom: 12px;">報告書を読むと、出会ったものの枠が仮称のまま現れます。分類と観察はあなたが書きます。</p>
         ${entries.length === 0
-          ? `<div class="empty">まだ記録はありません。<br>観察対象のいる依頼の報告書に読了のハンコを押すと、枠が現れます。</div>`
+          ? `<div class="empty">まだ記録はありません。<br>観察対象のいる依頼の報告書に読了の封をすると、枠が現れます。</div>`
           : `<div class="grid-2" style="margin-top: 4px;">${entries.map(ecologyRecordCardHtml).join("")}</div>`}
       </div>
     </section>
@@ -3370,7 +3370,7 @@ function ecologyRecordCardHtml(entry) {
       <div class="card-title">
         <div>
           <h3>${escapeHtml(ecologyRecordDisplayName(entry))}${isEcologyRecordNameConfirmed(entry)
-            ? `<span class="er-name-stamp small" aria-label="確定" title="${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定">確<br />定</span>`
+            ? `<span class="er-name-stamp small" aria-label="確定" title="${escapeHtml(stampDateText(entry.nameConfirmedAt))} に封をした">確<br />定</span>`
             : `<span class="er-tag">仮称</span>`}</h3>
           <p class="muted">${escapeHtml(entry.category || "分類未記入")} &middot; ${escapeHtml(entry.area || "地域未記入")}</p>
         </div>
@@ -3453,7 +3453,7 @@ function confirmEcologyRecordName(id) {
   if (!canNameEcologyRecordEntry(entry)) return;
   const draft = (document.getElementById("er_name_draft")?.value ?? "").trim();
   if (!draft) return;
-  if (!confirm(`「${draft}」で確定します。\n確定した名前は二度と変えられません。よろしいですか？`)) return;
+  if (!confirm(`「${draft}」で封をします。\n封をした名前は二度と変えられません。よろしいですか？`)) return;
   // ★ 先に書きかけの欄も保存する（確定だけ通って観察が消えるのを防ぐ）
   applyEcologyRecordForm(entry);
   entry.name = draft;
@@ -3637,9 +3637,9 @@ function ecologyRecordNameSectionHtml(entry) {
       ${ready ? `
       <input id="er_name_draft" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
       <div class="button-row" style="margin-top: 8px;">
-        <button class="secondary-button" onclick="confirmEcologyRecordName('${escapeJsArg(entry.id)}')">確定印を押す</button>
+        <button class="secondary-button" onclick="confirmEcologyRecordName('${escapeJsArg(entry.id)}')">名前に封をする</button>
       </div>
-      <p class="muted er-hint">⚠️ 確定印を押すと名前が確定し、二度と変えられません。押すまでは何度でも書き直せます（「生態目録に保存」で下書きが残ります）。</p>` : ""}
+      <p class="muted er-hint">⚠️ 封をすると名前が確定し、二度と変えられません。封をするまでは何度でも書き直せます（「生態目録に保存」で下書きが残ります）。</p>` : ""}
     </div>`;
 }
 
@@ -3763,7 +3763,7 @@ function renderReportDetail(reportId) {
         <p class="paper-hl">${report.highlight ? `「${escapeHtml(report.highlight)}」` : ""}</p>
         ${report.readStampAt ? `
         <div class="paper-hanko" aria-label="読了" title="${escapeHtml(readStampDateText(report))}">${HANKO_KIKKO_SVG}<div>読了<b>${stampMonthDay(report.readStampAt)}</b></div></div>` : `
-        <button class="paper-stamp-btn" id="reportStampBtn"${typingDone ? "" : " disabled"} onclick="stampReport('${escapeJsArg(report.id)}')">読了の判子を押す</button>`}
+        <button class="paper-stamp-btn" id="reportStampBtn"${typingDone ? "" : " disabled"} onclick="stampReport('${escapeJsArg(report.id)}')">読了の封をする</button>`}
       </div>
       ${stampGrowthHtml(report)}
     </section>
@@ -3786,9 +3786,17 @@ function renderReportDetail(reportId) {
 //   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。報告書を読む画面（段階1）→ 拠点＝home（段階2）→ 依頼掲示板＝quests → 帰還報告＝result → 冒険者名簿＝adventurers → 生態目録＝ecology → 報告メモ＝observations（EX-157）。
 const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers", "ecology", "observations"];
 
-// 亀甲（六角）の枠の判子。★ 仮：将来ギルドの紋を作って差し替える（2026-10-14 の裁定）。
-const HANKO_KIKKO_SVG = '<svg viewBox="0 0 84 84" aria-hidden="true"><polygon points="42,3 76,22.5 76,61.5 42,81 8,61.5 8,22.5" fill="none" stroke="currentColor" stroke-width="3"/>'
-  + '<polygon points="42,9 71,25.5 71,58.5 42,75 13,58.5 13,25.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/></svg>';
+// 封蝋（EX-159。2026-10-19 に朱の判子から替えた）。丸く垂れた蝋に、亀甲（六角）の押し跡。
+//   ★ 色は朱（インクの3色は崩さない。戦闘の朱と封蝋の朱は同じ色）。陰影は同じ朱の明暗だけで付ける。
+//   ★ 亀甲は仮の押し跡：将来ギルドの紋ができたら、それがそのまま封蝋の印になる（2026-10-14 の紋の構想）。
+//   ※ 内部名（HANKO_KIKKO_SVG／paper-hanko／stampReport／readStampAt）は変えない。
+const HANKO_KIKKO_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true">'
+  + '<defs><radialGradient id="waxGrad" cx="38%" cy="32%" r="78%"><stop offset="0" stop-color="#d2594d"/><stop offset=".55" stop-color="#b8322a"/><stop offset="1" stop-color="#8c241d"/></radialGradient></defs>'
+  + '<path d="M50 4 C72 2 92 17 95 40 C98 61 88 79 71 88 C65 92 64 99 57 98 C52 97 53 91 47 92 C27 94 6 80 4 58 C2 35 19 6 50 4 Z" fill="url(#waxGrad)"/>'
+  + '<path d="M16 30 C22 17 36 9 50 8" fill="none" stroke="#e9877c" stroke-width="2.4" stroke-linecap="round" opacity=".55"/>'
+  + '<circle cx="50" cy="48" r="35" fill="none" stroke="#7a1f19" stroke-width="2" opacity=".5"/>'
+  + '<polygon points="50,21 74,34.5 74,61.5 50,75 26,61.5 26,34.5" fill="none" stroke="#e07b70" stroke-width="1.2" opacity=".55" transform="translate(.9 1)"/>'
+  + '<polygon points="50,21 74,34.5 74,61.5 50,75 26,61.5 26,34.5" fill="none" stroke="#6f1c16" stroke-width="2.4" stroke-linejoin="round" opacity=".75"/></svg>';
 
 // 拠点（home）の看板と計器。★ 計器は所持金・持ち物・在席の3つだけ（今の画面にもう出ている値）。
 //   性格値・親愛・未読件数は計器にしない（数値で出さない方針）。
