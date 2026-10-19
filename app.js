@@ -137,6 +137,53 @@ function receiveReward(reward, detail) {
   if (active.remaining <= 0) state.debt.active = null;
 }
 
+// ★ 体験版の終わりの合図（2026-10-19・EX-158【3】の裁定＝1A・2a・3trial）。
+//   【体験版のみ】`/trial/` のコピー（`STORAGE_SUFFIX` が `_trial`）でしか動かない。本体の画面には出ない＝製品版に外し忘れが残らない。
+//   条件：「隊商護衛の報告書を開いた（結末は問わない）」∧「名前の封が1つ以上」がそろった瞬間（後に来たほうで）、ホームのカード1枚を1度だけ出す。読んだら消える。
+//   ⚠️ 護衛の結末が fail でも条件に数える（失敗のあとは捜索チェーンへ続くが、この合図は「いまお見せできる記録」の締め）。遊び続けるのは縛らない。
+//   ※ 文面は仮（作者の確認後に差し替え）。
+const IS_TRIAL_COPY = STORAGE_SUFFIX === "_trial";
+const TRIAL_END_LINES = [
+  "最初の名前に、封をなさったんですね。",
+  "これで、この帳面にもあなたの字が残りました。——いまお見せできる記録は、ここまでです。",
+  "続きの頁は、まだ白紙のままです。また扉の音がしたら、お知らせしますね。"
+];
+
+function trialEndReached() {
+  const escortOpened = state.reports.some((report) => report.questId === "quest_caravan_escort" && report.opened);
+  const named = Object.values(state.ecologyRecord ?? {}).some((entry) => entry && entry.nameConfirmedAt);
+  return escortOpened && named;
+}
+
+function trialEndCardHtml() {
+  if (!IS_TRIAL_COPY) return "";
+  if (!state.trialEnd && trialEndReached()) {
+    state.trialEnd = { at: Date.now(), read: false };
+    saveState();
+  }
+  if (!state.trialEnd || state.trialEnd.read) return "";
+  return `
+    <section class="card money-event-card" data-trial-end="1">
+      <div class="card-body reception">
+        <div class="reception-portrait" aria-hidden="true"></div>
+        <div>
+          <p class="eyebrow">Guild Reception</p>
+          <h3>受付嬢</h3>
+          <div class="speech">${TRIAL_END_LINES.map((line) => escapeHtml(line)).join("<br />")}</div>
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissTrialEnd()">わかりました</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+}
+
+function dismissTrialEnd() {
+  if (state.trialEnd) state.trialEnd.read = true;
+  saveState();
+  render();
+}
+
 function dismissMoneyEvent() {
   if (Array.isArray(state.moneyEvents)) state.moneyEvents.shift();
   saveState();
@@ -475,6 +522,7 @@ function createInitialState() {
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     debt: { active: null, timesBorrowed: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    trialEnd: null, // 体験版の終わりの合図（EX-158【3】。/trial/ のコピーだけが立てる）。{ at, read }
     stock: {},       // 在庫（品 id → 数）。★ 最初は空（2026-09-23・EX-144）
     gameOver: null,  // 運営不能（★ 記録の終わり方の一つ。「負け」ではない）
     player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
@@ -2167,6 +2215,7 @@ function renderHome() {
     ${paperMetersHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
+    ${trialEndCardHtml()}
     ${returnedReports.length > 1 ? `
     <div class="weather-bar">
       <span class="weather-bar-icon">📨</span>
