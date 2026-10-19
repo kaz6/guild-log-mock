@@ -230,8 +230,8 @@ grep -rnE "test\.(fixme|skip)\(" tools/tests/               # 走らないテス
 
 | | `scripts/` | `tools/` |
 |---|---|---|
-| 外部依存 | **ゼロ**（現行13本すべて） | 持ってよい（playwright など） |
-| 実行の仕方 | DevTools に貼る8本／`node scripts/…` で回す5本（`gen-*.js` 4本＋`check-observation-targets.js`） | `node` から回す |
+| 外部依存 | **ゼロ**（現行14本すべて） | 持ってよい（playwright など） |
+| 実行の仕方 | DevTools に貼る8本／`node scripts/…` で回す6本（`gen-*.js` 4本＋`check-observation-targets.js`＋`make-trial.js`） | `node` から回す |
 | 性質 | **クローンしただけで流せる** | 環境を整えないと流せない |
 
 - ★ **`scripts/` の「外部依存ゼロ」を壊さないこと。** 壊すと、戦闘の数値を触ったときの必須確認

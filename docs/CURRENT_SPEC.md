@@ -15,7 +15,7 @@
 現在は完成度を磨き込む段階ではなく、面白そうな機能を小さく入れて手触りを確認する段階です。
 
 - Mock version: `v0.1.2`
-- 保存キー: `expeditionGuildLogMockV011`
+- 保存キー（`/trial/` のコピーは末尾に `_trial` が付く）: `expeditionGuildLogMockV011`
 - 基本方針: 1回1機能 / 最小差分 / 動いたらcommit
 
 ---
@@ -415,6 +415,7 @@ node scripts/gen-quest-table.js
 - ★ **Mock の道具は既定では出ません。URL に `?dev=1` を付けたときだけ出ます**（EX-158。外部のテスターに渡す版で、作者の検証用の道具が見えないようにするため）。対象：`🔧 時間帯／天候／特殊裁定／時間加速` の帯・「Mock初期化」・左上の版の表示・サイドバーの「今回の検証」メモ・加速中だけ出す「Mock用」ボタン2つ。ページのタイトルも `?dev=1` のときだけ「HTML Mock」を含みます。
   - ⚠️ **隠すだけでなく効かせません**：保存に加速（`state.demoSpeed`）が残っていても、`?dev=1` なしでは `getDemoSpeed()` が常に等倍を返します。試験は `?dev=1` で開きます（`tools/tests/helpers/app.js`。隠した形の試験は `dev-mode.spec.js`）。
 - 依頼掲示板の `🔧 時間加速` バーで `等倍 / 60倍 / 3600倍` を選びます。`state.demoSpeed` に保存され、リロードしても維持されます。
+- ★ **テスター用の凍結コピー `trial/`**（EX-158【2】）：`https://kaz6.github.io/guild-log-mock/trial/` で開く。本体の写しで、`node scripts/make-trial.js` を実行しない限り変わらない（更新は単独の PR・不具合の修正だけ）。**保存の鍵はパスから決める**：パスが `/trial/` で終わるとき `STORAGE_KEY` に `_trial` を足す（`expeditionGuildLogMockV011_trial`。綴じた記録は `…V011_trial_bound`）。同じ端末で本体と並べて開いても保存は混ざらない。
 - `expedition.durationMs` には**素の値**を保存し、完了判定と進捗率の比較時に倍率を掛けます。**出発済みの遠征も加速できます。**
 - Mock用の即帰還ボタンは**加速中のみ表示**します（等倍＝素の状態＝人に見せる状態）。
 
