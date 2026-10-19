@@ -17,7 +17,10 @@ const { execSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const outArg = process.argv.indexOf("--out");
+if (outArg > 0 && !process.argv[outArg + 1]) { console.error("--out には作り先のディレクトリを渡すこと"); process.exit(1); }
 const DEST = outArg > 0 ? path.resolve(process.argv[outArg + 1]) : path.join(ROOT, "trial");
+// ⚠️ 作り先は消してから作る。名前が trial 以外のディレクトリは消さない（--out の指定ミスで作業ディレクトリを消さないため）
+if (path.basename(DEST) !== "trial") { console.error(`作り先の名前は trial にすること: ${DEST}`); process.exit(1); }
 
 // 配るもの。index.html の FILES と同じ並び（data-*.js は名前で拾う）＋ index.html・style.css・assets
 const files = ["index.html", "style.css", "app.js", ...fs.readdirSync(ROOT).filter((f) => /^data-.*\.js$/.test(f)).sort()];
