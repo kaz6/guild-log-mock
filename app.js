@@ -7,12 +7,16 @@ const DEV_MODE = (() => {
 if (DEV_MODE) document.querySelectorAll("[data-dev-only]").forEach((el) => { el.hidden = false; });
 else document.title = "遠征ギルドログ";
 
-const STORAGE_KEY = "expeditionGuildLogMockV011";
+// ★ テスター用の凍結コピー（`/trial/` の下）は保存の鍵に `_trial` を足す（2026-10-19・EX-158【2】）。
+//   同じオリジン（kaz6.github.io）で作者の版と並べて開いても、セーブが混ざらない・互いに壊さない。
+//   ⚠️ 鍵は**パスから決める**ので、コピーは本体とバイト単位で同じ。`trial/` を作り直す手順は `scripts/make-trial.js`。
+const STORAGE_SUFFIX = /\/trial\/[^/]*$/.test(location.pathname) ? "_trial" : "";
+const STORAGE_KEY = "expeditionGuildLogMockV011" + STORAGE_SUFFIX;
 // ★ 手動セーブ＝「記録を綴じる」（2026-09-21・EX-141）。**オートセーブとは別のキー**に置く。
 //   ★ 別にする理由：同じキーに入れると、世代不一致の初期化（`loadState`）と「Mock初期化」が
 //     **綴じた記録ごと巻き添えにする**——戻りたい場面でまさに消える。
 //     （2026-07-27 に `state.unlockedQuestIds` を却下した理由「state が増え、既存セーブの扱いを決める必要が出る」も同じ向き）
-const BOUND_STORAGE_KEY = "expeditionGuildLogMockV011_bound";
+const BOUND_STORAGE_KEY = "expeditionGuildLogMockV011" + STORAGE_SUFFIX + "_bound";
 // ★ 綴じた記録は**2冊まで**（裁定＝点1のC）。画面に出るのは常に最新の1冊で、
 //   綴じるたびに前の1冊が裏へ下がる。★ **戻ると最新の1冊を使い切り、裏の1冊が表に出る**
 //   （実装側の判断。そうしないと裏の1冊へ到達する経路が無く、枠が1つの案と同じになる）。
