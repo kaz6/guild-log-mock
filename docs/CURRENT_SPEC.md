@@ -15,7 +15,7 @@
 現在は完成度を磨き込む段階ではなく、面白そうな機能を小さく入れて手触りを確認する段階です。
 
 - Mock version: `v0.1.2`
-- 保存キー: `expeditionGuildLogMockV011`（`/trial/` のコピーは `…V011_trial`）
+- 保存キー（`/trial/` のコピーは末尾に `_trial` が付く）: `expeditionGuildLogMockV011`
 - 基本方針: 1回1機能 / 最小差分 / 動いたらcommit
 
 ---
