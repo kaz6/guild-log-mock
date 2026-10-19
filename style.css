@@ -1653,3 +1653,6 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 .paper-growth .who { font-weight: 600; }
 @keyframes paper-growth-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .paper-growth { animation: none; } }
+
+/* Mock の道具は既定では隠す（EX-158）。`hidden` は author の display 指定に負けるので、印のついたものだけ強制する */
+[data-dev-only][hidden] { display: none !important; }

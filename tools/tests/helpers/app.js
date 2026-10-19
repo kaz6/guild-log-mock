@@ -2,7 +2,9 @@
 const path = require("path");
 
 const REPO = path.resolve(__dirname, "..", "..", "..");
-const URL = `file://${REPO}/index.html`;
+// ★ 試験は ?dev=1 で開く（Mock の道具＝時間加速などを使うので。EX-158）。道具を隠した「テスターに渡す形」は PLAIN_URL。
+const PLAIN_URL = `file://${REPO}/index.html`;
+const URL = `${PLAIN_URL}?dev=1`;
 
 // ★ **どのテストも必ずここから始める**（EX-143 の裁定）。
 //   file:// は全テストで同じオリジンなので、消さないと前のテストの保存を踏む。
@@ -120,4 +122,4 @@ async function waitForReturn(page, reportsBefore, timeoutMs = 30_000) {
   await page.waitForTimeout(600);
 }
 
-module.exports = { REPO, URL, freshPage, interview, boardTitles, seedClearedQuests, departQuest, waitForReturn };
+module.exports = { REPO, URL, PLAIN_URL, freshPage, interview, boardTitles, seedClearedQuests, departQuest, waitForReturn };
