@@ -3625,7 +3625,7 @@ function ecologyRecordNameSectionHtml(entry) {
           <span>${escapeHtml(ecologyRecordDisplayName(entry))}</span>
           <span class="er-name-stamp" aria-label="確定">確<br />定</span>
         </p>
-        <p class="muted er-hint">${escapeHtml(stampDateText(entry.nameConfirmedAt))} に確定しました。名前はもう変えられません。</p>
+        <p class="muted er-hint">${escapeHtml(stampDateText(entry.nameConfirmedAt))} に封をしました。名前はもう変えられません。</p>
       </div>`;
   }
   const filled = ecologyRecordFilledAxes(entry).size;
