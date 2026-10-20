@@ -4,7 +4,9 @@
 // ★ 正本の「# か ## で日付を含む見出し」を節とみなし、写しに同じ節（日付＋題名の頭）があるかを見る。
 //   写しは正本から切り出すので、1節が複数に割れる／畳まれることはある（2026-08-08 の裁定）。だから「数が違う」ことは報告するが、
 //   ★ 本題は「正本にあって写しに無い節」の一覧。今回（2026-10-20）は約25節が欠けていて、予備にならなかった。
-// 終了コード：「どこにも無い」が0なら0、あれば1（報告のためで、止めるためではない）。外部依存ゼロ。
+// ★ 写し側の「重複」も見る（2026-10-20・今回の二重取り込みを欠け検査が拾えなかったため）。見出し（日付・記号・リンク記法を外した形）と本文が同じ節が2つ以上あれば重複。
+//   見出しだけ同じで本文が違う節は正当にある（正本にも2件ある）ので、数だけ知らせて落とさない。
+// 終了コード：「どこにも無い」が0かつ重複が0なら0、どちらかあれば1（報告のためで、止めるためではない）。外部依存ゼロ。
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -25,6 +27,23 @@ function sections(text) {
   return out;
 }
 
+// 写しの重複：見出し＋本文が同じ節。見出しの形が違っても（日付が括弧の中・波括弧のエスケープ）同じ節とみなす
+function duplicates(text) {
+  const lines = text.split("\n");
+  const hs = [];
+  lines.forEach((l, i) => { const m = l.match(/^#{1,2} (.*)$/); if (m) hs.push({ i, h: m[1] }); });
+  const flat = (t) => t.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\d{4}-\d{2}-\d{2}/g, "").replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
+  const seen = new Map();
+  hs.forEach((s, j) => {
+    if (!/\d{4}-\d{2}-\d{2}/.test(s.h)) return;
+    const body = lines.slice(s.i + 1, j + 1 < hs.length ? hs[j + 1].i : lines.length).join("\n");
+    const k = flat(s.h) + "|" + flat(body.replace(/^-{3,}\s*$/gm, "")); // 節の区切り線（---）の有無は本文の違いに数えない（今回の重複は区切り線だけが違った）
+    if (!seen.has(k)) seen.set(k, []);
+    seen.get(k).push({ line: s.i + 1, raw: s.h });
+  });
+  return [...seen.values()].filter((v) => v.length > 1);
+}
+
 if (!fs.existsSync(NOTION)) { console.error("docs/backup/DECISION_LOG.notion.md が無い。先に scripts/save-notion-backup.js で正本を書き出す"); process.exit(2); }
 const n = sections(fs.readFileSync(NOTION, "utf8"));
 const r = sections(fs.readFileSync(REPO, "utf8"));
@@ -39,7 +58,12 @@ const mentioned = noHeading.filter((s) => repoText.includes(s.key));
 console.log(`正本の節 ${n.length} ／ 写しの節 ${r.length}（写しは切り出し・分割があるので、数が違うこと自体は異常ではない）`);
 console.log(`見出しに無い（本文では言及あり）: ${mentioned.length}件（要確認。言及だけでは写されたとは言えない）`);
 if (process.argv.includes("--verbose")) mentioned.forEach((s) => console.log(`  ? ${s.raw}`));
-if (missing.length === 0) { console.log("正本にあって写しのどこにも無い節: 0件"); process.exit(0); }
-console.log(`正本にあって写しのどこにも無い節: ${missing.length}件`);
-missing.forEach((s) => console.log(`  - ${s.raw}`));
-process.exit(1);
+const dups = duplicates(fs.readFileSync(REPO, "utf8"));
+console.log(`写しの重複（見出しも本文も同じ節）: ${dups.length}件`);
+dups.forEach((v) => console.log(`  ! ${v.map((x) => `L${x.line}`).join(" と ")}　${v[0].raw}`));
+if (missing.length === 0) console.log("正本にあって写しのどこにも無い節: 0件");
+else {
+  console.log(`正本にあって写しのどこにも無い節: ${missing.length}件`);
+  missing.forEach((s) => console.log(`  - ${s.raw}`));
+}
+process.exit(missing.length === 0 && dups.length === 0 ? 0 : 1);

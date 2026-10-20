@@ -36,5 +36,6 @@ test("正本の写し・照合の2本（scripts/save-notion-backup.js, check-dec
   let out;
   try { out = run(["scripts/check-decision-log-sections.js"]); } catch (e) { out = e.stdout; }
   expect(out, out).toContain("正本の節");
+  expect(out, out).toContain("写しの重複（見出しも本文も同じ節）: 0件"); // 二重取り込み（2026-10-20）を拾う検査。今の写しに重複は無い
   expect(() => run(["scripts/save-notion-backup.js"])).toThrow(); // 引数なしは使い方を出して止まる
 });
