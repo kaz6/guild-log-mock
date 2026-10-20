@@ -29,3 +29,12 @@ test("観察記録の穴が0件（scripts/check-observation-targets.js）", () =
   const out = run(["scripts/check-observation-targets.js"]);
   expect(out, out).toContain("問題は見つかりませんでした（0件）");
 });
+
+test("正本の写し・照合の2本（scripts/save-notion-backup.js, check-decision-log-sections.js）が動く", () => {
+  // ★ 正本が壊れた事故（2026-10-20・EX-158）の対策③④。外部依存ゼロ。照合は「欠けがあれば終了コード1」なので、出力だけを見る
+  ["scripts/save-notion-backup.js", "scripts/check-decision-log-sections.js"].forEach((f) => expect(() => run(["--check", f]), f).not.toThrow());
+  let out;
+  try { out = run(["scripts/check-decision-log-sections.js"]); } catch (e) { out = e.stdout; }
+  expect(out, out).toContain("正本の節");
+  expect(() => run(["scripts/save-notion-backup.js"])).toThrow(); // 引数なしは使い方を出して止まる
+});

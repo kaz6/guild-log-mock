@@ -5,9 +5,9 @@
 //
 // 呼び方：node notion-guard.js <mode>
 //   pre-search   … PreToolUse（notion-search）：規則1（書き込み直後の search）と規則3（DECISION_LOG を名前で検索）
-//   pre-update   … PreToolUse（notion-update-page）：規則1（置換前後が同じ置換）と規則5（DECISION_LOG 正本への replace_all_matches）
+//   pre-update   … PreToolUse（notion-update-page）：規則1（置換前後が同じ置換）と規則5（DECISION_LOG 正本は追記専用）
 //   post-write   … PostToolUse（Notion への書き込み系）：規則2（全角数字の警告）＋「読み直し待ち」を記録
-//   post-fetch   … PostToolUse（notion-fetch）：読み直したページの「読み直し待ち」を消す
+//   post-fetch   … PostToolUse（notion-fetch）：読み直したページの「読み直し待ち」を消す＋規則6（DECISION_LOG 正本の量が減っていないか）
 //   stop         … Stop：「読み直し待ち」が残っていたら、ターンを終えるのを止めて残りのページを返す（2026-10-15）
 // 入力は stdin の JSON（session_id / tool_name / tool_input）。
 // 終了コード 2 は、PreToolUse なら呼び出しを止め、PostToolUse なら stderr をモデルに返す（＝警告）。0 は何もしない。
@@ -94,6 +94,80 @@ function collectStrings(value, out = []) {
   return out;
 }
 
+// ---- 規則6：正本の量の比較 ----
+// 数えるもの：見出し（# か ## で、日付を含む行）・表（行頭の <table）・文字数。基準は直前に読んだときの値（なければ docs/backup の写し）
+const BACKUP_FILE = process.env.NOTION_GUARD_BACKUP_FILE || path.join(__dirname, "..", "..", "docs", "backup", "DECISION_LOG.notion.md");
+const SHRINK_CHAR_RATIO = 0.02;
+
+function extractContent(resp) {
+  // fetch の結果は「JSON（text に本文）」「その配列」「文字列」のいずれかで届く。<content>…</content> の中身を返す
+  const texts = [];
+  const walk = (v) => {
+    if (typeof v === "string") {
+      try { const j = JSON.parse(v); if (j && typeof j === "object") return walk(j); } catch { /* 文字列のまま */ }
+      texts.push(v);
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") { if (typeof v.text === "string") walk(v.text); else if (v.content !== undefined) walk(v.content); }
+  };
+  walk(resp);
+  const all = texts.join("\n");
+  const i = all.indexOf("<content>");
+  const j = all.lastIndexOf("</content>");
+  return i >= 0 && j > i ? all.slice(i + 9, j) : all;
+}
+
+function measure(body) {
+  const lines = String(body).split("\n");
+  return {
+    headings: lines.filter((l) => /^#{1,2} /.test(l) && /\d{4}-\d{2}-\d{2}/.test(l)).length,
+    tables: lines.filter((l) => l.startsWith("<table")).length,
+    chars: String(body).length
+  };
+}
+
+function baselinePath() {
+  const dir = process.env.NOTION_GUARD_STATE_DIR || path.join(os.tmpdir(), "claude-notion-guard");
+  return { dir, file: path.join(dir, "decision-log.baseline.json") };
+}
+
+function readBaseline() {
+  try { return JSON.parse(fs.readFileSync(baselinePath().file, "utf8")); } catch { /* 次へ */ }
+  try { return { ...measure(fs.readFileSync(BACKUP_FILE, "utf8")), from: "docs/backup/DECISION_LOG.notion.md" }; } catch { return null; }
+}
+
+// 大きいページの fetch は、結果が上限を超えてファイルに落ち、フックには「saved to <パス>」という文だけが届く（実測 2026-10-20）。
+// そのファイルを読んで数える
+function loadBody(resp) {
+  let body = extractContent(resp);
+  if (!/<content>|^#{1,2} /m.test(body)) {
+    const m = JSON.stringify(resp || "").match(/saved to ((?:\\.|[^"\\\s])+?\.txt)/);
+    if (m) {
+      try { body = extractContent(JSON.parse(fs.readFileSync(m[1].replace(/\\\//g, "/"), "utf8"))); } catch { /* 読めなければ空のまま */ }
+    }
+  }
+  return body;
+}
+
+function checkShrink(resp) {
+  const body = loadBody(resp);
+  const now = measure(body);
+  if (now.headings === 0 && now.chars < 1000) return; // 本文が取れていない（想定外の形）。止めない
+  const base = readBaseline();
+  const lost = [];
+  if (base && !base.accept) {
+    if (now.headings < base.headings) lost.push(`見出し ${base.headings}→${now.headings}`);
+    if (now.tables < base.tables) lost.push(`表 ${base.tables}→${now.tables}`);
+    if (now.chars < base.chars * (1 - SHRINK_CHAR_RATIO)) lost.push(`文字数 ${base.chars}→${now.chars}（${Math.round((1 - now.chars / base.chars) * 1000) / 10}%減）`);
+  }
+  if (lost.length === 0) {
+    const { dir, file } = baselinePath();
+    try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, JSON.stringify({ ...now, at: new Date().toISOString() })); } catch { /* 基準が書けなくても止めない */ }
+    return;
+  }
+  // 減っているあいだは基準を更新しない（直るまで毎回知らせる）。意図した減少なら node notion-guard.js accept-shrink
+  block(`[notion-guard] DECISION_LOG の正本が、基準より減っている：${lost.join("／")}。書き換えで消えた可能性がある。このまま先へ進まず、原因を確かめること（ページ履歴からの復元は作者に頼む。退避は docs/backup/DECISION_LOG.notion.md と docs/audit/）。意図した減少だと確かめたときだけ、node .claude/hooks/notion-guard.js accept-shrink で基準を取り直す。`);
+}
+
 function block(message) {
   process.stderr.write(message + "\n");
   process.exit(2);
@@ -101,6 +175,13 @@ function block(message) {
 
 function main() {
   const mode = process.argv[2];
+  if (mode === "accept-shrink") { // 手で呼ぶ（stdin なし）。次に正本を notion-fetch したときの値を、そのまま新しい基準にする
+    const { dir, file } = baselinePath();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ accept: true }));
+    process.stdout.write("次に正本を notion-fetch した時点の値を新しい基準にする。\n");
+    process.exit(0);
+  }
   const input = readInput();
   if (!input) process.exit(0);
   const sid = input.session_id;
@@ -127,10 +208,14 @@ function main() {
     if (same.length > 0) {
       block(`[notion-guard] old_str と new_str が同じ置換が ${same.length} 件ある（単発 probe）。これは存在しない文字列でも成功を返すので、当たり確認にならない。確かめは notion-fetch の読み直しで行うこと。`);
     }
-    // 規則5：DECISION_LOG の正本への replace_all_matches（2026-10-20・EX-158）。
-    // Notion は old_str の `\</table\>` を `</table>` に自動で補正するので、一括置換が本物の表の閉じタグ全部に当たり、ページの大部分が消えた
-    if (normId(ti.page_id) === DECISION_LOG_ID && updates.some((u) => u && u.replace_all_matches === true)) {
-      block(`[notion-guard] DECISION_LOG の正本（${DECISION_LOG_ID}）への replace_all_matches は止める。Notion が old_str の \\</table\\> を </table> に自動で補正するため、一括置換が意図しない全ての閉じタグに当たり、ページの大部分が消えた（2026-10-20・EX-158）。範囲を絞った置換（行を含む一意な old_str）で直し、直すたびに notion-fetch で読み直すこと。`);
+    // 規則5：DECISION_LOG の正本は追記専用（2026-10-20・EX-158）。通す＝末尾への追記（insert_content）／1か所だけに当たる置換。
+    // 止める＝replace_all_matches／replace_content。Notion は old_str の `\\</table\\>` を `</table>` に自動で補正するので、
+    // 一括置換が本物の表の閉じタグ全部に当たり、ページの大部分が消えた。全置換も同じ（過去ログは当時のままにする）
+    if (normId(ti.page_id) === DECISION_LOG_ID) {
+      const all = updates.some((u) => u && u.replace_all_matches === true);
+      if (all || ti.command === "replace_content") {
+        block(`[notion-guard] DECISION_LOG の正本（${DECISION_LOG_ID}）は追記専用。直すなら1か所ずつ。${all ? "replace_all_matches" : "replace_content（全置換）"}は止める（Notion が old_str の \\</table\\> を </table> に自動で補正するため、一括置換が本物の閉じタグ全部に当たり、ページの大部分が消えた。2026-10-20・EX-158）。末尾への追記は insert_content、直すときは行を含む一意な old_str の置換を1件ずつ行い、直すたびに notion-fetch で読み直すこと。`);
+      }
     }
     process.exit(0);
   }
@@ -154,6 +239,8 @@ function main() {
 
   if (mode === "post-fetch") {
     clearPending(sid, ti.id);
+    // 規則6：DECISION_LOG の正本の量が減っていないか（読んでも、減ったことには気づけないため。2026-10-20・EX-158）
+    if (normId(ti.id) === DECISION_LOG_ID) checkShrink(input.tool_response);
     process.exit(0);
   }
 
