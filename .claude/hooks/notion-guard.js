@@ -5,7 +5,7 @@
 //
 // 呼び方：node notion-guard.js <mode>
 //   pre-search   … PreToolUse（notion-search）：規則1（書き込み直後の search）と規則3（DECISION_LOG を名前で検索）
-//   pre-update   … PreToolUse（notion-update-page）：規則1（置換前後が同じ置換）
+//   pre-update   … PreToolUse（notion-update-page）：規則1（置換前後が同じ置換）と規則5（DECISION_LOG 正本への replace_all_matches）
 //   post-write   … PostToolUse（Notion への書き込み系）：規則2（全角数字の警告）＋「読み直し待ち」を記録
 //   post-fetch   … PostToolUse（notion-fetch）：読み直したページの「読み直し待ち」を消す
 //   stop         … Stop：「読み直し待ち」が残っていたら、ターンを終えるのを止めて残りのページを返す（2026-10-15）
@@ -126,6 +126,11 @@ function main() {
     const same = updates.filter((u) => u && typeof u.old_str === "string" && u.old_str === u.new_str);
     if (same.length > 0) {
       block(`[notion-guard] old_str と new_str が同じ置換が ${same.length} 件ある（単発 probe）。これは存在しない文字列でも成功を返すので、当たり確認にならない。確かめは notion-fetch の読み直しで行うこと。`);
+    }
+    // 規則5：DECISION_LOG の正本への replace_all_matches（2026-10-20・EX-158）。
+    // Notion は old_str の `\</table\>` を `</table>` に自動で補正するので、一括置換が本物の表の閉じタグ全部に当たり、ページの大部分が消えた
+    if (normId(ti.page_id) === DECISION_LOG_ID && updates.some((u) => u && u.replace_all_matches === true)) {
+      block(`[notion-guard] DECISION_LOG の正本（${DECISION_LOG_ID}）への replace_all_matches は止める。Notion が old_str の \\</table\\> を </table> に自動で補正するため、一括置換が意図しない全ての閉じタグに当たり、ページの大部分が消えた（2026-10-20・EX-158）。範囲を絞った置換（行を含む一意な old_str）で直し、直すたびに notion-fetch で読み直すこと。`);
     }
     process.exit(0);
   }

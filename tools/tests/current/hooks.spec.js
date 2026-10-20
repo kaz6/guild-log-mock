@@ -76,6 +76,18 @@ test.describe("規則1：書き込み直後の確かめに search や単発 prob
       content_updates: [{ old_str: "古い", new_str: "新しい" }] } }, dir);
     expect(real.code).toBe(0);
   });
+
+  test("規則5：DECISION_LOG の正本への replace_all_matches は止まる。他のページ・単発の置換は通る", () => {
+    const dir = freshState();
+    const ops = (all) => [{ old_str: "古い", new_str: "新しい", ...(all ? { replace_all_matches: true } : {}) }];
+    const bad = runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_A, command: "update_content", content_updates: ops(true) } }, dir);
+    expect(bad.code).toBe(2);
+    expect(bad.err).toContain("replace_all_matches");
+    const dashed = runHook("pre-update", { session_id: "s", tool_input: { page_id: "3a9a8a5d-fd45-81e3-a8cf-c3872a300766", command: "update_content", content_updates: ops(true) } }, dir);
+    expect(dashed.code).toBe(2);
+    expect(runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_A, command: "update_content", content_updates: ops(false) } }, dir).code).toBe(0);
+    expect(runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_B, command: "update_content", content_updates: ops(true) } }, dir).code).toBe(0);
+  });
 });
 
 test.describe("規則4：読み直していないままターンを終えない（Stop）", () => {
