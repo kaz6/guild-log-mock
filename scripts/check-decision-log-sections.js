@@ -29,7 +29,7 @@ if (!fs.existsSync(NOTION)) { console.error("docs/backup/DECISION_LOG.notion.md 
 const n = sections(fs.readFileSync(NOTION, "utf8"));
 const r = sections(fs.readFileSync(REPO, "utf8"));
 // 写しの「見出し」に同じ題名の頭がある（日付は写しで付け替えることがあるので、題名の頭だけで見る）。★ 本文中の言及は数えない（言及で欠けが隠れる。pr-review の指摘・2026-10-20）
-const norm = (t) => t.replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
+const norm = (t) => t.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
 const repoText = norm(fs.readFileSync(REPO, "utf8"));
 // 写しの「見出し」に同じ題名の頭が無い節。うち、写しのどこにも題名の頭が出てこないものを「欠け」、本文では言及があるものを「見出しに無い（言及あり）」に分ける
 // ★ 本文中の言及は欠けを隠す（pr-review の指摘・2026-10-20）。だから言及だけで「ある」とは言わず、別の欄に出す
