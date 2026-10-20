@@ -17,7 +17,7 @@ function runHook(mode, input, stateDir) {
   const r = spawnSync("node", [HOOK, mode], {
     input: JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, NOTION_GUARD_STATE_DIR: stateDir },
+    env: { ...process.env, NOTION_GUARD_STATE_DIR: stateDir, NOTION_GUARD_BACKUP_FILE: path.join(stateDir, "no-backup.md") },
     timeout: 10_000
   });
   return { code: r.status, err: r.stderr };
@@ -87,6 +87,93 @@ test.describe("規則1：書き込み直後の確かめに search や単発 prob
     expect(dashed.code).toBe(2);
     expect(runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_A, command: "update_content", content_updates: ops(false) } }, dir).code).toBe(0);
     expect(runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_B, command: "update_content", content_updates: ops(true) } }, dir).code).toBe(0);
+  });
+
+  test("規則5：DECISION_LOG の正本は追記専用。replace_content は止まり、末尾への追記（insert_content）は通る", () => {
+    const dir = freshState();
+    const full = runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_A, command: "replace_content", new_str: "x" } }, dir);
+    expect(full.code).toBe(2);
+    expect(full.err).toContain("追記専用");
+    expect(full.err).toContain("1か所ずつ");
+    expect(runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_A, command: "insert_content", content: "x" } }, dir).code).toBe(0);
+    expect(runHook("pre-update", { session_id: "s", tool_input: { page_id: PAGE_B, command: "replace_content", new_str: "x" } }, dir).code).toBe(0);
+  });
+});
+
+// 規則6：正本の量が減っていないか。fetch の結果（本文）か、大きくてファイルに落ちたときの「saved to <パス>」から数える
+function logBody(headings, tables, extra = 0) {
+  const parts = ["> 正本\n"];
+  for (let i = 0; i < headings; i++) parts.push(`## 2026-07-${String(i % 28 + 1).padStart(2, "0")}: 節${i}\n本文${"あ".repeat(100)}\n`);
+  for (let i = 0; i < tables; i++) parts.push("<table>\n<tr><td>x</td></tr>\n</table>\n");
+  parts.push("あ".repeat(extra));
+  return parts.join("");
+}
+const fetchResp = (body) => [{ type: "text", text: JSON.stringify({ title: "DECISION_LOG", text: `<page>\n<content>\n${body}\n</content>\n</page>` }) }];
+
+test.describe("規則6：正本の量が減っていないか（post-fetch）", () => {
+  const input = (resp, id = PAGE_A) => ({ session_id: "s", tool_input: { id }, tool_response: resp });
+
+  test("見出し・表・2%以上の文字数が減ると止まる。同じか増えたら通り、基準が更新される", () => {
+    const dir = freshState();
+    expect(runHook("post-fetch", input(fetchResp(logBody(20, 3))), dir).code).toBe(0); // 基準を作る
+    expect(runHook("post-fetch", input(fetchResp(logBody(21, 3))), dir).code).toBe(0); // 増えた
+    const lessHeading = runHook("post-fetch", input(fetchResp(logBody(20, 3))), dir);
+    expect(lessHeading.code).toBe(2);
+    expect(lessHeading.err).toContain("見出し 21→20");
+    const lessTable = runHook("post-fetch", input(fetchResp(logBody(21, 2))), dir);
+    expect(lessTable.code).toBe(2);
+    expect(lessTable.err).toContain("表 3→2");
+    // 減っているあいだは基準を動かさない（同じ減りを次の fetch でも知らせる）
+    expect(runHook("post-fetch", input(fetchResp(logBody(21, 2))), dir).code).toBe(2);
+    expect(runHook("post-fetch", input(fetchResp(logBody(21, 3))), dir).code).toBe(0);
+  });
+
+  test("見出しと表が同じでも、文字数が2%以上減れば止まる。1%の減少は通る", () => {
+    const dir = freshState();
+    runHook("post-fetch", input(fetchResp(logBody(10, 2, 10000))), dir);
+    expect(runHook("post-fetch", input(fetchResp(logBody(10, 2, 9900))), dir).code).toBe(0);
+    const big = runHook("post-fetch", input(fetchResp(logBody(10, 2, 9000))), dir);
+    expect(big.code).toBe(2);
+    expect(big.err).toContain("文字数");
+  });
+
+  test("accept-shrink で意図した減少を受け入れ、次の fetch が新しい基準になる", () => {
+    const dir = freshState();
+    runHook("post-fetch", input(fetchResp(logBody(20, 3))), dir);
+    expect(runHook("post-fetch", input(fetchResp(logBody(19, 3))), dir).code).toBe(2);
+    const acc = spawnSync("node", [HOOK, "accept-shrink"], { encoding: "utf8", env: { ...process.env, NOTION_GUARD_STATE_DIR: dir } });
+    expect(acc.status).toBe(0);
+    expect(runHook("post-fetch", input(fetchResp(logBody(19, 3))), dir).code).toBe(0);
+    expect(runHook("post-fetch", input(fetchResp(logBody(18, 3))), dir).code).toBe(2);
+  });
+
+  test("大きくてファイルに落ちたときは、エラー文の saved to のパスから本文を読んで数える", () => {
+    const dir = freshState();
+    const file = path.join(dir, "big-fetch.txt");
+    const write = (h) => fs.writeFileSync(file, JSON.stringify({ text: `<content>\n${logBody(h, 3)}\n</content>` }));
+    const msg = `Error: result (274,517 characters) exceeds maximum allowed tokens. Output has been saved to ${file}\nFormat: Plain text`;
+    write(20);
+    expect(runHook("post-fetch", input(msg), dir).code).toBe(0);
+    write(18);
+    const r = runHook("post-fetch", input(msg), dir);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("見出し 20→18");
+  });
+
+  test("基準が無いときは docs/backup の写しが基準になる（写しより少ない正本は止まる）", () => {
+    const dir = freshState();
+    const backup = path.join(dir, "backup.md");
+    fs.writeFileSync(backup, logBody(20, 3));
+    const run = (body) => spawnSync("node", [HOOK, "post-fetch"], { input: JSON.stringify(input(fetchResp(body))), encoding: "utf8", env: { ...process.env, NOTION_GUARD_STATE_DIR: dir, NOTION_GUARD_BACKUP_FILE: backup } });
+    expect(run(logBody(15, 3)).status).toBe(2);
+    expect(run(logBody(20, 3)).status).toBe(0);
+  });
+
+  test("別のページの fetch や、本文が取れない形では止めない", () => {
+    const dir = freshState();
+    runHook("post-fetch", input(fetchResp(logBody(20, 3))), dir);
+    expect(runHook("post-fetch", input(fetchResp(logBody(1, 0)), PAGE_B), dir).code).toBe(0);
+    expect(runHook("post-fetch", input("なにか短い文"), dir).code).toBe(0);
   });
 });
 
