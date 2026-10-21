@@ -31,7 +31,8 @@ function measure(body) {
   const lines = String(body).split("\n");
   return {
     headings: lines.filter((l) => /^#{1,2} /.test(l) && /\d{4}-\d{2}-\d{2}/.test(l)).length,
-    tables: lines.filter((l) => l.startsWith("<table")).length,
+    // 表は <table> タグと | 区切りの Markdown の2通りで返ってくる（フックと同じ数え方）
+    tables: lines.filter((l) => l.startsWith("<table") || /^\|(\s*:?-+:?\s*\|)+\s*$/.test(l)).length,
     chars: String(body).length
   };
 }
