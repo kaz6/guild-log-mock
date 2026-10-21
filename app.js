@@ -1217,6 +1217,7 @@ function setRoute(nextRoute) {
   route = nextRoute;
   editingAdventurerId = null;
   recorderBadgeOpen = false; // 画面を移ったらバッジの紙片は閉じる（開いたまま居座らせない）
+  roomNotice = ""; // ホームの窓の一言も、画面を移ったら捨てる（戻ってきたときに居残らせない）
   render();
 }
 

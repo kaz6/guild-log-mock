@@ -35,7 +35,10 @@ test.describe("ホームの窓（EX-161）", () => {
     await page.evaluate(() => { setRoute("home"); roomPanel = 2; render(); });
     await page.locator('[data-room-object="pile"]').click({ force: true });
     expect(await page.evaluate(() => route)).toBe("home");
-    for (const id of ["shelf", "badge", "counter", "backyard"]) {
+    // 押すと報告書棚が見える位置まで動く（画面は home のまま）
+    await page.waitForTimeout(700);
+    expect(await page.evaluate(() => { const r = document.getElementById("reportShelf").getBoundingClientRect(); return r.top >= 0 && r.top < window.innerHeight; })).toBe(true);
+    for (const id of ["shelf", "badge", "counter", "backyard", "receptionist", "papers", "pen", "elsie"]) {
       await expect(page.locator(`button[data-room-object="${id}"]`)).toHaveCount(0);
     }
     expect(errors).toEqual([]);
@@ -49,6 +52,9 @@ test.describe("ホームの窓（EX-161）", () => {
     await expect(page.locator('button[data-room-object="grave"]')).toHaveCount(1);
     await page.locator('button[data-room-object="grave"]').click({ force: true });
     await expect(page.locator(".room-notice")).toContainText("準備中");
+    // 別の画面へ移って戻っても、一言は居残らない
+    await page.evaluate(() => { setRoute("quests"); setRoute("home"); });
+    await expect(page.locator(".room-notice")).toBeHidden();
     expect(errors).toEqual([]);
   });
 
