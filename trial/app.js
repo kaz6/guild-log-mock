@@ -4555,6 +4555,8 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
   const post = findByTrait(party, "background", "郵便配達人");
   const has = (id) => itemIds.includes(id);
   const name = (adv) => getDisplayName(adv);
+  // 封蝋で「止めた側」。触ろうとした側（warrior）と同じ人にならないようにする（2026-10-21）。他にいなければ null（ひとり向けの文にする）
+  const stopper = scout !== warrior ? scout : humans.find((adv) => adv !== warrior) ?? null;
 
   const generic = {
     ぬかるみ: [
@@ -4571,9 +4573,9 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     ],
     封蝋の確認: [
       `${name(post)}は封蝋に触れず、光にかざして割れがないことだけを確認した。昔の癖が出たらしい。`,
-      soloStyle
+      soloStyle || !stopper
         ? `${name(warrior)}は封蝋を確認しようとして、思いとどまった。光にかざして状態を見るだけにした。`
-        : `封蝋は古いが、まだ保たれていた。${name(warrior)}は不用意に触ろうとして、${name(scout)}に止められた。`
+        : `封蝋は古いが、まだ保たれていた。${name(warrior)}は不用意に触ろうとして、${name(stopper)}に止められた。`
     ],
     宛先の聞き込み: [
       `宛先の家はすぐには見つからなかった。${name(scout)}は井戸端で聞き込みを行い、古い表札の場所を聞き出した。`,
