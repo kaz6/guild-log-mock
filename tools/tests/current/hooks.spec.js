@@ -141,6 +141,29 @@ test.describe("規則6：正本の量が減っていないか（post-fetch）", 
     expect(lost.err).toContain("表 3→2");
   });
 
+  // ★ 実物の fetch の抜粋（2026-10-21：表が | 区切りで返った回）。書式が変わったときの誤停止を、実物で再現できるようにしておく
+  const fixture = () => fs.readFileSync(path.join(__dirname, "..", "fixtures", "notion-fetch-pipe-table.md"), "utf8");
+  const pipeToHtml = (body) => body.replace(/^(\|.*\|\n)+/gm, "<table header-row=\"true\">\n<tr><td>x</td></tr>\n</table>\n");
+  const pipeToText = (body) => body.replace(/^\|.*\|$/gm, (l) => l.replace(/\|/g, " ").trim());
+
+  test("実物の抜粋（表が | 区切り）：表1・見出し3と数え、タグの表だった基準と同じなら通る", () => {
+    const dir = freshState();
+    expect(runHook("post-fetch", input(fetchResp(pipeToHtml(fixture()))), dir).code).toBe(0); // 基準＝タグの表（旧書式）
+    expect(runHook("post-fetch", input(fetchResp(fixture())), dir).code).toBe(0); // 同じ中身が | の表で返る
+    const base = JSON.parse(fs.readFileSync(path.join(dir, "decision-log.baseline.json"), "utf8"));
+    expect(base.tables).toBe(1);
+    expect(base.headings).toBe(3);
+  });
+
+  test("★ 表が数えられない書式になり、元には表があるときは『数えられない』として止める（今の挙動を維持）", () => {
+    const dir = freshState();
+    runHook("post-fetch", input(fetchResp(fixture())), dir); // 基準＝表1
+    const r = runHook("post-fetch", input(fetchResp(pipeToText(fixture()))), dir); // 表の記号が無くなった形
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("表 1→0");
+    expect(r.err).toContain("数えられなかった");
+  });
+
   test("見出しと表が同じでも、文字数が2%以上減れば止まる。1%の減少は通る", () => {
     const dir = freshState();
     runHook("post-fetch", input(fetchResp(logBody(10, 2, 10000))), dir);
