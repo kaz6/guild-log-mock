@@ -108,6 +108,10 @@ function logBody(headings, tables, extra = 0) {
   parts.push("あ".repeat(extra));
   return parts.join("");
 }
+// fetch の返し方が表を | 区切りの Markdown で返した場合（2026-10-21 に実際に起きた）。表の数は同じに数える
+function logBodyPipe(headings, tables) {
+  return logBody(headings, 0).concat(Array.from({ length: tables }, () => "| 指標 | 旧 |\n| --- | --- |\n| x | y |\n\n").join(""));
+}
 const fetchResp = (body) => [{ type: "text", text: JSON.stringify({ title: "DECISION_LOG", text: `<page>\n<content>\n${body}\n</content>\n</page>` }) }];
 
 test.describe("規則6：正本の量が減っていないか（post-fetch）", () => {
@@ -126,6 +130,15 @@ test.describe("規則6：正本の量が減っていないか（post-fetch）", 
     // 減っているあいだは基準を動かさない（同じ減りを次の fetch でも知らせる）
     expect(runHook("post-fetch", input(fetchResp(logBody(21, 2))), dir).code).toBe(2);
     expect(runHook("post-fetch", input(fetchResp(logBody(21, 3))), dir).code).toBe(0);
+  });
+
+  test("表が | 区切りの書き方で返っても、表の数は同じに数える（タグの表→| の表で『表が消えた』と誤って止まらない）", () => {
+    const dir = freshState();
+    expect(runHook("post-fetch", input(fetchResp(logBody(20, 3))), dir).code).toBe(0); // 基準＝タグの表3
+    expect(runHook("post-fetch", input(fetchResp(logBodyPipe(20, 3))), dir).code).toBe(0); // 同じ3つが | の表で返る
+    const lost = runHook("post-fetch", input(fetchResp(logBodyPipe(20, 2))), dir); // 本当に1つ減ったら止まる
+    expect(lost.code).toBe(2);
+    expect(lost.err).toContain("表 3→2");
   });
 
   test("見出しと表が同じでも、文字数が2%以上減れば止まる。1%の減少は通る", () => {

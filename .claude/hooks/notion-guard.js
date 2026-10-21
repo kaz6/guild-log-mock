@@ -120,7 +120,8 @@ function measure(body) {
   const lines = String(body).split("\n");
   return {
     headings: lines.filter((l) => /^#{1,2} /.test(l) && /\d{4}-\d{2}-\d{2}/.test(l)).length,
-    tables: lines.filter((l) => l.startsWith("<table")).length,
+    // 表は2通りの書き方で返ってくる：<table> タグ（旧）と、| 区切りの Markdown の表（2026-10-21 の fetch から）。区切り行の数で数える
+    tables: lines.filter((l) => l.startsWith("<table") || /^\|(\s*:?-+:?\s*\|)+\s*$/.test(l)).length,
     chars: String(body).length
   };
 }

@@ -21,7 +21,7 @@ function sections(text) {
     const m = line.match(/^#{1,2} (.*)$/);
     if (!m || !/\d{4}-\d{2}-\d{2}/.test(m[1])) continue;
     const date = (m[1].match(/(\d{4}-\d{2}-\d{2})/) || [])[1];
-    const title = m[1].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\d{4}-\d{2}-\d{2}[:：｜]?/g, "").replace(/（[^）]*）/g, "").replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
+    const title = m[1].replace(/<\/?(code|b|s|i|u)>/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\d{4}-\d{2}-\d{2}[:：｜]?/g, "").replace(/（[^）]*）/g, "").replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
     out.push({ raw: m[1], date, key: title.slice(0, 10) });
   }
   return out;
@@ -48,7 +48,7 @@ if (!fs.existsSync(NOTION)) { console.error("docs/backup/DECISION_LOG.notion.md 
 const n = sections(fs.readFileSync(NOTION, "utf8"));
 const r = sections(fs.readFileSync(REPO, "utf8"));
 // 写しの「見出し」に同じ題名の頭がある（日付は写しで付け替えることがあるので、題名の頭だけで見る）。★ 本文中の言及は数えない（言及で欠けが隠れる。pr-review の指摘・2026-10-20）
-const norm = (t) => t.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
+const norm = (t) => t.replace(/<\/?(code|b|s|i|u)>/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[★\s*`~\\{}:：｜「」『』（）()、。・=＝]/g, "");
 const repoText = norm(fs.readFileSync(REPO, "utf8"));
 // 写しの「見出し」に同じ題名の頭が無い節。うち、写しのどこにも題名の頭が出てこないものを「欠け」、本文では言及があるものを「見出しに無い（言及あり）」に分ける
 // ★ 本文中の言及は欠けを隠す（pr-review の指摘・2026-10-20）。だから言及だけで「ある」とは言わず、別の欄に出す
