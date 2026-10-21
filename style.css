@@ -1678,3 +1678,8 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 .room-arrow.right { right: 0; border-right: 0; }
 .room-arrow:disabled { opacity: .25; cursor: default; }
 .room-notice { position: absolute; left: 50px; right: 50px; bottom: 8px; margin: 0; padding: 6px 8px; text-align: center; font-size: 13px; background: var(--paper-sheet, #f3ecdc); border: 1px solid var(--paper-ink, #2b2620); }
+/* 吹き出しの目次（EX-161 段階2）。見た目は仮 */
+.room-bubble { position: absolute; z-index: 2; display: flex; flex-direction: column; min-width: 130px; background: var(--paper-sheet, #f3ecdc); border: 1px solid var(--paper-ink, #2b2620); box-shadow: 0 2px 0 var(--paper-edge, #e4d8bf); }
+.room-bubble-item { min-height: 44px; padding: 8px 14px; font-size: 14px; letter-spacing: .15em; text-align: left; color: var(--paper-ink, #2b2620); background: none; border: 0; border-bottom: 1px solid var(--paper-rule, #cfc3aa); cursor: pointer; }
+.room-bubble-item:last-child { border-bottom: 0; }
+.room-bubble-item:active { background: rgba(43, 38, 32, .08); }

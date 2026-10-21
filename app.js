@@ -1217,6 +1217,7 @@ function setRoute(nextRoute) {
   route = nextRoute;
   editingAdventurerId = null;
   recorderBadgeOpen = false; // 画面を移ったらバッジの紙片は閉じる（開いたまま居座らせない）
+  roomMenu = null;
   roomNotice = ""; // ホームの窓の一言も、画面を移ったら捨てる（戻ってきたときに居残らせない）
   render();
 }
@@ -1968,6 +1969,7 @@ function render() {
     adventurers: "冒険者名簿",
     observations: "報告メモ",
     ecology: "生態目録",
+    ledger: "帳簿",
     report: "報告書",
     result: "帰還報告"
   };
@@ -1978,6 +1980,7 @@ function render() {
   if (route === "adventurers") renderAdventurers();
   if (route === "observations") renderObservations();
   if (route === "ecology") renderEcologyRecord();
+  if (route === "ledger") renderLedger();
   if (route === "report") renderReportDetail(state.activeReportId);
   if (route === "result") renderResult(nextResultReportId());
 }
@@ -2155,10 +2158,14 @@ function moneyEventCardHtml() {
     </section>`;
 }
 
+// 綴じるカードを出す条件（bindCardHtml と、ホームの窓のペンの目次で同じ条件を使う）
+function bindCardShown() {
+  return state.reports.some((report) => report.opened) || readBoundBooks().length > 0;
+}
+
 function bindCardHtml() {
-  const anyOpened = state.reports.some((report) => report.opened);
   const books = readBoundBooks();
-  if (!anyOpened && books.length === 0) return "";
+  if (!bindCardShown()) return "";
   const book = books[0] ?? null;
   const unbound = book ? Math.max(0, state.reports.length - (book.meta?.reportCount ?? 0)) : 0;
   // ① 受付嬢の促し。まだ一度も綴じていない間だけ出す。
@@ -2178,7 +2185,7 @@ function bindCardHtml() {
     ? `<button class="ghost-button" onclick="openBindRestoreConfirm()">Mock用：最後に綴じた記録まで戻る</button>`
     : "";
   return `
-      <section class="card">
+      <section class="card" id="bindCard">
         <div class="card-body">
           <div class="card-title">
             <div>
@@ -2211,16 +2218,29 @@ const ROOM_OBJECTS = [
   { id: "backyard", panel: 0, label: "バックヤード", x: 62, y: 14, w: 32, h: 40 },
   { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology") },
   { id: "board", panel: 1, label: "掲示板", x: 14, y: 12, w: 72, h: 38, act: () => setRoute("quests") },
-  { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14 },
+  { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14, act: () => toggleRoomMenu("papers") },
   { id: "badge", panel: 1, label: "証", x: 66, y: 60, w: 22, h: 14 },
   { id: "shelf", panel: 2, label: "本棚", x: 6, y: 10, w: 44, h: 40 },
   { id: "elsie", panel: 2, label: "エルシーの場所", x: 54, y: 56, w: 40, h: 16 },
   { id: "grave", panel: 2, label: "墓標", x: 56, y: 14, w: 36, h: 36, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
   { id: "pile", panel: 2, label: "書類の山", x: 8, y: 74, w: 36, h: 14, act: () => openReportShelf() },
-  { id: "pen", panel: 2, label: "ペン", x: 62, y: 80, w: 26, h: 10 }
+  { id: "pen", panel: 2, label: "ペン", x: 62, y: 80, w: 26, h: 10, act: () => toggleRoomMenu("pen") }
 ];
+// 吹き出しの目次（段階2）。★ 中身は増減する前提で表にする。act は物と同じ「今ある画面を開く」だけ。
+//   ★ 入口が複数でも開く先は同じ画面（名簿はナビからも書類からも同じ名簿の画面）。show：出す条件（無ければ常に）。
+const ROOM_MENUS = {
+  papers: [
+    { label: "帳簿", act: () => setRoute("ledger") },
+    { label: "名簿", act: () => setRoute("adventurers") }
+  ],
+  pen: [
+    { label: "記録を綴じる", show: () => bindCardShown(), act: () => document.getElementById("bindCard")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" }) },
+    { label: "報告メモ", act: () => setRoute("observations") }
+  ]
+};
 let roomPanel = ROOM_START_PANEL;
 let roomNotice = "";
+let roomMenu = null; // 吹き出しを開いている物の id
 
 function roomWindowHtml() {
   const panels = ROOM_PANELS.map((name, i) => `
@@ -2234,8 +2254,30 @@ function roomWindowHtml() {
       <div class="room-strip" style="transform:translateX(${-roomPanel * 100}%)">${panels}</div>
       <button class="room-arrow left" type="button" aria-label="左へ" onclick="shiftRoom(-1)"${roomPanel === 0 ? " disabled" : ""}>◀</button>
       <button class="room-arrow right" type="button" aria-label="右へ" onclick="shiftRoom(1)"${roomPanel === ROOM_PANELS.length - 1 ? " disabled" : ""}>▶</button>
+      ${roomMenuHtml()}
       <p class="room-notice" role="status"${roomNotice ? "" : " hidden"}>${escapeHtml(roomNotice)}</p>
     </section>`;
+}
+
+function roomMenuHtml() {
+  const o = ROOM_OBJECTS.find((x) => x.id === roomMenu);
+  const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
+  if (!o || o.panel !== roomPanel || items.length === 0) return "";
+  return `<div class="room-bubble" role="menu" style="left:${Math.min(Math.max(o.x, 6), 50)}%;bottom:${100 - o.y + 2}%">${items.map((m, i) =>
+    `<button class="room-bubble-item" type="button" role="menuitem" onclick="tapRoomMenuItem(${i})">${m.label}</button>`).join("")}</div>`;
+}
+
+function toggleRoomMenu(id) {
+  roomMenu = roomMenu === id ? null : id;
+  render();
+}
+
+function tapRoomMenuItem(i) {
+  const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
+  const item = items[i];
+  roomMenu = null;
+  if (item?.act) item.act();
+  if (route === "home") render();
 }
 
 // ★ 1秒ごとの再描画でも位置が戻らないよう、番号は変数で持ち、押したときは全体を描き直さずに動かす（動きも途切れない）
@@ -2244,6 +2286,8 @@ function shiftRoom(dir) {
   if (next === roomPanel) return;
   roomPanel = next;
   roomNotice = "";
+  roomMenu = null;
+  document.querySelector(".room-bubble")?.remove();
   const win = document.querySelector(".room-window");
   if (!win) return;
   win.querySelector(".room-strip").style.transform = `translateX(${-roomPanel * 100}%)`;
@@ -2285,7 +2329,6 @@ function renderHome() {
   app.innerHTML = `
     ${paperSignboardHtml()}
     ${roomWindowHtml()}
-    ${paperMetersHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
     ${trialEndCardHtml()}
@@ -2789,6 +2832,7 @@ function renderQuests() {
             <h3>出発確認</h3>
           </div>
         </div>
+        ${paperMetersHtml()}
         ${selectedQuest ? dispatchSummaryHtml(selectedQuest, state.gameOver ? "ギルドは畳まれている。もう誰も送り出せない。" : expeditionBlock) : `<div class="empty">まず依頼を選んでください。</div>`}
         <div class="button-row" style="margin-top: 16px;">
           <button class="primary-button" ${canStart ? "" : "disabled"} onclick="startExpedition()">遠征開始</button>
@@ -3910,7 +3954,7 @@ function renderReportDetail(reportId) {
 //   紙と打たれた文字と朱の判子。★ 見た目だけ（遊びの仕組み・データ・報告書の文面は変えない）。
 //   ★ Unity で UI は全面に差し替える前提（2026-09-21）。作り込みすぎない＝移るのは方向で、この実装ではない。
 //   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。報告書を読む画面（段階1）→ 拠点＝home（段階2）→ 依頼掲示板＝quests → 帰還報告＝result → 冒険者名簿＝adventurers → 生態目録＝ecology → 報告メモ＝observations（EX-157）。
-const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers", "ecology", "observations"];
+const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers", "ecology", "observations", "ledger"];
 
 // 封蝋（EX-159。2026-10-19 に朱の判子から替えた）。丸く垂れた蝋に、亀甲（六角）の押し跡。
 //   ★ 色は朱（インクの3色は崩さない。戦闘の朱と封蝋の朱は同じ色）。陰影は同じ朱の明暗だけで付ける。
@@ -3928,6 +3972,16 @@ const HANKO_KIKKO_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true">'
 //   性格値・親愛・未読件数は計器にしない（数値で出さない方針）。
 function paperSignboardHtml() {
   return `<div class="paper-signboard"><div class="name">西端ギルド</div><div class="kana">遠征報告受付</div></div>`;
+}
+
+// 帳簿（EX-161 段階2）。★ ホームから外した計器（所持金・持ち物・在席）の置き場。未読件数は出さない。
+function renderLedger() {
+  app.innerHTML = `
+    ${paperMetersHtml()}
+    ${walletCardHtml()}
+    <div class="button-row" style="margin-top: 14px;">
+      <button class="secondary-button" onclick="setRoute('home')">ギルドへ戻る</button>
+    </div>`;
 }
 
 function paperMetersHtml() {

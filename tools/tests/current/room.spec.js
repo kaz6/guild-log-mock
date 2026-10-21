@@ -38,7 +38,7 @@ test.describe("ホームの窓（EX-161）", () => {
     // 押すと報告書棚が見える位置まで動く（画面は home のまま）
     await page.waitForTimeout(700);
     expect(await page.evaluate(() => { const r = document.getElementById("reportShelf").getBoundingClientRect(); return r.top >= 0 && r.top < window.innerHeight; })).toBe(true);
-    for (const id of ["shelf", "badge", "counter", "backyard", "receptionist", "papers", "pen", "elsie"]) {
+    for (const id of ["shelf", "badge", "counter", "backyard", "receptionist", "elsie"]) {
       await expect(page.locator(`button[data-room-object="${id}"]`)).toHaveCount(0);
     }
     expect(errors).toEqual([]);
@@ -67,5 +67,48 @@ test.describe("ホームの窓（EX-161）", () => {
       return document.querySelector(".reception .speech").getBoundingClientRect().top >= w;
     });
     expect(order).toBe(true);
+  });
+});
+
+test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
+  test("書類→帳簿／名簿、ペン→報告メモ。入口が違っても開く先は同じ画面", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.locator('[data-room-object="papers"]').click({ force: true });
+    await expect(page.locator(".room-bubble-item")).toHaveText(["帳簿", "名簿"]);
+    await page.locator(".room-bubble-item", { hasText: "帳簿" }).click();
+    expect(await page.evaluate(() => route)).toBe("ledger");
+    await expect(page.locator(".paper-meter")).toHaveCount(3);
+    await page.evaluate(() => setRoute("home"));
+    await page.locator('[data-room-object="papers"]').click({ force: true });
+    await page.locator(".room-bubble-item", { hasText: "名簿" }).click();
+    const viaPapers = await page.evaluate(() => ({ route, title: document.getElementById("viewTitle").textContent }));
+    await page.evaluate(() => setRoute("home"));
+    await page.locator('[data-route="adventurers"]').click();
+    const viaNav = await page.evaluate(() => ({ route, title: document.getElementById("viewTitle").textContent }));
+    expect(viaPapers).toEqual(viaNav);
+    await page.evaluate(() => { setRoute("home"); roomPanel = 2; render(); });
+    await page.locator('[data-room-object="pen"]').click({ force: true });
+    // 綴じるカードは最初の報告書を開くまで出ない＝目次にも出さない
+    await expect(page.locator(".room-bubble-item")).toHaveText(["報告メモ"]);
+    await page.locator(".room-bubble-item", { hasText: "報告メモ" }).click();
+    expect(await page.evaluate(() => route)).toBe("observations");
+    expect(errors).toEqual([]);
+  });
+
+  test("ホームの計器は外れ、帳簿と出発の画面に出る。1秒の再描画でも吹き出しは残り、枠を移すと閉じる", async ({ page }) => {
+    await freshPage(page);
+    await interview(page);
+    await expect(page.locator("#app > .paper-meters")).toHaveCount(0);
+    await page.evaluate(() => setRoute("quests"));
+    await expect(page.locator(".paper-meters")).toContainText("所持金");
+    await expect(page.locator(".paper-meters")).toContainText("持ち物");
+    await expect(page.locator(".paper-meters")).toContainText("在席");
+    await page.evaluate(() => { setRoute("home"); });
+    await page.locator('[data-room-object="papers"]').click({ force: true });
+    await page.waitForTimeout(1300);
+    await expect(page.locator(".room-bubble")).toHaveCount(1);
+    await page.locator(".room-arrow.right").click();
+    await expect(page.locator(".room-bubble")).toHaveCount(0);
   });
 });
