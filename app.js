@@ -4555,6 +4555,8 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
   const post = findByTrait(party, "background", "郵便配達人");
   const has = (id) => itemIds.includes(id);
   const name = (adv) => getDisplayName(adv);
+  // 2つ目の主語が前の主語と同じ人のときは省く（「ミナが枝を払い、ミナが探した」→「ミナが枝を払い、探した」。別の人のときは名前を出す）
+  const sameOrName = (next, prev) => (next === prev ? "" : `${name(next)}が`);
   // 封蝋で「止めた側」。触ろうとした側（warrior）と同じ人にならないようにする（2026-10-21）。他にいなければ null（ひとり向けの文にする）
   const stopper = scout !== warrior ? scout : humans.find((adv) => adv !== warrior) ?? null;
 
@@ -4594,7 +4596,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     倒木: [
       soloStyle
         ? `倒木が道をふさいでいた。${name(warrior)}が枝を払い、自分で安全な迂回路を確かめた。`
-        : `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${name(scout)}が安全な迂回路を探した。`,
+        : `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${sameOrName(scout, warrior)}安全な迂回路を探した。`,
       `古い倒木の裏側に、泥被り茸がいくつか生えていた。${name(herbalist)}は無理に引き抜かず、根元の土ごと採取した。`
     ],
     森喰い兎: [
@@ -4616,7 +4618,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     道標の傾き: [
       soloStyle
         ? `道標は片側へ傾いていた。${name(warrior)}は支えながら、反対の手で根元の土を確認した。`
-        : `道標は片側へ傾いていた。${name(warrior)}が支え、${name(scout)}が根元の土を確認した。`,
+        : `道標は片側へ傾いていた。${name(warrior)}が支え、${sameOrName(scout, warrior)}根元の土を確認した。`,
       `傾いた道標は、近づいてみるとまだ読めた。文字の向きだけが少し怪しい。`
     ],
     苔に隠れた文字: [
@@ -5189,7 +5191,9 @@ function questOutcomeText(questId, key, party, itemIds, fallbackKey) {
   if (!entry) return null;
   const quest = window.masterQuests.find((q) => q.id === questId);
   const slots = outcomeSlotValues(quest, party);
-  const fill = (text) => (typeof text === "string" ? text.replace(/\{[^}]+\}/g, (m) => slots[m] ?? m) : text);
+  // 同じ人が続けて主語になるとき（「{斥候}が…、{薬草師}が…」で両方が同じ名前）は、2つ目の主語を省く
+  const dropRepeatedSubject = (text) => text.replace(/(\{[^}]+\})が([^、。{]*)、(\{[^}]+\})が/g, (m, x, mid, y) => (slots[x] !== undefined && slots[x] === slots[y] ? `${x}が${mid}、` : m));
+  const fill = (text) => (typeof text === "string" ? dropRepeatedSubject(text).replace(/\{[^}]+\}/g, (m) => slots[m] ?? m) : text);
   return {
     result: entry.result,
     summary: fill(outcomeTextPart(entry.summary, party, itemIds)),

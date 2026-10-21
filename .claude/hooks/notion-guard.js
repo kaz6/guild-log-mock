@@ -157,7 +157,10 @@ function checkShrink(resp) {
   const lost = [];
   if (base && !base.accept) {
     if (now.headings < base.headings) lost.push(`見出し ${base.headings}→${now.headings}`);
-    if (now.tables < base.tables) lost.push(`表 ${base.tables}→${now.tables}`);
+    if (now.tables < base.tables) {
+      // 表を1つも数えられないとき：書式が変わって数えられないだけの可能性が高い（2026-10-21 に | 区切りで実際に起きた）。止める挙動は維持して、疑う先を添える
+      lost.push(`表 ${base.tables}→${now.tables}` + (now.tables === 0 ? "（表を1つも数えられなかった。fetch の表の書式が変わって数えられないだけの可能性もある。本文に表が残っているかを見て、measure の数え方を直すこと）" : ""));
+    }
     if (now.chars < base.chars * (1 - SHRINK_CHAR_RATIO)) lost.push(`文字数 ${base.chars}→${now.chars}（${Math.round((1 - now.chars / base.chars) * 1000) / 10}%減）`);
   }
   if (lost.length === 0) {
