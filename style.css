@@ -1661,3 +1661,20 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 
 /* Mock の道具は既定では隠す（EX-158）。`hidden` は author の display 指定に負けるので、印のついたものだけ強制する */
 [data-dev-only][hidden] { display: none !important; }
+
+/* ── ホームの窓（2026-10-22・EX-161 段階1）──────────────────────────────────
+   縦長の3枚を横に並べ、窓で1枚ずつ見る。絵は仮（枠と文字ラベルだけ）。
+   ★ 高さは --room-h（あとで決める）。★ 枠の見せ方は .room-frame だけ（差し替えはここ）。 */
+.room-window { --room-h: 50vh; position: relative; overflow: hidden; height: var(--room-h); min-height: 280px; margin: 10px 0; background: var(--paper-sheet, #f3ecdc); border: 1px solid var(--paper-ink, #2b2620); }
+.room-strip { display: flex; width: 100%; height: 100%; transition: transform .35s ease; }
+@media (prefers-reduced-motion: reduce) { .room-strip { transition: none; } }
+.room-panel { position: relative; flex: 0 0 100%; height: 100%; }
+.room-thing { position: absolute; display: flex; align-items: center; justify-content: center; color: var(--paper-soft, #6d6355); font-size: 12px; letter-spacing: .2em; opacity: .55; pointer-events: none; }
+.room-hit { position: absolute; display: block; padding: 0; background: none; border: 0; cursor: pointer; color: var(--paper-ink, #2b2620); -webkit-tap-highlight-color: transparent; }
+.room-frame { position: absolute; inset: 3%; display: flex; align-items: center; justify-content: center; border: 1px solid var(--paper-ink, #2b2620); font-size: 13px; letter-spacing: .2em; }
+.room-hit:active .room-frame, .room-hit:focus-visible .room-frame { background: rgba(43, 38, 32, .08); }
+.room-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 56px; padding: 0; font-size: 18px; color: var(--paper-ink, #2b2620); background: rgba(243, 236, 220, .85); border: 1px solid var(--paper-ink, #2b2620); cursor: pointer; }
+.room-arrow.left { left: 0; border-left: 0; }
+.room-arrow.right { right: 0; border-right: 0; }
+.room-arrow:disabled { opacity: .25; cursor: default; }
+.room-notice { position: absolute; left: 50px; right: 50px; bottom: 8px; margin: 0; padding: 6px 8px; text-align: center; font-size: 13px; background: var(--paper-sheet, #f3ecdc); border: 1px solid var(--paper-ink, #2b2620); }

@@ -2196,6 +2196,77 @@ function bindCardHtml() {
       </section>`;
 }
 
+// ── ホームの窓（2026-10-22・EX-161 段階1）────────────────────────────────────
+//   ★ 縦長の3枚（左・真ん中・右）を ▶◀ で切り替える。絵はまだ無いので仮の線画（枠と文字ラベル）。
+//   ★ 見た目と導線だけ。遊びの仕組み・データは変えない。物は表（ROOM_OBJECTS）で持つ。
+//   ★ 枠は「触れる物」だけに出す（枠の見せ方は .room-frame に集約＝後で差し替えやすい）。触れる範囲（.room-hit）は枠より大きい。
+//   ★ 窓の高さは変数 --room-h（style.css）。
+const ROOM_PANELS = ["左", "真ん中", "右"];
+const ROOM_START_PANEL = 1; // 起動時は真ん中（仮）
+// act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
+const ROOM_OBJECTS = [
+  { id: "receptionist", panel: 0, label: "受付嬢", x: 8, y: 14, w: 40, h: 34 },
+  { id: "counter", panel: 0, label: "カウンター", x: 4, y: 52, w: 56, h: 14 },
+  { id: "backyard", panel: 0, label: "バックヤード", x: 62, y: 14, w: 32, h: 40 },
+  { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology") },
+  { id: "board", panel: 1, label: "掲示板", x: 14, y: 12, w: 72, h: 38, act: () => setRoute("quests") },
+  { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14 },
+  { id: "badge", panel: 1, label: "証", x: 66, y: 60, w: 22, h: 14 },
+  { id: "shelf", panel: 2, label: "本棚", x: 6, y: 10, w: 44, h: 40 },
+  { id: "elsie", panel: 2, label: "エルシーの場所", x: 54, y: 56, w: 40, h: 16 },
+  { id: "grave", panel: 2, label: "墓標", x: 56, y: 14, w: 36, h: 36, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
+  { id: "pile", panel: 2, label: "書類の山", x: 8, y: 74, w: 36, h: 14, act: () => openReportShelf() },
+  { id: "pen", panel: 2, label: "ペン", x: 62, y: 80, w: 26, h: 10 }
+];
+let roomPanel = ROOM_START_PANEL;
+let roomNotice = "";
+
+function roomWindowHtml() {
+  const panels = ROOM_PANELS.map((name, i) => `
+      <div class="room-panel" data-room-panel="${i}" aria-label="${name}">
+        ${ROOM_OBJECTS.filter((o) => o.panel === i && (!o.show || o.show())).map((o) => o.act
+          ? `<button class="room-hit" type="button" data-room-object="${o.id}" style="left:${o.x - 3}%;top:${o.y - 3}%;width:${o.w + 6}%;height:${o.h + 6}%" onclick="tapRoomObject('${o.id}')"><span class="room-frame">${o.label}</span></button>`
+          : `<span class="room-thing" data-room-object="${o.id}" style="left:${o.x}%;top:${o.y}%;width:${o.w}%;height:${o.h}%">${o.label}</span>`).join("")}
+      </div>`).join("");
+  return `
+    <section class="room-window" aria-label="ギルドの中">
+      <div class="room-strip" style="transform:translateX(${-roomPanel * 100}%)">${panels}</div>
+      <button class="room-arrow left" type="button" aria-label="左へ" onclick="shiftRoom(-1)"${roomPanel === 0 ? " disabled" : ""}>◀</button>
+      <button class="room-arrow right" type="button" aria-label="右へ" onclick="shiftRoom(1)"${roomPanel === ROOM_PANELS.length - 1 ? " disabled" : ""}>▶</button>
+      <p class="room-notice" role="status"${roomNotice ? "" : " hidden"}>${escapeHtml(roomNotice)}</p>
+    </section>`;
+}
+
+// ★ 1秒ごとの再描画でも位置が戻らないよう、番号は変数で持ち、押したときは全体を描き直さずに動かす（動きも途切れない）
+function shiftRoom(dir) {
+  const next = Math.max(0, Math.min(ROOM_PANELS.length - 1, roomPanel + dir));
+  if (next === roomPanel) return;
+  roomPanel = next;
+  roomNotice = "";
+  const win = document.querySelector(".room-window");
+  if (!win) return;
+  win.querySelector(".room-strip").style.transform = `translateX(${-roomPanel * 100}%)`;
+  win.querySelector(".room-arrow.left").disabled = roomPanel === 0;
+  win.querySelector(".room-arrow.right").disabled = roomPanel === ROOM_PANELS.length - 1;
+  const note = win.querySelector(".room-notice");
+  if (note) note.hidden = true;
+}
+
+function tapRoomObject(id) {
+  const o = ROOM_OBJECTS.find((x) => x.id === id);
+  if (o?.act) o.act();
+}
+
+function showRoomNotice(text) {
+  roomNotice = text;
+  render();
+}
+
+// 届いた報告書（ホームの報告書棚）へ。★ 今ある画面を開くだけ（新しい画面は作らない）
+function openReportShelf() {
+  document.getElementById("reportShelf")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+}
+
 function renderHome() {
   const unopened = state.reports.filter((report) => !report.opened);
   const latestReports = state.reports.slice(0, 3);
@@ -2212,6 +2283,7 @@ function renderHome() {
 
   app.innerHTML = `
     ${paperSignboardHtml()}
+    ${roomWindowHtml()}
     ${paperMetersHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
@@ -2261,7 +2333,7 @@ function renderHome() {
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="reportShelf">
         <div class="card-body">
           <div class="card-title">
             <div>
