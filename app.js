@@ -2230,12 +2230,12 @@ const ROOM_OBJECTS = [
 //   ★ 入口が複数でも開く先は同じ画面（名簿はナビからも書類からも同じ名簿の画面）。show：出す条件（無ければ常に）。
 const ROOM_MENUS = {
   papers: [
-    { label: "帳簿", act: () => setRoute("ledger") },
-    { label: "名簿", act: () => setRoute("adventurers") }
+    { id: "ledger", label: "帳簿", act: () => setRoute("ledger") },
+    { id: "roster", label: "名簿", act: () => setRoute("adventurers") }
   ],
   pen: [
-    { label: "記録を綴じる", show: () => bindCardShown(), act: () => document.getElementById("bindCard")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" }) },
-    { label: "報告メモ", act: () => setRoute("observations") }
+    { id: "bind", label: "記録を綴じる", show: () => bindCardShown(), act: () => document.getElementById("bindCard")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" }) },
+    { id: "memo", label: "報告メモ", act: () => setRoute("observations") }
   ]
 };
 let roomPanel = ROOM_START_PANEL;
@@ -2263,8 +2263,8 @@ function roomMenuHtml() {
   const o = ROOM_OBJECTS.find((x) => x.id === roomMenu);
   const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
   if (!o || o.panel !== roomPanel || items.length === 0) return "";
-  return `<div class="room-bubble" role="menu" style="left:${Math.min(Math.max(o.x, 6), 50)}%;bottom:${100 - o.y + 2}%">${items.map((m, i) =>
-    `<button class="room-bubble-item" type="button" role="menuitem" onclick="tapRoomMenuItem(${i})">${m.label}</button>`).join("")}</div>`;
+  return `<div class="room-bubble" role="menu" style="${o.x > 50 ? `right:${Math.max(100 - o.x - o.w, 2)}%` : `left:${Math.max(o.x, 2)}%`};bottom:${100 - o.y + 2}%">${items.map((m) =>
+    `<button class="room-bubble-item" type="button" role="menuitem" onclick="tapRoomMenuItem('${m.id}')">${m.label}</button>`).join("")}</div>`;
 }
 
 function toggleRoomMenu(id) {
@@ -2272,12 +2272,13 @@ function toggleRoomMenu(id) {
   render();
 }
 
-function tapRoomMenuItem(i) {
-  const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
-  const item = items[i];
+// ★ 項目は添字でなく id で引く（1秒ごとの再描画で条件が変わっても、押した項目がずれない）。
+//   ★ 閉じるときは描き直さず吹き出しだけ外す（綴じるカードへのスクロールを再描画で途切れさせない）
+function tapRoomMenuItem(id) {
+  const item = (ROOM_MENUS[roomMenu] ?? []).find((m) => m.id === id);
   roomMenu = null;
+  document.querySelector(".room-bubble")?.remove();
   if (item?.act) item.act();
-  if (route === "home") render();
 }
 
 // ★ 1秒ごとの再描画でも位置が戻らないよう、番号は変数で持ち、押したときは全体を描き直さずに動かす（動きも途切れない）

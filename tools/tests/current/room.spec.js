@@ -111,4 +111,21 @@ test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
     await page.locator(".room-arrow.right").click();
     await expect(page.locator(".room-bubble")).toHaveCount(0);
   });
+
+  test("ペン→記録を綴じる：報告書を開いたあとは目次に出て、綴じるカードまで動く", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => {
+      const r = generateReport({ questId: "quest_tavern_errand", adventurerIds: ["adv_mina"], adventurerItemIds: {}, seed: 1, departTimeOfDay: "昼", departWeather: "晴れ", startTime: 0, durationMs: 1 });
+      r.id = "report_room_bind"; r.opened = true;
+      state.reports.unshift(r); roomPanel = 2; render();
+    });
+    await page.locator('[data-room-object="pen"]').click({ force: true });
+    await expect(page.locator(".room-bubble-item")).toHaveText(["記録を綴じる", "報告メモ"]);
+    await page.locator(".room-bubble-item", { hasText: "記録を綴じる" }).click();
+    await page.waitForTimeout(900);
+    await expect(page.locator(".room-bubble")).toHaveCount(0);
+    expect(await page.evaluate(() => { const r = document.getElementById("bindCard").getBoundingClientRect(); return r.top >= 0 && r.top < window.innerHeight; })).toBe(true);
+    expect(errors).toEqual([]);
+  });
 });
