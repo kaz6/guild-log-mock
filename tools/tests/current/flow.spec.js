@@ -25,7 +25,7 @@ test.describe.serial("CLAUDE.md の動作確認8項目", () => {
     await expect(page.getByText("面接を始める").first()).toBeVisible();
   });
 
-  test("② 名前入力・気質選択を終えるとホーム画面（受付嬢）に移る", async () => {
+  test("② 名前入力・志望動機を終えるとホーム画面（受付嬢）に移る", async () => {
     await interview(page, "カズ");
     const txt = await page.evaluate(() => document.body.innerText);
     expect(txt).toContain("依頼を選ぶ");

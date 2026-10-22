@@ -22,17 +22,23 @@ async function freshPage(page) {
   return errors;
 }
 
-// 面接（名前 → 気質 → 記録）を通す。
+// 面接を通す（2026-10-23・EX-162 で台本の確定稿に合わせた）。
+//   名前 → 志望動機（返事だけ・保存しない）→ 名簿の記録は「あとで」で飛ばす。★ name を空にすると無記名（記録員）の道を通る。
 async function interview(page, name = "カズ") {
-  await page.getByText("面接を始める").first().click();
-  await page.waitForTimeout(250);
+  const click = async (text) => {
+    await page.getByRole("button", { name: text, exact: true }).first().click();
+    await page.waitForTimeout(150);
+  };
+  await click("面接を始める");
   await page.locator("#interviewNameInput").fill(name);
-  await page.getByText("次へ").first().click();
-  await page.waitForTimeout(250);
-  await page.getByText("記録好き").first().click();
-  await page.waitForTimeout(400);
-  await page.getByText("名簿に記録する").first().click();
-  await page.waitForTimeout(600);
+  await click("次へ");
+  if (!name) await click("このまま進む"); else await click("次へ");
+  await click("お金のため");
+  for (let i = 0; i < 7; i++) await click("次へ"); // 返事 → 合格 → 福利厚生 → バッジ → 名乗り → 扉の音 → 皆の挨拶
+  await click("あとで");
+  await click("次へ");
+  await click("はい");
+  await page.waitForTimeout(450);
 }
 
 // 掲示板に並んでいる依頼の題名。
