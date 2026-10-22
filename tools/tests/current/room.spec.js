@@ -38,7 +38,7 @@ test.describe("ホームの窓（EX-161）", () => {
     // 押すと報告書棚が見える位置まで動く（画面は home のまま）
     await page.waitForTimeout(700);
     expect(await page.evaluate(() => { const r = document.getElementById("reportShelf").getBoundingClientRect(); return r.top >= 0 && r.top < window.innerHeight; })).toBe(true);
-    for (const id of ["shelf", "badge", "counter", "backyard", "receptionist", "elsie"]) {
+    for (const id of ["shelf", "badge", "counter", "backyard"]) {
       await expect(page.locator(`button[data-room-object="${id}"]`)).toHaveCount(0);
     }
     expect(errors).toEqual([]);
@@ -126,6 +126,25 @@ test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
     await page.waitForTimeout(900);
     await expect(page.locator(".room-bubble")).toHaveCount(0);
     expect(await page.evaluate(() => { const r = document.getElementById("bindCard").getBoundingClientRect(); return r.top >= 0 && r.top < window.innerHeight; })).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("受付嬢とエルシーをタップすると一言（仮）が出て、押すたびに替わる", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const notice = page.locator(".room-notice");
+    await page.evaluate(() => { roomPanel = 0; render(); });
+    await page.locator('button[data-room-object="receptionist"]').click({ force: true });
+    await expect(notice).toHaveText("はい、なんでしょう。");
+    await page.locator('button[data-room-object="receptionist"]').click({ force: true });
+    await expect(notice).toHaveText("記録係さん、今日もお疲れさまです。");
+    await page.locator(".room-arrow.right").click();
+    await page.locator(".room-arrow.right").click();
+    await expect(notice).toBeHidden();
+    await page.locator('button[data-room-object="elsie"]').click({ force: true });
+    await expect(notice).toHaveText("エルシーは尻尾を振った。");
+    await page.locator('button[data-room-object="elsie"]').click({ force: true });
+    await expect(notice).toHaveText("撫でると、エルシーは目を細めた。");
     expect(errors).toEqual([]);
   });
 });

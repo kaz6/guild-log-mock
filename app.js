@@ -2213,7 +2213,7 @@ const ROOM_PANELS = ["左", "真ん中", "右"];
 const ROOM_START_PANEL = 1; // 起動時は真ん中（仮）
 // act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
 const ROOM_OBJECTS = [
-  { id: "receptionist", panel: 0, label: "受付嬢", x: 8, y: 14, w: 40, h: 34 },
+  { id: "receptionist", panel: 0, label: "受付嬢", x: 8, y: 14, w: 40, h: 34, act: () => tapRoomReaction("receptionist") },
   { id: "counter", panel: 0, label: "カウンター", x: 4, y: 52, w: 56, h: 14 },
   { id: "backyard", panel: 0, label: "バックヤード", x: 62, y: 14, w: 32, h: 40 },
   { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology") },
@@ -2221,7 +2221,7 @@ const ROOM_OBJECTS = [
   { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14, act: () => toggleRoomMenu("papers") },
   { id: "badge", panel: 1, label: "証", x: 66, y: 60, w: 22, h: 14 },
   { id: "shelf", panel: 2, label: "本棚", x: 6, y: 10, w: 44, h: 40 },
-  { id: "elsie", panel: 2, label: "エルシーの場所", x: 54, y: 56, w: 40, h: 16 },
+  { id: "elsie", panel: 2, label: "エルシーの場所", x: 54, y: 56, w: 40, h: 16, act: () => tapRoomReaction("elsie") },
   { id: "grave", panel: 2, label: "墓標", x: 56, y: 14, w: 36, h: 36, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
   { id: "pile", panel: 2, label: "書類の山", x: 8, y: 74, w: 36, h: 14, act: () => openReportShelf() },
   { id: "pen", panel: 2, label: "ペン", x: 62, y: 80, w: 26, h: 10, act: () => toggleRoomMenu("pen") }
@@ -2238,6 +2238,20 @@ const ROOM_MENUS = {
     { id: "memo", label: "報告メモ", act: () => setRoute("observations") }
   ]
 };
+// タップの反応（段階3）。★ 文面は仮（チャット側が後で書き直す）。表で持ち、押すたびに順に替える（乱数は使わない）。
+const ROOM_REACTIONS = {
+  receptionist: ["はい、なんでしょう。", "記録係さん、今日もお疲れさまです。"],
+  elsie: ["エルシーは尻尾を振った。", "撫でると、エルシーは目を細めた。"]
+};
+const roomReactionCount = {};
+function tapRoomReaction(id) {
+  const lines = ROOM_REACTIONS[id] ?? [];
+  if (lines.length === 0) return;
+  const n = roomReactionCount[id] ?? 0;
+  roomReactionCount[id] = n + 1;
+  showRoomNotice(lines[n % lines.length]);
+}
+
 let roomPanel = ROOM_START_PANEL;
 let roomNotice = "";
 let roomMenu = null; // 吹き出しを開いている物の id
