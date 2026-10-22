@@ -465,15 +465,19 @@ let editingAdventurerId = null;
 let departRefusal = null;
 let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
 
-// オープニング面接: プレイヤー（記録係）の気質選択肢。tags は将来の受付嬢・冒険者の会話反映用。
-const PLAYER_PERSONALITIES = [
-  { key: "careful", label: "慎重", blurb: "石橋を叩いてから渡る方だ。", tags: ["慎重", "確認", "安全"] },
-  { key: "bold", label: "大胆", blurb: "考えるより先に、まず動く。", tags: ["大胆", "即断", "前進"] },
-  { key: "caring", label: "世話好き", blurb: "人を放っておけない。", tags: ["世話焼き", "気配り", "仲間"] },
-  { key: "recorder", label: "記録好き", blurb: "細かいことも書き留めたくなる。", tags: ["記録", "観察", "細部"] }
+// オープニング面接（2026-10-23・EX-162）。★ 文面は Notion「オープニング面接の台本（確定稿・2026-10-23）」
+//   （401a8a5dfd458167858af138886f724c）が正本。一字一句そのまま写す。直したいときは台本の側を直してから。
+//   ★ 旧実装の「気質」の選択は台本に無いので無くした（state.player の形は旧セーブのために残す）。
+// 志望動機の返事。★ 返事を出すだけで、選んだ内容は保存しない（作者の指示）。
+const INTERVIEW_MOTIVES = [
+  { label: "お金のため", reply: ["お金はだいじですからね！", "ただ、あんまり稼げるお仕事じゃないかもですね！"] },
+  { label: "家が近いから", reply: ["正直でいいですね！私はここに住んでるので、ご近所さんですね！"] },
+  { label: "この地域に興味あって", reply: ["わかります！わたしもそうなんですよ！まだまだ未開拓なのはこちらの方角ですからね！"] }
 ];
+// 無記名のときの呼び名（台本の指定）。
+const INTERVIEW_UNNAMED = "記録員";
 let interviewStep = 0;
-let interviewDraft = { name: "", personality: null };
+let interviewDraft = { name: "", unnamed: false, motive: null };
 // バッジを開いているか／光らせるか。どちらも画面だけの一時状態で保存しない。
 // ★ 光る状態はオープニング再演出のために形だけ用意したもので、今はどこからも on にしていない。
 let recorderBadgeOpen = false;
@@ -2001,23 +2005,37 @@ function renderInterview() {
       </div>
     </section>
   `;
+  // 台本の1段落＝吹き出し1つ。段落の中の改行はそのまま改行にする。
+  const speech = (...paragraphs) => paragraphs
+    .map((lines, i) => `<div class="speech"${i > 0 ? ' style="margin-top: 12px;"' : ""}>${lines.join("<br>")}</div>`)
+    .join("");
+  const next = (label = "次へ") => `
+      <div class="button-row" style="margin-top: 16px;">
+        <button class="primary-button" onclick="interviewNext()">${label}</button>
+      </div>`;
+  const name = escapeHtml(interviewDraft.name);
 
   if (interviewStep === 0) {
     app.innerHTML = receptionCard(`
-      <div class="speech">ようこそ、遠征ギルドへ。本日はギルドの<strong>記録係</strong>の面接にお越しいただきました。わたしはこのギルドの受付を務めています。……といっても、堅い面接ではありません。少しだけ、お話を伺わせてください。</div>
-      <div class="button-row" style="margin-top: 16px;">
-        <button class="primary-button" onclick="interviewBegin()">面接を始める</button>
-      </div>
+      ${speech(
+        ["ようこそ、西端ギルドへ！"],
+        ["本日は記録員の面接にお越しいただきありがとうございます！", "よろしくお願いしますね！"]
+      )}
+      ${next("面接を始める")}
     `);
     return;
   }
 
   if (interviewStep === 1) {
     app.innerHTML = receptionCard(`
-      <div class="speech">まず、お名前を伺ってもよろしいですか。この名簿に、記録係として書き留めておきます。</div>
+      ${speech([
+        "こんなご時世に、西の端まで来てくれる方なんて、なかなかいなくて。",
+        "あら、履歴書にお名前が書いてありませんね…",
+        "すみません。あなたのことは何とお呼びすればよいでしょうか？"
+      ])}
       <div class="form-row" style="margin-top: 14px;">
         <label for="interviewNameInput">お名前</label>
-        <input id="interviewNameInput" type="text" maxlength="24" placeholder="記録係の名前" value="${escapeHtml(interviewDraft.name)}" />
+        <input id="interviewNameInput" type="text" maxlength="24" placeholder="${INTERVIEW_UNNAMED}" value="${interviewDraft.unnamed ? "" : name}" />
       </div>
       <div class="button-row" style="margin-top: 14px;">
         <button class="primary-button" onclick="interviewSubmitName()">次へ</button>
@@ -2033,63 +2051,211 @@ function renderInterview() {
   }
 
   if (interviewStep === 2) {
+    // 無記名のときは名前の欄へ戻れる（台本の注記「そのまま進むと、以後『記録員さん』と呼ぶ」）。
+    app.innerHTML = receptionCard(interviewDraft.unnamed
+      ? `
+      ${speech(["記録員さんでいいんですか？", "お名前は大事ですよ〜？"])}
+      <div class="button-row" style="margin-top: 16px;">
+        <button class="primary-button" onclick="interviewNext()">このまま進む</button>
+        <button class="secondary-button" onclick="interviewBackToName()">名前を書く</button>
+      </div>`
+      : `
+      ${speech([`${name}さん、とおっしゃるんですね！`, "よろしくお願いしますね！"])}
+      ${next()}`);
+    return;
+  }
+
+  if (interviewStep === 3) {
     app.innerHTML = receptionCard(`
-      <div class="speech">${escapeHtml(interviewDraft.name)}さん、ですね。差し支えなければ、ご自身の気質を一つだけ選んでいただけますか。……ええ、面接の形として伺うだけですので、正解はありません。</div>
+      ${speech(["早速ですが、志望動機を教えてください！"])}
       <div class="button-row" style="margin-top: 16px; flex-wrap: wrap; gap: 10px;">
-        ${PLAYER_PERSONALITIES.map((p) => `<button class="secondary-button" onclick="interviewPickPersonality('${p.key}')" title="${escapeHtml(p.blurb)}">${escapeHtml(p.label)}</button>`).join("")}
+        ${INTERVIEW_MOTIVES.map((m, i) => `<button class="secondary-button" onclick="interviewPickMotive(${i})">${escapeHtml(m.label)}</button>`).join("")}
       </div>
     `);
     return;
   }
 
-  const chosen = PLAYER_PERSONALITIES.find((p) => p.key === interviewDraft.personality);
+  if (interviewStep === 4) {
+    const motive = INTERVIEW_MOTIVES[interviewDraft.motive] ?? INTERVIEW_MOTIVES[0];
+    app.innerHTML = receptionCard(`${speech(motive.reply)}${next()}`);
+    return;
+  }
+
+  if (interviewStep === 5) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["それでは、面接の結果は後日郵送にてお送りを……いたしません！"],
+        ["合格です！", "あなたのお人柄ならしっかりやっていただけると！私のカンがそう言ってます！", "人事権は私にありますので、文句なしです！"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 6) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["ギルドは福利厚生もしっかりしてますからね。有給、育休に加え、組合積立、10年以上のお勤めで退職金に色も着きますよ！"],
+        ["末永くお勤めしてもらえるよう、私も精一杯サポートしますので、これからよろしくお願いしますね！"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 7) {
+    app.innerHTML = receptionCard(`
+      ${speech(["そして、こちらが<strong>記録員バッジ</strong>！", "正式なギルドの記録員である証です！無くしちゃダメですよ！"])}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 8) {
+    app.innerHTML = receptionCard(`
+      ${speech([
+        "……私の名前ですか？そうですね、申し遅れました！",
+        "私の名前は<strong>アルメナ</strong>といいます！",
+        `しっかり覚えてくださいね！${name}さん！私はしっかり覚えちゃいましたよ〜！`
+      ])}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 9) {
+    // 【ドア音】は音を鳴らさず、1行の演出にする（作者の指示）。
+    // ★ 話し手の表示は、名乗った（紹介された）あとの行から名前に切り替える（台本の決めごと）。
+    //   切り替えのきっかけ：ガッド＝「あ！ガッドさん！」／ミナ・エルネ・ロウ＝本人の名乗りの行／エルシー＝「この子はエルシーっていいます。」。
+    //   名乗りの行そのものは元の表示（男・女性など）のまま。今の台本ではガッド以外は名乗ったあとに話さない。
+    app.innerHTML = receptionCard(`
+      <p class="muted">（扉の音）</p>
+      ${speech(
+        ["男:よう、帰ったぜ。看板も掛けたし、だいたいサマになったんじゃないか？"],
+        ["あ！ガッドさん！ありがとうございます！"],
+        [`こちらは本日からここの記録員として配属された、${name}さんです！`],
+        ["ガッド:おう！よろしくな！こう見えて料理が得意なんだぜ。", "だからか、みんなは鉄鍋って呼ぶけどな。"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 10) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["女性:相変わらずうるさいわね…私はミナよ。配達をしてたわ。", "女性2:まあまあ、いつものことじゃないですか。私はエルネといいます。薬草に詳しいんですよ。何でも聞いてくださいね。"],
+        ["男2:ようやく帰ってこれた…ぼ、ぼくはロウと言います…体が大きいことだけが取り柄です…"],
+        ["犬:♪"],
+        ["あら、しっぽブンブン振っちゃって。みんな集まってきて嬉しいのね。", "この子はエルシーっていいます。", "うちの優秀なギルド犬なんですよ〜"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 11) {
+    // 【名簿に記録】：名簿の「記録係メモ」と同じ欄を、1人ぶんだけここに出す。保存も名簿と同じ処理（saveAdventurerMemo）。
+    //   ★ 書かなくても「あとで」で進める。
+    //   ★ 欄には名簿と同じく今の値を入れておく（空で保存すると既存のメモを消してしまうため）。
+    const advs = state.adventurers ?? [];
+    const first = advs[0] ?? {};
+    app.innerHTML = receptionCard(`
+      ${speech(["早速ですが、最初のお仕事です！", "皆さんのことを、<strong>名簿に記録</strong>してみましょう！"])}
+      <div class="form-row" style="margin-top: 14px;">
+        <label for="interviewMemoTarget">冒険者</label>
+        <select id="interviewMemoTarget" onchange="interviewFillMemo()">
+          ${advs.map((adv) => `<option value="${escapeHtml(adv.id)}">${escapeHtml(getDisplayName(adv))}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="nicknameInput">あだ名</label>
+        <input id="nicknameInput" value="${escapeHtml(first.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
+      </div>
+      <div class="form-row">
+        <label for="memoInput">メモ</label>
+        <textarea id="memoInput" placeholder="この冒険者について覚えておきたいこと">${escapeHtml(first.memo ?? "")}</textarea>
+      </div>
+      <div class="button-row" style="margin-top: 14px;">
+        <button class="primary-button" onclick="interviewSaveMemo()">記録を保存</button>
+        <button class="secondary-button" onclick="interviewNext()">あとで</button>
+      </div>
+    `);
+    return;
+  }
+
+  if (interviewStep === 12) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["うまく出来ましたね！これでトラブルがあっても記録を読むことで対処が可能になる、大事なお仕事です！"],
+        ["それでは、皆さん集まったことですし、お酒を買って祝賀会しましょう！今回はギルドの経費で落としちゃいましょう〜！"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
   app.innerHTML = receptionCard(`
-    <div class="speech">ありがとうございます。……形ばかりの面接ですが、問題ありません。ようこそ、記録係の${escapeHtml(interviewDraft.name)}さん。</div>
-    <div class="speech" style="margin-top: 12px;">では、記録係としての最初のお仕事です。この名簿に、あなた自身を書き留めてください。これが、ギルドに残る最初の記録になります。</div>
-    <div class="kv" style="margin-top: 14px;">
-      <span>記録係</span><strong>${escapeHtml(interviewDraft.name)}</strong>
-      <span>気質</span><strong>${escapeHtml(chosen?.label ?? "—")}</strong>
-    </div>
+    ${speech(["では、どなたかにお使いに行っていただきましょう！", "依頼掲示板で、内容に合った冒険者の方を選んで出発させましょう！"])}
     <div class="button-row" style="margin-top: 16px;">
-      <button class="primary-button" onclick="interviewComplete()">名簿に記録する</button>
+      <button class="primary-button" onclick="interviewComplete()">はい</button>
     </div>
   `);
 }
 
-function interviewBegin() {
-  interviewStep = 1;
+function interviewNext() {
+  interviewStep += 1;
   render();
 }
 
 function interviewSubmitName() {
   const el = document.getElementById("interviewNameInput");
   const value = (el?.value ?? "").trim();
-  interviewDraft.name = value || "記録係";
+  interviewDraft.unnamed = !value;
+  interviewDraft.name = value || INTERVIEW_UNNAMED;
   interviewStep = 2;
   render();
 }
 
-function interviewPickPersonality(key) {
-  interviewDraft.personality = key;
-  interviewStep = 3;
+function interviewBackToName() {
+  interviewStep = 1;
   render();
 }
 
+function interviewPickMotive(index) {
+  interviewDraft.motive = index; // ★ 返事を選ぶためだけ。保存しない
+  interviewStep = 4;
+  render();
+}
+
+function interviewFillMemo() {
+  const adv = getAdventurer(document.getElementById("interviewMemoTarget")?.value);
+  if (!adv) return;
+  document.getElementById("nicknameInput").value = adv.nickname ?? "";
+  document.getElementById("memoInput").value = adv.memo ?? "";
+}
+
+function interviewSaveMemo() {
+  const id = document.getElementById("interviewMemoTarget")?.value;
+  if (id) saveAdventurerMemo(id);
+  interviewNext();
+}
+
 function interviewComplete() {
-  const chosen = PLAYER_PERSONALITIES.find((p) => p.key === interviewDraft.personality);
   state.player = {
-    name: interviewDraft.name || "記録係",
-    personality: interviewDraft.personality,
-    personalityLabel: chosen?.label ?? null,
-    personalityTags: chosen?.tags ?? [], // ★死蔵（保存されるだけで一度も読まれていない。2026-07-31 の棚卸し）
+    name: interviewDraft.name || INTERVIEW_UNNAMED,
+    // ★ 気質の選択は EX-162 で無くした。旧セーブと形を揃えるために欄だけ残す
+    personality: null,
+    personalityLabel: null,
+    personalityTags: [],
     interviewDone: true,
     // 就任日（2026-08-09・EX-065）。バッジの表示にしか使わない。
-    // ★ 名簿に書き留めた瞬間＝就任なので、ここ以外では発行しない。
+    // ★ 面接を終えた瞬間＝就任なので、ここ以外では発行しない。
     appointedAt: Date.now()
   };
   saveState();
   interviewStep = 0;
-  interviewDraft = { name: "", personality: null };
+  interviewDraft = { name: "", unnamed: false, motive: null };
   route = "home";
   render();
 }
