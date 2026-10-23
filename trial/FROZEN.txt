@@ -1,2 +1,2 @@
-テスター用の凍結コピー。本体の 6a6396c から scripts/make-trial.js で作った。
+テスター用の凍結コピー。本体の d0affbf から scripts/make-trial.js で作った。
 手で編集しない。作り直すときは node scripts/make-trial.js を実行して単独の PR にする。

@@ -141,12 +141,13 @@ function receiveReward(reward, detail) {
 //   【体験版のみ】`/trial/` のコピー（`STORAGE_SUFFIX` が `_trial`）でしか動かない。本体の画面には出ない＝製品版に外し忘れが残らない。
 //   条件：「隊商護衛の報告書を開いた（結末は問わない）」∧「名前の封が1つ以上」がそろった瞬間（後に来たほうで）、ホームのカード1枚を1度だけ出す。読んだら消える。
 //   ⚠️ 護衛の結末が fail でも条件に数える（失敗のあとは捜索チェーンへ続くが、この合図は「いまお見せできる記録」の締め）。遊び続けるのは縛らない。
-//   ※ 文面は仮（作者の確認後に差し替え）。
+//   ★ 文面は確定稿（2026-10-23。夕に「命名の直後」と「終わりの合図」の2つへ分けた）。
+//     正本は Notion「オープニング面接の台本（確定稿・2026-10-23）」の末尾の節。配列の1要素＝台本の1段落（空行で区切られたまとまり）。
+//     命名の直後の一言は FIRST_NAME_SEAL_PARAGRAPHS（本体でも出る）。
 const IS_TRIAL_COPY = STORAGE_SUFFIX === "_trial";
-const TRIAL_END_LINES = [
-  "最初の名前に、封をなさったんですね。",
-  "これで、この帳面にもあなたの字が残りました。——いまお見せできる記録は、ここまでです。",
-  "続きの頁は、まだ白紙のままです。また扉の音がしたら、お知らせしますね。"
+const TRIAL_END_PARAGRAPHS = [
+  ["さて、残念なことにいま歩める記録は、ここまでみたいです。"],
+  ["また扉の音がしたら、お知らせしますね！"]
 ];
 
 function trialEndReached() {
@@ -169,13 +170,57 @@ function trialEndCardHtml() {
         <div>
           <p class="eyebrow">Guild Reception</p>
           <h3>受付嬢</h3>
-          <div class="speech">${TRIAL_END_LINES.map((line) => escapeHtml(line)).join("<br />")}</div>
-          <div class="button-row" style="margin-top: 12px;">
-            <button class="secondary-button" onclick="dismissTrialEnd()">わかりました</button>
-          </div>
+          ${trialEndWindowHtml()}
         </div>
       </div>
     </section>`;
+}
+
+function trialEndWindowHtml() {
+  const w = speechWindow("trialEnd", TRIAL_END_PARAGRAPHS.map((p) => p.map(escapeHtml)));
+  return w.html + (w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissTrialEnd()">わかりました</button>
+          </div>` : w.more);
+}
+
+// ★ 命名の直後の一言（2026-10-23・作者の確定稿）。**最初に名前の封をした瞬間に1度だけ**、命名の画面の上に受付嬢のカードで出す。
+//   本体でも出す（命名は本編でも起きる）。`state.firstNameSeal = { name, at, read }` を保存し、リロードしても戻らない。
+//   ⚠️ 立てるのは封の操作（confirmEcologyRecordName）の中だけ。読み込み時に既存の封から立てない
+//     ——古いセーブで「いま名付けた」と言い出さないため。
+function firstNameSealParagraphs(name) {
+  return [
+    ["すごいです！", `あなたがこの子の、「${name}」の名付け親になったんですよ！`],
+    ["名付けとは不確かさ溢れる振る舞いを枠に詰めて安定させる神聖な——っと、新しい発見に少し興奮してしまいましたね。"]
+  ];
+}
+
+function firstNameSealCardHtml(entryId) {
+  const seal = state.firstNameSeal;
+  if (!seal || seal.read) return "";
+  const w = speechWindow("firstNameSeal",
+    firstNameSealParagraphs(seal.name).map((p) => p.map(escapeHtml)),
+    `openEcologyRecordEditor('${escapeJsArg(entryId)}')`);
+  return `
+    <section class="card money-event-card" data-first-name-seal="1">
+      <div class="card-body reception">
+        <div>
+          <p class="eyebrow">Guild Reception</p>
+          <h3>受付嬢</h3>
+          ${w.html}
+          ${w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissFirstNameSeal('${escapeJsArg(entryId)}')">わかりました</button>
+          </div>` : w.more}
+        </div>
+      </div>
+    </section>`;
+}
+
+function dismissFirstNameSeal(entryId) {
+  if (state.firstNameSeal) state.firstNameSeal.read = true;
+  saveState();
+  openEcologyRecordEditor(entryId);
 }
 
 function dismissTrialEnd() {
@@ -465,15 +510,113 @@ let editingAdventurerId = null;
 let departRefusal = null;
 let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
 
-// オープニング面接: プレイヤー（記録係）の気質選択肢。tags は将来の受付嬢・冒険者の会話反映用。
-const PLAYER_PERSONALITIES = [
-  { key: "careful", label: "慎重", blurb: "石橋を叩いてから渡る方だ。", tags: ["慎重", "確認", "安全"] },
-  { key: "bold", label: "大胆", blurb: "考えるより先に、まず動く。", tags: ["大胆", "即断", "前進"] },
-  { key: "caring", label: "世話好き", blurb: "人を放っておけない。", tags: ["世話焼き", "気配り", "仲間"] },
-  { key: "recorder", label: "記録好き", blurb: "細かいことも書き留めたくなる。", tags: ["記録", "観察", "細部"] }
+// オープニング面接（2026-10-23・EX-162）。★ 文面は Notion「オープニング面接の台本（確定稿・2026-10-23）」
+//   （401a8a5dfd458167858af138886f724c）が正本。一字一句そのまま写す。直したいときは台本の側を直してから。
+//   ★ 旧実装の「気質」の選択は台本に無いので無くした（state.player の形は旧セーブのために残す）。
+// 志望動機の返事。★ 返事を出すだけで、選んだ内容は保存しない（作者の指示）。
+const INTERVIEW_MOTIVES = [
+  { label: "お金のため", reply: ["お金はだいじですからね！", "ただ、あんまり稼げるお仕事じゃないかもですね！"] },
+  { label: "家が近いから", reply: ["正直でいいですね！私はここに住んでるので、ご近所さんですね！"] },
+  { label: "この地域に興味あって", reply: ["わかります！わたしもそうなんですよ！まだまだ未開拓なのはこちらの方角ですからね！"] }
 ];
+// 無記名のときの呼び名（台本の指定）。
+const INTERVIEW_UNNAMED = "記録員";
 let interviewStep = 0;
-let interviewDraft = { name: "", personality: null };
+let speechWindowStep = -1; // 窓のページを段ごとに巻き戻すための控え
+let interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
+// 名前の長さの上限（2026-10-23・仮）。★ 数えるのは文字数（全角・半角とも1字。`[...s].length`）。
+//   止めるのは入力欄だけで、古いセーブの長い名前は切らない（読み込みでは触らない）。
+const PLAYER_NAME_MAX = 12;
+const ECOLOGY_NAME_MAX = 20;
+
+// ── 会話の窓（2026-10-23・EX-162 の続き）────────────────────────────────────
+// ★ 台本の文（面接・命名の直後の一言・体験版の終わりの合図）を、決まった大きさの窓に1ページずつ出す。
+//   段落（台本の空行）で改ページし、1段落が窓に入らなければ行で、1行が入らなければ「。！？」で割る。
+//   ★ 390px 幅の実測は1行16字。禁則で1字落ちる行を見込んで、見積もりは15字×4行（約60字）で行う。
+//   収まっているかは試験（tools/tests/current/speech-window.spec.js）が実際の描画で確かめる。
+const SPEECH_WINDOW_LINES = 4;
+const SPEECH_WINDOW_CHARS_PER_LINE = 15;
+const speechWindowPage = {}; // 窓 id → いま開いているページ。画面だけの一時状態（保存しない）
+function speechLinesNeeded(html) {
+  return Math.max(1, Math.ceil([...html.replace(/<[^>]+>/g, "")].length / SPEECH_WINDOW_CHARS_PER_LINE));
+}
+// 1行が窓に入らないときだけ「。！？」で割る。話し手の表示（「女性:」など）は続きのページにも付け直す。
+function splitSpeechLine(line) {
+  if (speechLinesNeeded(line) <= SPEECH_WINDOW_LINES) return [line];
+  const label = (line.match(/^[^:：<]{1,4}[:：]/) ?? [""])[0];
+  const sentences = line.slice(label.length).split(/(?<=[。！？][」』）]?)/).filter(Boolean);
+  const out = [];
+  let cur = "";
+  sentences.forEach((sentence) => {
+    if (cur && speechLinesNeeded(label + cur + sentence) > SPEECH_WINDOW_LINES) { out.push(label + cur); cur = sentence; }
+    else cur += sentence;
+  });
+  if (cur) out.push(label + cur);
+  return out;
+}
+function speechWindowPages(paragraphs) {
+  const pages = [];
+  paragraphs.forEach((paragraph) => {
+    let page = [];
+    let used = 0;
+    paragraph.flatMap(splitSpeechLine).forEach((unit) => {
+      const n = speechLinesNeeded(unit);
+      if (page.length > 0 && used + n > SPEECH_WINDOW_LINES) { pages.push(page); page = []; used = 0; }
+      page.push(unit);
+      used += n;
+    });
+    if (page.length > 0) pages.push(page);
+  });
+  return pages;
+}
+// 窓の HTML。最後のページでなければ「続き」のボタンを付ける（呼ぶ側は last のときだけ操作を出す）。
+//   onNext：ページを進めたあとの描き直し（既定は render。重ね画面のときは開き直す関数を渡す）。
+function speechWindow(id, paragraphs, onNext = "render()") {
+  const pages = speechWindowPages(paragraphs);
+  const index = Math.min(speechWindowPage[id] ?? 0, pages.length - 1);
+  const last = index >= pages.length - 1;
+  return {
+    last,
+    html: `<div class="speech speech-window" data-window="${escapeHtml(id)}" data-page="${index + 1}/${pages.length}">${pages[index].join("<br>")}</div>`,
+    more: last ? "" : `
+      <div class="button-row" style="margin-top: 12px;">
+        <button class="primary-button window-next" onclick="speechWindowNext('${escapeJsArg(id)}'); ${onNext}">続き ▼</button>
+      </div>`
+  };
+}
+function speechWindowNext(id) {
+  speechWindowPage[id] = (speechWindowPage[id] ?? 0) + 1;
+}
+
+// 文字数の上限つきの入力欄（data-char-limit）。★ 変換中（IME）は切らず、確定したときに切る。
+//   「あと〇字」の札（data-limit-hint の id）を一緒に書き換える。
+function charLimitHintText(value, limit) {
+  const rest = limit - [...value].length;
+  return rest > 0 ? `あと${rest}字` : "ここまでです";
+}
+function enforceCharLimit(input) {
+  const limit = Number(input.dataset.charLimit);
+  if (!limit) return;
+  // ★ 超えたぶんは「いま入れた字」（カーソルの直前）から削る。末尾を切ると、途中に足したときに最後の字が消えてしまう。
+  const caret = input.selectionStart ?? input.value.length;
+  const before = [...input.value.slice(0, caret)];
+  const after = input.value.slice(caret);
+  const over = before.length + [...after].length - limit;
+  if (over > 0) {
+    const kept = before.slice(0, Math.max(0, before.length - over)).join("");
+    input.value = [...(kept + after)].slice(0, limit).join("");
+    const pos = Math.min(kept.length, input.value.length);
+    input.setSelectionRange(pos, pos);
+  }
+  const hint = input.dataset.limitHint && document.getElementById(input.dataset.limitHint);
+  if (hint) hint.textContent = charLimitHintText(input.value, limit);
+}
+document.addEventListener("input", (e) => {
+  if (e.target?.dataset?.charLimit && !e.isComposing) enforceCharLimit(e.target);
+});
+document.addEventListener("compositionend", (e) => {
+  if (e.target?.dataset?.charLimit) enforceCharLimit(e.target);
+});
 // バッジを開いているか／光らせるか。どちらも画面だけの一時状態で保存しない。
 // ★ 光る状態はオープニング再演出のために形だけ用意したもので、今はどこからも on にしていない。
 let recorderBadgeOpen = false;
@@ -522,6 +665,7 @@ function createInitialState() {
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     debt: { active: null, timesBorrowed: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
     trialEnd: null, // 体験版の終わりの合図（EX-158【3】。/trial/ のコピーだけが立てる）。{ at, read }
     stock: {},       // 在庫（品 id → 数）。★ 最初は空（2026-09-23・EX-144）
     gameOver: null,  // 運営不能（★ 記録の終わり方の一つ。「負け」ではない）
@@ -1217,6 +1361,8 @@ function setRoute(nextRoute) {
   route = nextRoute;
   editingAdventurerId = null;
   recorderBadgeOpen = false; // 画面を移ったらバッジの紙片は閉じる（開いたまま居座らせない）
+  roomMenu = null;
+  roomNotice = ""; // ホームの窓の一言も、画面を移ったら捨てる（戻ってきたときに居残らせない）
   render();
 }
 
@@ -1926,7 +2072,7 @@ function renderRecorderBadge() {
   const dateText = appointedDateText();
   recorderBadgeCard.innerHTML = `
     <p class="recorder-badge-role">記録員</p>
-    <p class="recorder-badge-name">${escapeHtml(state.player?.name ?? "記録係")}</p>
+    <p class="recorder-badge-name">${escapeHtml(state.player?.name ?? "記録員")}</p>
     <p class="recorder-badge-date">${dateText ? `就任　${escapeHtml(dateText)}` : ""}</p>
   `;
 }
@@ -1967,6 +2113,7 @@ function render() {
     adventurers: "冒険者名簿",
     observations: "報告メモ",
     ecology: "生態目録",
+    ledger: "帳簿",
     report: "報告書",
     result: "帰還報告"
   };
@@ -1977,6 +2124,7 @@ function render() {
   if (route === "adventurers") renderAdventurers();
   if (route === "observations") renderObservations();
   if (route === "ecology") renderEcologyRecord();
+  if (route === "ledger") renderLedger();
   if (route === "report") renderReportDetail(state.activeReportId);
   if (route === "result") renderResult(nextResultReportId());
 }
@@ -1992,28 +2140,54 @@ function renderInterview() {
         <div style="flex: 1;">
           <p class="eyebrow">Guild Reception</p>
           <h3>受付嬢</h3>
-          ${body}
+          ${interviewWindowCut(body)}
         </div>
       </div>
     </section>
   `;
+  // 台本の文は会話の窓に出す（段落＝改ページ）。★ 最後のページまでは、窓より後ろ（入力欄・選択肢・次へ）を出さず「続き」だけ。
+  if (speechWindowStep !== interviewStep) {
+    Object.keys(speechWindowPage).filter((k) => k.startsWith("iv")).forEach((k) => delete speechWindowPage[k]);
+    speechWindowStep = interviewStep;
+  }
+  let windowMore = "";
+  const speech = (...paragraphs) => {
+    const w = speechWindow(`iv${interviewStep}`, paragraphs);
+    windowMore = w.more;
+    return `${w.html}<!--/window-->`;
+  };
+  const interviewWindowCut = (body) => {
+    const [head, rest = ""] = body.split("<!--/window-->");
+    return windowMore ? head + windowMore : head + rest;
+  };
+  const next = (label = "次へ") => `
+      <div class="button-row" style="margin-top: 16px;">
+        <button class="primary-button" onclick="interviewNext()">${label}</button>
+      </div>`;
+  const name = escapeHtml(interviewDraft.name);
 
   if (interviewStep === 0) {
     app.innerHTML = receptionCard(`
-      <div class="speech">ようこそ、遠征ギルドへ。本日はギルドの<strong>記録係</strong>の面接にお越しいただきました。わたしはこのギルドの受付を務めています。……といっても、堅い面接ではありません。少しだけ、お話を伺わせてください。</div>
-      <div class="button-row" style="margin-top: 16px;">
-        <button class="primary-button" onclick="interviewBegin()">面接を始める</button>
-      </div>
+      ${speech(
+        ["ようこそ、西端ギルドへ！"],
+        ["本日は記録員の面接にお越しいただきありがとうございます！", "よろしくお願いしますね！"]
+      )}
+      ${next("面接を始める")}
     `);
     return;
   }
 
   if (interviewStep === 1) {
     app.innerHTML = receptionCard(`
-      <div class="speech">まず、お名前を伺ってもよろしいですか。この名簿に、記録係として書き留めておきます。</div>
+      ${speech([
+        "こんなご時世に、西の端まで来てくれる方なんて、なかなかいなくて。",
+        "あら、履歴書にお名前が書いてありませんね…",
+        "すみません。あなたのことは何とお呼びすればよいでしょうか？"
+      ])}
       <div class="form-row" style="margin-top: 14px;">
         <label for="interviewNameInput">お名前</label>
-        <input id="interviewNameInput" type="text" maxlength="24" placeholder="記録係の名前" value="${escapeHtml(interviewDraft.name)}" />
+        <input id="interviewNameInput" type="text" data-char-limit="${PLAYER_NAME_MAX}" data-limit-hint="interviewNameHint" placeholder="${INTERVIEW_UNNAMED}" value="${interviewDraft.unnamed ? "" : name}" />
+        <p class="muted" id="interviewNameHint">${charLimitHintText(interviewDraft.unnamed ? "" : interviewDraft.name, PLAYER_NAME_MAX)}</p>
       </div>
       <div class="button-row" style="margin-top: 14px;">
         <button class="primary-button" onclick="interviewSubmitName()">次へ</button>
@@ -2029,63 +2203,231 @@ function renderInterview() {
   }
 
   if (interviewStep === 2) {
+    // 無記名のときは名前の欄へ戻れる（台本の注記「そのまま進むと、以後『記録員さん』と呼ぶ」）。
+    app.innerHTML = receptionCard(interviewDraft.unnamed
+      ? `
+      ${speech(["記録員さんでいいんですか？", "お名前は大事ですよ〜？"])}
+      <div class="button-row" style="margin-top: 16px;">
+        <button class="primary-button" onclick="interviewNext()">このまま進む</button>
+        <button class="secondary-button" onclick="interviewBackToName()">名前を書く</button>
+      </div>`
+      : `
+      ${speech([`${name}さん、とおっしゃるんですね！`, "よろしくお願いしますね！"])}
+      ${next()}`);
+    return;
+  }
+
+  if (interviewStep === 3) {
     app.innerHTML = receptionCard(`
-      <div class="speech">${escapeHtml(interviewDraft.name)}さん、ですね。差し支えなければ、ご自身の気質を一つだけ選んでいただけますか。……ええ、面接の形として伺うだけですので、正解はありません。</div>
+      ${speech(["早速ですが、志望動機を教えてください！"])}
       <div class="button-row" style="margin-top: 16px; flex-wrap: wrap; gap: 10px;">
-        ${PLAYER_PERSONALITIES.map((p) => `<button class="secondary-button" onclick="interviewPickPersonality('${p.key}')" title="${escapeHtml(p.blurb)}">${escapeHtml(p.label)}</button>`).join("")}
+        ${INTERVIEW_MOTIVES.map((m, i) => `<button class="secondary-button" onclick="interviewPickMotive(${i})">${escapeHtml(m.label)}</button>`).join("")}
       </div>
     `);
     return;
   }
 
-  const chosen = PLAYER_PERSONALITIES.find((p) => p.key === interviewDraft.personality);
+  if (interviewStep === 4) {
+    const motive = INTERVIEW_MOTIVES[interviewDraft.motive] ?? INTERVIEW_MOTIVES[0];
+    app.innerHTML = receptionCard(`${speech(motive.reply)}${next()}`);
+    return;
+  }
+
+  if (interviewStep === 5) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["それでは、面接の結果は後日郵送にてお送りを……いたしません！"],
+        ["合格です！", "あなたのお人柄ならしっかりやっていただけると！私のカンがそう言ってます！", "人事権は私にありますので、文句なしです！"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 6) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["ギルドは福利厚生もしっかりしてますからね。有給、育休に加え、組合積立、10年以上のお勤めで退職金に色も着きますよ！"],
+        ["末永くお勤めしてもらえるよう、私も精一杯サポートしますので、これからよろしくお願いしますね！"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 7) {
+    app.innerHTML = receptionCard(`
+      ${speech(["そして、こちらが<strong>記録員バッジ</strong>！", "正式なギルドの記録員である証です！無くしちゃダメですよ！"])}
+      ${interviewBadgeHtml()}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 8) {
+    app.innerHTML = receptionCard(`
+      ${speech([
+        "……私の名前ですか？そうですね、申し遅れました！",
+        "私の名前は<strong>アルメナ</strong>といいます！",
+        `しっかり覚えてくださいね！${name}さん！私はしっかり覚えちゃいましたよ〜！`
+      ])}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 9) {
+    // 【ドア音】は音を鳴らさず、1行の演出にする（作者の指示）。
+    // ★ 話し手の表示は、名乗った（紹介された）あとの行から名前に切り替える（台本の決めごと）。
+    //   切り替えのきっかけ：ガッド＝「あ！ガッドさん！」／ミナ・エルネ・ロウ＝本人の名乗りの行／エルシー＝「この子はエルシーっていいます。」。
+    //   名乗りの行そのものは元の表示（男・女性など）のまま。今の台本ではガッド以外は名乗ったあとに話さない。
+    app.innerHTML = receptionCard(`
+      <p class="muted">（扉の音）</p>
+      ${speech(
+        ["男:よう、帰ったぜ。看板も掛けたし、だいたいサマになったんじゃないか？"],
+        ["あ！ガッドさん！ありがとうございます！"],
+        [`こちらは本日からここの記録員として配属された、${name}さんです！`],
+        ["ガッド:おう！よろしくな！こう見えて料理が得意なんだぜ。", "だからか、みんなは鉄鍋って呼ぶけどな。"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 10) {
+    app.innerHTML = receptionCard(`
+      ${speech(
+        ["女性:相変わらずうるさいわね…私はミナよ。配達をしてたわ。", "女性2:まあまあ、いつものことじゃないですか。私はエルネといいます。薬草に詳しいんですよ。何でも聞いてくださいね。"],
+        ["男2:ようやく帰ってこれた…ぼ、ぼくはロウと言います…体が大きいことだけが取り柄です…"],
+        ["犬:♪"],
+        ["あら、しっぽブンブン振っちゃって。みんな集まってきて嬉しいのね。", "この子はエルシーっていいます。", "うちの優秀なギルド犬なんですよ〜"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
+  if (interviewStep === 11) {
+    // 【名簿に記録】：名簿の「記録員メモ」と同じ欄を、1人ぶんだけここに出す。保存も名簿と同じ処理（saveAdventurerMemo）。
+    //   ★ 書かなくても「あとで」で進める。
+    //   ★ 欄には名簿と同じく今の値を入れておく（空で保存すると既存のメモを消してしまうため）。
+    const advs = state.adventurers ?? [];
+    const first = advs[0] ?? {};
+    app.innerHTML = receptionCard(`
+      ${speech(["早速ですが、最初のお仕事です！", "皆さんのことを、<strong>名簿に記録</strong>してみましょう！"])}
+      <div class="form-row" style="margin-top: 14px;">
+        <label for="interviewMemoTarget">冒険者</label>
+        <select id="interviewMemoTarget" onchange="interviewFillMemo()">
+          ${advs.map((adv) => `<option value="${escapeHtml(adv.id)}">${escapeHtml(getDisplayName(adv))}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="nicknameInput">あだ名</label>
+        <input id="nicknameInput" value="${escapeHtml(first.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
+      </div>
+      <div class="form-row">
+        <label for="memoInput">メモ</label>
+        <textarea id="memoInput" placeholder="この冒険者について覚えておきたいこと">${escapeHtml(first.memo ?? "")}</textarea>
+      </div>
+      <div class="button-row" style="margin-top: 14px;">
+        <button class="primary-button" onclick="interviewSaveMemo()">記録を保存</button>
+        <button class="secondary-button" onclick="interviewSkipMemo()">あとで</button>
+      </div>
+    `);
+    return;
+  }
+
+  if (interviewStep === 12) {
+    // ★「あとで」を選んだときは、書いていないので「うまく出来ましたね」は出さない（仮の変種。作者確認で差し替え可）。
+    app.innerHTML = receptionCard(`
+      ${speech(
+        interviewDraft.memoSaved
+          ? ["うまく出来ましたね！これでトラブルがあっても記録を読むことで対処が可能になる、大事なお仕事です！"]
+          : ["あとで書いてくださっても大丈夫ですよ！名簿は、いつでも書けますからね。", "記録を読むことでトラブルにも対処が可能になる、大事なお仕事です！"],
+        ["それでは、皆さん集まったことですし、お酒を買って祝賀会しましょう！今回はギルドの経費で落としちゃいましょう〜！"]
+      )}
+      ${next()}
+    `);
+    return;
+  }
+
   app.innerHTML = receptionCard(`
-    <div class="speech">ありがとうございます。……形ばかりの面接ですが、問題ありません。ようこそ、記録係の${escapeHtml(interviewDraft.name)}さん。</div>
-    <div class="speech" style="margin-top: 12px;">では、記録係としての最初のお仕事です。この名簿に、あなた自身を書き留めてください。これが、ギルドに残る最初の記録になります。</div>
-    <div class="kv" style="margin-top: 14px;">
-      <span>記録係</span><strong>${escapeHtml(interviewDraft.name)}</strong>
-      <span>気質</span><strong>${escapeHtml(chosen?.label ?? "—")}</strong>
-    </div>
+    ${speech(["では、どなたかにお使いに行っていただきましょう！", "依頼掲示板で、内容に合った冒険者の方を選んで出発させましょう！"])}
     <div class="button-row" style="margin-top: 16px;">
-      <button class="primary-button" onclick="interviewComplete()">名簿に記録する</button>
+      <button class="primary-button" onclick="interviewComplete()">はい</button>
     </div>
   `);
 }
 
-function interviewBegin() {
-  interviewStep = 1;
+function interviewNext() {
+  interviewStep += 1;
   render();
 }
 
 function interviewSubmitName() {
   const el = document.getElementById("interviewNameInput");
-  const value = (el?.value ?? "").trim();
-  interviewDraft.name = value || "記録係";
+  const value = [...(el?.value ?? "").trim()].slice(0, PLAYER_NAME_MAX).join(""); // 入力欄でも止めているが、念のためここでも切る
+  interviewDraft.unnamed = !value;
+  interviewDraft.name = value || INTERVIEW_UNNAMED;
   interviewStep = 2;
   render();
 }
 
-function interviewPickPersonality(key) {
-  interviewDraft.personality = key;
-  interviewStep = 3;
+function interviewBackToName() {
+  interviewStep = 1;
   render();
 }
 
+function interviewPickMotive(index) {
+  interviewDraft.motive = index; // ★ 返事を選ぶためだけ。保存しない
+  interviewStep = 4;
+  render();
+}
+
+function interviewFillMemo() {
+  const adv = getAdventurer(document.getElementById("interviewMemoTarget")?.value);
+  if (!adv) return;
+  document.getElementById("nicknameInput").value = adv.nickname ?? "";
+  document.getElementById("memoInput").value = adv.memo ?? "";
+}
+
+function interviewSaveMemo() {
+  const id = document.getElementById("interviewMemoTarget")?.value;
+  if (id) saveAdventurerMemo(id);
+  interviewDraft.memoSaved = true;
+  interviewNext();
+}
+
+function interviewSkipMemo() {
+  interviewDraft.memoSaved = false;
+  interviewNext();
+}
+
+// 面接でバッジを渡す場面の絵（仮。文字の入った丸いバッジ）。★ 演出だけで、バッジの所持・就任日は面接の終わりで確定する。
+//   将来、ギルドの紋に差し替える前提。
+function interviewBadgeHtml() {
+  return `
+      <div class="interview-badge" aria-hidden="true">
+        <span class="interview-badge-mark">✦</span>
+        <span class="interview-badge-text">記録員</span>
+      </div>`;
+}
+
 function interviewComplete() {
-  const chosen = PLAYER_PERSONALITIES.find((p) => p.key === interviewDraft.personality);
   state.player = {
-    name: interviewDraft.name || "記録係",
-    personality: interviewDraft.personality,
-    personalityLabel: chosen?.label ?? null,
-    personalityTags: chosen?.tags ?? [], // ★死蔵（保存されるだけで一度も読まれていない。2026-07-31 の棚卸し）
+    name: interviewDraft.name || INTERVIEW_UNNAMED,
+    // ★ 気質の選択は EX-162 で無くした。旧セーブと形を揃えるために欄だけ残す
+    personality: null,
+    personalityLabel: null,
+    personalityTags: [],
     interviewDone: true,
     // 就任日（2026-08-09・EX-065）。バッジの表示にしか使わない。
-    // ★ 名簿に書き留めた瞬間＝就任なので、ここ以外では発行しない。
+    // ★ 面接を終えた瞬間＝就任なので、ここ以外では発行しない。
     appointedAt: Date.now()
   };
   saveState();
   interviewStep = 0;
-  interviewDraft = { name: "", personality: null };
+  interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
   route = "home";
   render();
 }
@@ -2154,10 +2496,14 @@ function moneyEventCardHtml() {
     </section>`;
 }
 
+// 綴じるカードを出す条件（bindCardHtml と、ホームの窓のペンの目次で同じ条件を使う）
+function bindCardShown() {
+  return state.reports.some((report) => report.opened) || readBoundBooks().length > 0;
+}
+
 function bindCardHtml() {
-  const anyOpened = state.reports.some((report) => report.opened);
   const books = readBoundBooks();
-  if (!anyOpened && books.length === 0) return "";
+  if (!bindCardShown()) return "";
   const book = books[0] ?? null;
   const unbound = book ? Math.max(0, state.reports.length - (book.meta?.reportCount ?? 0)) : 0;
   // ① 受付嬢の促し。まだ一度も綴じていない間だけ出す。
@@ -2177,7 +2523,7 @@ function bindCardHtml() {
     ? `<button class="ghost-button" onclick="openBindRestoreConfirm()">Mock用：最後に綴じた記録まで戻る</button>`
     : "";
   return `
-      <section class="card">
+      <section class="card" id="bindCard">
         <div class="card-body">
           <div class="card-title">
             <div>
@@ -2196,6 +2542,129 @@ function bindCardHtml() {
       </section>`;
 }
 
+// ── ホームの窓（2026-10-22・EX-161 段階1）────────────────────────────────────
+//   ★ 縦長の3枚（左・真ん中・右）を ▶◀ で切り替える。絵はまだ無いので仮の線画（枠と文字ラベル）。
+//   ★ 見た目と導線だけ。遊びの仕組み・データは変えない。物は表（ROOM_OBJECTS）で持つ。
+//   ★ 枠は「触れる物」だけに出す（枠の見せ方は .room-frame に集約＝後で差し替えやすい）。触れる範囲（.room-hit）は枠より大きい。
+//   ★ 窓の高さは変数 --room-h（style.css）。
+const ROOM_PANELS = ["左", "真ん中", "右"];
+const ROOM_START_PANEL = 1; // 起動時は真ん中（仮）
+// act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
+const ROOM_OBJECTS = [
+  { id: "receptionist", panel: 0, label: "受付嬢", x: 8, y: 14, w: 40, h: 34, act: () => tapRoomReaction("receptionist") },
+  { id: "counter", panel: 0, label: "カウンター", x: 4, y: 52, w: 56, h: 14 },
+  { id: "backyard", panel: 0, label: "バックヤード", x: 62, y: 14, w: 32, h: 40 },
+  { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology") },
+  { id: "board", panel: 1, label: "掲示板", x: 14, y: 12, w: 72, h: 38, act: () => setRoute("quests") },
+  { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14, act: () => toggleRoomMenu("papers") },
+  { id: "badge", panel: 1, label: "証", x: 66, y: 60, w: 22, h: 14 },
+  { id: "shelf", panel: 2, label: "本棚", x: 6, y: 10, w: 44, h: 40 },
+  { id: "elsie", panel: 2, label: "エルシーの場所", x: 54, y: 56, w: 40, h: 16, act: () => tapRoomReaction("elsie") },
+  { id: "grave", panel: 2, label: "墓標", x: 56, y: 14, w: 36, h: 36, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
+  { id: "pile", panel: 2, label: "書類の山", x: 8, y: 74, w: 36, h: 14, act: () => openReportShelf() },
+  { id: "pen", panel: 2, label: "ペン", x: 62, y: 80, w: 26, h: 10, act: () => toggleRoomMenu("pen") }
+];
+// 吹き出しの目次（段階2）。★ 中身は増減する前提で表にする。act は物と同じ「今ある画面を開く」だけ。
+//   ★ 入口が複数でも開く先は同じ画面（名簿はナビからも書類からも同じ名簿の画面）。show：出す条件（無ければ常に）。
+const ROOM_MENUS = {
+  papers: [
+    { id: "ledger", label: "帳簿", act: () => setRoute("ledger") },
+    { id: "roster", label: "名簿", act: () => setRoute("adventurers") }
+  ],
+  pen: [
+    { id: "bind", label: "記録を綴じる", show: () => bindCardShown(), act: () => document.getElementById("bindCard")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" }) },
+    { id: "memo", label: "報告メモ", act: () => setRoute("observations") }
+  ]
+};
+// タップの反応（段階3）。★ 文面は仮（チャット側が後で書き直す）。表で持ち、押すたびに順に替える（乱数は使わない）。
+const ROOM_REACTIONS = {
+  receptionist: ["はい、なんでしょう。", "記録員さん、今日もお疲れさまです。"],
+  elsie: ["エルシーは尻尾を振った。", "撫でると、エルシーは目を細めた。"]
+};
+const roomReactionCount = {};
+function tapRoomReaction(id) {
+  const lines = ROOM_REACTIONS[id] ?? [];
+  if (lines.length === 0) return;
+  const n = roomReactionCount[id] ?? 0;
+  roomReactionCount[id] = n + 1;
+  showRoomNotice(lines[n % lines.length]);
+}
+
+let roomPanel = ROOM_START_PANEL;
+let roomNotice = "";
+let roomMenu = null; // 吹き出しを開いている物の id
+
+function roomWindowHtml() {
+  const panels = ROOM_PANELS.map((name, i) => `
+      <div class="room-panel" data-room-panel="${i}" aria-label="${name}">
+        ${ROOM_OBJECTS.filter((o) => o.panel === i && (!o.show || o.show())).map((o) => o.act
+          ? `<button class="room-hit" type="button" data-room-object="${o.id}" style="left:${o.x - 3}%;top:${o.y - 3}%;width:${o.w + 6}%;height:${o.h + 6}%" onclick="tapRoomObject('${o.id}')"><span class="room-frame">${o.label}</span></button>`
+          : `<span class="room-thing" data-room-object="${o.id}" style="left:${o.x}%;top:${o.y}%;width:${o.w}%;height:${o.h}%">${o.label}</span>`).join("")}
+      </div>`).join("");
+  return `
+    <section class="room-window" aria-label="ギルドの中">
+      <div class="room-strip" style="transform:translateX(${-roomPanel * 100}%)">${panels}</div>
+      <button class="room-arrow left" type="button" aria-label="左へ" onclick="shiftRoom(-1)"${roomPanel === 0 ? " disabled" : ""}>◀</button>
+      <button class="room-arrow right" type="button" aria-label="右へ" onclick="shiftRoom(1)"${roomPanel === ROOM_PANELS.length - 1 ? " disabled" : ""}>▶</button>
+      ${roomMenuHtml()}
+      <p class="room-notice" role="status"${roomNotice ? "" : " hidden"}>${escapeHtml(roomNotice)}</p>
+    </section>`;
+}
+
+function roomMenuHtml() {
+  const o = ROOM_OBJECTS.find((x) => x.id === roomMenu);
+  const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
+  if (!o || o.panel !== roomPanel || items.length === 0) return "";
+  return `<div class="room-bubble" role="menu" style="${o.x > 50 ? `right:${Math.max(100 - o.x - o.w, 2)}%` : `left:${Math.max(o.x, 2)}%`};bottom:${100 - o.y + 2}%">${items.map((m) =>
+    `<button class="room-bubble-item" type="button" role="menuitem" onclick="tapRoomMenuItem('${m.id}')">${m.label}</button>`).join("")}</div>`;
+}
+
+function toggleRoomMenu(id) {
+  roomMenu = roomMenu === id ? null : id;
+  render();
+}
+
+// ★ 項目は添字でなく id で引く（1秒ごとの再描画で条件が変わっても、押した項目がずれない）。
+//   ★ 閉じるときは描き直さず吹き出しだけ外す（綴じるカードへのスクロールを再描画で途切れさせない）
+function tapRoomMenuItem(id) {
+  const item = (ROOM_MENUS[roomMenu] ?? []).find((m) => m.id === id);
+  roomMenu = null;
+  document.querySelector(".room-bubble")?.remove();
+  if (item?.act) item.act();
+}
+
+// ★ 1秒ごとの再描画でも位置が戻らないよう、番号は変数で持ち、押したときは全体を描き直さずに動かす（動きも途切れない）
+function shiftRoom(dir) {
+  const next = Math.max(0, Math.min(ROOM_PANELS.length - 1, roomPanel + dir));
+  if (next === roomPanel) return;
+  roomPanel = next;
+  roomNotice = "";
+  roomMenu = null;
+  document.querySelector(".room-bubble")?.remove();
+  const win = document.querySelector(".room-window");
+  if (!win) return;
+  win.querySelector(".room-strip").style.transform = `translateX(${-roomPanel * 100}%)`;
+  win.querySelector(".room-arrow.left").disabled = roomPanel === 0;
+  win.querySelector(".room-arrow.right").disabled = roomPanel === ROOM_PANELS.length - 1;
+  const note = win.querySelector(".room-notice");
+  if (note) note.hidden = true;
+}
+
+function tapRoomObject(id) {
+  const o = ROOM_OBJECTS.find((x) => x.id === id);
+  if (o?.act) o.act();
+}
+
+function showRoomNotice(text) {
+  roomNotice = text;
+  render();
+}
+
+// 届いた報告書（ホームの報告書棚）へ。★ 今ある画面を開くだけ（新しい画面は作らない）
+function openReportShelf() {
+  document.getElementById("reportShelf")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+}
+
 function renderHome() {
   const unopened = state.reports.filter((report) => !report.opened);
   const latestReports = state.reports.slice(0, 3);
@@ -2212,7 +2681,7 @@ function renderHome() {
 
   app.innerHTML = `
     ${paperSignboardHtml()}
-    ${paperMetersHtml()}
+    ${roomWindowHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
     ${trialEndCardHtml()}
@@ -2261,7 +2730,7 @@ function renderHome() {
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="reportShelf">
         <div class="card-body">
           <div class="card-title">
             <div>
@@ -2716,6 +3185,7 @@ function renderQuests() {
             <h3>出発確認</h3>
           </div>
         </div>
+        ${paperMetersHtml()}
         ${selectedQuest ? dispatchSummaryHtml(selectedQuest, state.gameOver ? "ギルドは畳まれている。もう誰も送り出せない。" : expeditionBlock) : `<div class="empty">まず依頼を選んでください。</div>`}
         <div class="button-row" style="margin-top: 16px;">
           <button class="primary-button" ${canStart ? "" : "disabled"} onclick="startExpedition()">遠征開始</button>
@@ -3081,7 +3551,7 @@ function adventurerEditorHtml(adventurer) {
   const roleLabel = adventurer.species === "dog" ? "紹介" : "役割・紹介";
   const roleText = adventurer.species === "dog"
     ? adventurerRoleIntro(adventurer)
-    : `${adventurer.job ?? "冒険者"} / ${adventurer.background ?? "—"} — ${adventurer.memo?.trim() || "記録係メモはまだありません。"}`;
+    : `${adventurer.job ?? "冒険者"} / ${adventurer.background ?? "—"} — ${adventurer.memo?.trim() || "記録員メモはまだありません。"}`;
 
   return `
     <div class="card-title">
@@ -3136,7 +3606,7 @@ function adventurerEditorHtml(adventurer) {
 
     <hr class="soft" />
 
-    <p class="meta-label">記録係メモ</p>
+    <p class="meta-label">記録員メモ</p>
     <div class="form-row">
       <label for="nicknameInput">あだ名</label>
       <input id="nicknameInput" value="${escapeHtml(adventurer.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
@@ -3504,7 +3974,7 @@ function confirmEcologyRecordName(id) {
   const entry = getEcologyRecordEntry(id);
   if (!entry || isEcologyRecordNameConfirmed(entry)) return;
   if (!canNameEcologyRecordEntry(entry)) return;
-  const draft = (document.getElementById("er_name_draft")?.value ?? "").trim();
+  const draft = [...(document.getElementById("er_name_draft")?.value ?? "").trim()].slice(0, ECOLOGY_NAME_MAX).join("");
   if (!draft) return;
   if (!confirm(`「${draft}」で封をします。\n封をした名前は二度と変えられません。よろしいですか？`)) return;
   // ★ 先に書きかけの欄も保存する（確定だけ通って観察が消えるのを防ぐ）
@@ -3512,6 +3982,7 @@ function confirmEcologyRecordName(id) {
   entry.name = draft;
   entry.nameDraft = "";
   entry.nameConfirmedAt = Date.now();
+  if (!state.firstNameSeal) state.firstNameSeal = { name: draft, at: entry.nameConfirmedAt, read: false };
   saveState();
   render();
   openEcologyRecordEditor(entry.id); // 確定した姿をそのまま見せる
@@ -3688,7 +4159,8 @@ function ecologyRecordNameSectionHtml(entry) {
       <p class="er-static"><span>${escapeHtml(entry.target)}</span><span class="er-tag">仮称</span></p>
       <p class="muted er-hint">確かめられたことが ${filled} / ${ECOLOGY_RECORD_NAMING_AXES_REQUIRED} 軸（全12軸のうち）。${gate}</p>
       ${ready ? `
-      <input id="er_name_draft" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
+      <input id="er_name_draft" data-char-limit="${ECOLOGY_NAME_MAX}" data-limit-hint="er_name_hint" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
+      <p class="muted er-hint" id="er_name_hint">${charLimitHintText(entry.nameDraft || "", ECOLOGY_NAME_MAX)}</p>
       <div class="button-row" style="margin-top: 8px;">
         <button class="secondary-button" onclick="confirmEcologyRecordName('${escapeJsArg(entry.id)}')">名前に封をする</button>
       </div>
@@ -3729,6 +4201,7 @@ function ecologyRecordEditorHtml(entry) {
         <button class="ghost-button" onclick="closeEcologyRecordEditor()">✕ 閉じる</button>
       </div>
       <div class="er-modal-body">
+        ${firstNameSealCardHtml(entry.id)}
         <div class="er-form">
           ${ecologyRecordNameSectionHtml(entry)}
           ${categorySelect}
@@ -3803,7 +4276,7 @@ function renderReportDetail(reportId) {
     <section class="paper-sheet" data-report-id="${escapeHtml(report.id)}">
       <div class="paper-docno"><span>遠征報告書　開封済み</span><span>${todayLabelText()}</span></div>
       <h3 class="paper-title">${escapeHtml(quest?.title ?? "報告書")}</h3>
-      <p class="paper-sub">記録係 ${escapeHtml(state.player?.name ?? "")}</p>
+      <p class="paper-sub">記録員 ${escapeHtml(state.player?.name ?? "")}</p>
       <dl class="paper-fields">
         ${fieldRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}
       </dl>
@@ -3837,7 +4310,7 @@ function renderReportDetail(reportId) {
 //   紙と打たれた文字と朱の判子。★ 見た目だけ（遊びの仕組み・データ・報告書の文面は変えない）。
 //   ★ Unity で UI は全面に差し替える前提（2026-09-21）。作り込みすぎない＝移るのは方向で、この実装ではない。
 //   ★ 画面ごとに足していく（PAPER_LOOK_ROUTES）。報告書を読む画面（段階1）→ 拠点＝home（段階2）→ 依頼掲示板＝quests → 帰還報告＝result → 冒険者名簿＝adventurers → 生態目録＝ecology → 報告メモ＝observations（EX-157）。
-const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers", "ecology", "observations"];
+const PAPER_LOOK_ROUTES = ["report", "home", "quests", "result", "adventurers", "ecology", "observations", "ledger"];
 
 // 封蝋（EX-159。2026-10-19 に朱の判子から替えた）。丸く垂れた蝋に、亀甲（六角）の押し跡。
 //   ★ 色は朱（インクの3色は崩さない。戦闘の朱と封蝋の朱は同じ色）。陰影は同じ朱の明暗だけで付ける。
@@ -3855,6 +4328,16 @@ const HANKO_KIKKO_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true">'
 //   性格値・親愛・未読件数は計器にしない（数値で出さない方針）。
 function paperSignboardHtml() {
   return `<div class="paper-signboard"><div class="name">西端ギルド</div><div class="kana">遠征報告受付</div></div>`;
+}
+
+// 帳簿（EX-161 段階2）。★ ホームから外した計器（所持金・持ち物・在席）の置き場。未読件数は出さない。
+function renderLedger() {
+  app.innerHTML = `
+    ${paperMetersHtml()}
+    ${walletCardHtml()}
+    <div class="button-row" style="margin-top: 14px;">
+      <button class="secondary-button" onclick="setRoute('home')">ギルドへ戻る</button>
+    </div>`;
 }
 
 function paperMetersHtml() {
@@ -4555,6 +5038,8 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
   const post = findByTrait(party, "background", "郵便配達人");
   const has = (id) => itemIds.includes(id);
   const name = (adv) => getDisplayName(adv);
+  // 2つ目の主語が前の主語と同じ人のときは省く（「ミナが枝を払い、ミナが探した」→「ミナが枝を払い、探した」。別の人のときは名前を出す）
+  const sameOrName = (next, prev) => (next === prev ? "" : `${name(next)}が`);
   // 封蝋で「止めた側」。触ろうとした側（warrior）と同じ人にならないようにする（2026-10-21）。他にいなければ null（ひとり向けの文にする）
   const stopper = scout !== warrior ? scout : humans.find((adv) => adv !== warrior) ?? null;
 
@@ -4594,7 +5079,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     倒木: [
       soloStyle
         ? `倒木が道をふさいでいた。${name(warrior)}が枝を払い、自分で安全な迂回路を確かめた。`
-        : `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${name(scout)}が安全な迂回路を探した。`,
+        : `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${sameOrName(scout, warrior)}安全な迂回路を探した。`,
       `古い倒木の裏側に、泥被り茸がいくつか生えていた。${name(herbalist)}は無理に引き抜かず、根元の土ごと採取した。`
     ],
     森喰い兎: [
@@ -4616,7 +5101,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
     道標の傾き: [
       soloStyle
         ? `道標は片側へ傾いていた。${name(warrior)}は支えながら、反対の手で根元の土を確認した。`
-        : `道標は片側へ傾いていた。${name(warrior)}が支え、${name(scout)}が根元の土を確認した。`,
+        : `道標は片側へ傾いていた。${name(warrior)}が支え、${sameOrName(scout, warrior)}根元の土を確認した。`,
       `傾いた道標は、近づいてみるとまだ読めた。文字の向きだけが少し怪しい。`
     ],
     苔に隠れた文字: [
@@ -4679,7 +5164,7 @@ function workEventText(quest, eventName, party, itemIds, rng) {
   // ★ 最初のクエスト（2026-08-05・EX-053）。酒場は画面外の場所として、ログと会話の中にだけ出す。
   const tavernEvents = {
     注文の伝達: [
-      `酒場の主人に用件を伝えた。「ああ、聞いてるよ。新しい記録係さんの分だろう」と、すぐに奥へ引っ込んだ。`,
+      `酒場の主人に用件を伝えた。「ああ、聞いてるよ。新しい記録員さんの分だろう」と、すぐに奥へ引っ込んだ。`,
       `${solo ? name(humanMembers(party)[0] ?? party[0]) : name(caregiver)}が用件を伝えると、主人は手を拭きながら「今日中でいいのかい」と聞き返した。`
     ],
     樽の受け取り: [
@@ -5082,7 +5567,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
     } else {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げ、道標の位置を確認した。迷う前に違和感に気づけたのが大きい。`);
     }
-    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
+    lines.push(`古地図の余白には、前任の記録員らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
   }
   if (has("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
     if (solo) {
@@ -5189,7 +5674,9 @@ function questOutcomeText(questId, key, party, itemIds, fallbackKey) {
   if (!entry) return null;
   const quest = window.masterQuests.find((q) => q.id === questId);
   const slots = outcomeSlotValues(quest, party);
-  const fill = (text) => (typeof text === "string" ? text.replace(/\{[^}]+\}/g, (m) => slots[m] ?? m) : text);
+  // 同じ人が続けて主語になるとき（「{斥候}が…、{薬草師}が…」で両方が同じ名前）は、2つ目の主語を省く
+  const dropRepeatedSubject = (text) => text.replace(/(\{[^}]+\})が([^、。{]*)、(\{[^}]+\})が/g, (m, x, mid, y) => (slots[x] !== undefined && slots[x] === slots[y] ? `${x}が${mid}、` : m));
+  const fill = (text) => (typeof text === "string" ? dropRepeatedSubject(text).replace(/\{[^}]+\}/g, (m) => slots[m] ?? m) : text);
   return {
     result: entry.result,
     summary: fill(outcomeTextPart(entry.summary, party, itemIds)),
@@ -7790,7 +8277,7 @@ function generateReport(expedition) {
   if (quest.fixedReport) {
     // 参加者＝記録係＋出した冒険者＋エルシー。★ エルシーはギルド犬なので編成に入れていなくても名を連ねるが、
     //   ★ **別の遠征に出ている回は出さない**（2026-09-21・EX-140【1】。EX-064 の常駐をここで更新した）。
-    const keeperName = state.player?.name ?? "記録係";
+    const keeperName = state.player?.name ?? "記録員";
     const elsieName = getDisplayName(getAdventurer("adv_elsie") ?? { name: "エルシー" });
     const elsieInParty = party.some((adv) => adv.id === "adv_elsie");
     const elsiePresent = elsieInParty || isElsieAtGuild(expedition);
