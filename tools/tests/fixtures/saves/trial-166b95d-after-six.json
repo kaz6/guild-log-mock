@@ -1,0 +1,1839 @@
+{
+ "schemaVersion": 3,
+ "adventurers": [
+  {
+   "id": "adv_mina",
+   "name": "ミナ・レイフォード",
+   "nickname": "ミナ",
+   "favorite": true,
+   "job": "斥候",
+   "personality": "慎重",
+   "background": "郵便配達人",
+   "memo": "道をよく覚えている。無理をしない判断ができる。手紙配達系の依頼に向いていそう。",
+   "status": "待機中",
+   "history": [
+    "ミナはギルドの掃除に加わった。",
+    "隣の酒場に買い出し：上機嫌。ミナは丁寧な確認で記録に残った。"
+   ],
+   "tendencies": {
+    "memory": 5,
+    "caution": 4,
+    "courage": 3,
+    "kindness": 3,
+    "curiosity": 4
+   },
+   "stats": {
+    "combat": 12.285882352941176,
+    "exploration": 28.26705882352941,
+    "investigation": 10.288235294117648,
+    "negotiation": 12.690196078431372,
+    "support": 10.288235294117648,
+    "survival": 20.60235294117647
+   },
+   "weapon": {
+    "name": "短弓と配達短剣",
+    "type": "弓 / 短剣",
+    "range": "中距離",
+    "power": 20,
+    "guard": 20,
+    "control": 5,
+    "tags": [
+     "牽制",
+     "足止め",
+     "記録補助"
+    ]
+   },
+   "accessory": {
+    "name": "道標の小札",
+    "effect": "帰り道や目印を見落としにくい。",
+    "tags": [
+     "記憶",
+     "道案内",
+     "慎重"
+    ]
+   },
+   "obsession": {
+    "label": "贖罪",
+    "type": "atonement",
+    "core": "見捨てた側になりたくない",
+    "lie": "自分だけ安全に帰る資格はない",
+    "triggerTags": [
+     {
+      "id": "mina_deliver",
+      "label": "届け切る",
+      "steps": [
+       {
+        "acts": [
+         "伝える"
+        ],
+        "targets": [
+         "人"
+        ]
+       }
+      ],
+      "questTags": [
+       "配達"
+      ],
+      "lines": [
+       "{名前}は預かった言付けを胸の内で繰り返しながら、足を止めなかった。",
+       "休むよう勧められても、{名前}は「先に届けてから」とだけ言った。"
+      ],
+      "trade": {
+       "gain": "tierUp",
+       "cost": "selfInjuryUp",
+       "lines": [
+        "足を止めなかった分、{名前}は帰り道になってようやく自分の足の傷に気づいた。",
+        "{名前}は最後まで足を止めず、帰り道はほかの者に肩を借りた。"
+       ]
+      }
+     },
+     {
+      "id": "mina_last",
+      "label": "最後尾に戻る",
+      "steps": [
+       {
+        "acts": [
+         "手当て"
+        ],
+        "targets": [
+         "人"
+        ]
+       }
+      ],
+      "lines": [
+       "{名前}は全員の顔を確かめてから、最後に歩き出した。",
+       "{名前}は自分の荷を下ろして、まず手当てを待つ者のそばに膝をついた。"
+      ]
+     },
+     {
+      "id": "mina_persist",
+      "label": "打ち切れない",
+      "steps": [
+       {
+        "acts": [
+         "察する"
+        ],
+        "targets": [
+         "人"
+        ]
+       }
+      ],
+      "questCategory": "捜索",
+      "lines": [
+       "引き上げの声がかかってからも、{名前}はしばらく茂みの奥を見ていた。",
+       "日が傾いても、{名前}は「もう一度だけ」と言って、来た道を数歩戻った。"
+      ]
+     }
+    ],
+    "positiveLine": "最後尾の足音を確認してから、ようやく歩き出した。",
+    "dangerLine": "撤退できる状況でも、倒れた影の方へ戻ろうとした。",
+    "idleLine": "何もない道で、何度も背後を振り返っていた。"
+   },
+   "traits": [
+    {
+     "name": "面倒見がいい",
+     "type": "positive",
+     "tags": [
+      "仲間",
+      "救助",
+      "住民"
+     ]
+    },
+    {
+     "name": "よく気がつく",
+     "type": "positive",
+     "tags": [
+      "観察",
+      "小さな異変"
+     ]
+    },
+    {
+     "name": "自分を後回しにする",
+     "type": "flaw",
+     "tags": [
+      "負傷",
+      "包帯",
+      "撤退"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "adv_gadd",
+   "name": "ガッド・オルベイン",
+   "nickname": "鉄鍋",
+   "favorite": false,
+   "job": "戦士",
+   "personality": "豪胆",
+   "background": "宿場の用心棒",
+   "memo": "前に出る癖がある。危険度が低い依頼でも、念のため包帯を持たせたい。",
+   "status": "待機中",
+   "history": [],
+   "tendencies": {
+    "memory": 2,
+    "caution": 1,
+    "courage": 5,
+    "kindness": 4,
+    "curiosity": 1
+   },
+   "stats": {
+    "combat": 30,
+    "exploration": 10,
+    "investigation": 10,
+    "negotiation": 13,
+    "support": 10,
+    "survival": 15
+   },
+   "weapon": {
+    "name": "鉄鍋槌",
+    "type": "鈍器",
+    "range": "近距離",
+    "power": 50,
+    "guard": 30,
+    "control": 2,
+    "tags": [
+     "押し返し",
+     "威圧",
+     "前衛"
+    ]
+   },
+   "accessory": {
+    "name": "焦げた鍋つかみ",
+    "effect": "熱いものや荒い作業に少し強い。",
+    "tags": [
+     "豪胆",
+     "料理",
+     "前に出る"
+    ]
+   },
+   "obsession": {
+    "label": "収集",
+    "type": "hoarding",
+    "core": "欠乏に戻りたくない",
+    "lie": "蓄えがなければ、また何も持たない自分に戻ってしまう",
+    "triggerTags": [
+     {
+      "id": "gadd_carry",
+      "label": "持ち帰る",
+      "steps": [
+       {
+        "acts": [
+         "運ぶ"
+        ],
+        "targets": [
+         "重い"
+        ]
+       },
+       {
+        "acts": [
+         "採る"
+        ]
+       }
+      ],
+      "questTags": [
+       "片付け",
+       "古物",
+       "畑",
+       "採集"
+      ],
+      "lines": [
+       "{名前}は使えそうな枝や布切れを拾い、もう入らない袋に押し込んだ。",
+       "帰り道、{名前}の背負い袋だけが、来たときよりふくらんでいた。"
+      ]
+     },
+     {
+      "id": "gadd_feed",
+      "label": "食わせる",
+      "steps": [
+       {
+        "acts": [
+         "火と食"
+        ]
+       }
+      ],
+      "lines": [
+       "{名前}は干し肉を一切れ取り出し、しばらく眺めてから、鍋に落とした。",
+       "みんなの椀によそい終えてから、{名前}は鍋の底をさらって自分の分にした。"
+      ]
+     }
+    ],
+    "positiveLine": "使えそうな物を拾い集め、帰り道の荷を少しだけ重くした。",
+    "dangerLine": "捨ててよいはずの古道具を、どうしても置いていけなかった。",
+    "idleLine": "鉄鍋は袋の中身を何度も数え直していた。"
+   },
+   "traits": [
+    {
+     "name": "気前がいい",
+     "type": "positive",
+     "tags": [
+      "食料",
+      "住民",
+      "生活依頼"
+     ]
+    },
+    {
+     "name": "場を和ませる",
+     "type": "positive",
+     "tags": [
+      "祝宴",
+      "村",
+      "会話"
+     ]
+    },
+    {
+     "name": "生活の匂いに情が移る",
+     "type": "flaw",
+     "tags": [
+      "台所",
+      "道具",
+      "畑",
+      "廃屋"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "adv_elne",
+   "name": "エルネ・シェルカ",
+   "nickname": "",
+   "favorite": false,
+   "job": "薬草師",
+   "personality": "世話焼き",
+   "background": "村の調合係",
+   "memo": "採集依頼で頼りになる。休憩時の観察が細かい。",
+   "status": "待機中",
+   "history": [],
+   "tendencies": {
+    "memory": 4,
+    "caution": 4,
+    "courage": 2,
+    "kindness": 5,
+    "curiosity": 3
+   },
+   "stats": {
+    "combat": 10,
+    "exploration": 10,
+    "investigation": 14,
+    "negotiation": 10,
+    "support": 28,
+    "survival": 12
+   },
+   "weapon": {
+    "name": "薬草師の杖",
+    "type": "杖",
+    "range": "近距離",
+    "power": 20,
+    "guard": 30,
+    "control": 4,
+    "tags": [
+     "支援",
+     "足場確認",
+     "制止"
+    ]
+   },
+   "accessory": {
+    "name": "乾燥薬草の匂い袋",
+    "effect": "疲労や軽い不調に気づきやすい。",
+    "tags": [
+     "手当",
+     "気配り",
+     "薬草"
+    ]
+   },
+   "obsession": {
+    "label": "統制",
+    "type": "control",
+    "core": "不明なまま終わらせたくない",
+    "lie": "名前も記録もないものは、存在しなかったことにされてしまう",
+    "triggerTags": [
+     {
+      "id": "elne_again",
+      "label": "もう一度見る",
+      "steps": [
+       {
+        "acts": [
+         "記録"
+        ],
+        "targets": [
+         "生き物"
+        ]
+       }
+      ],
+      "lines": [
+       "引き上げる前に、{名前}はもう一度だけ振り返り、帳面に何か書き足した。",
+       "{名前}は同じところを二度、三度と見直し、そのたびに字が小さくなった。"
+      ]
+     },
+     {
+      "id": "elne_order",
+      "label": "手順を崩さない",
+      "steps": [
+       {
+        "acts": [
+         "手当て"
+        ],
+        "targets": [
+         "人"
+        ]
+       }
+      ],
+      "lines": [
+       "{名前}は急かされても、薬を量る手を一度も速めなかった。",
+       "{名前}は包帯を巻く前に、決まった順に傷を確かめ、それを書き留めた。"
+      ]
+     }
+    ],
+    "positiveLine": "曖昧な輪郭を、震える字で報告書の余白に残した。",
+    "dangerLine": "逃げるべき場面で、もう一度だけ対象を見ようとした。",
+    "idleLine": "エルネ・シェルカは、消えかけた名前を何度も書き直していた。"
+   },
+   "traits": [
+    {
+     "name": "記録が正確",
+     "type": "positive",
+     "tags": [
+      "記録",
+      "報告書",
+      "観察"
+     ]
+    },
+    {
+     "name": "冷静に観察する",
+     "type": "positive",
+     "tags": [
+      "なにか",
+      "不明",
+      "生態目録"
+     ]
+    },
+    {
+     "name": "記録を優先しすぎる",
+     "type": "flaw",
+     "tags": [
+      "危険",
+      "観察",
+      "撤退"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "adv_row",
+   "name": "ロウ",
+   "nickname": "",
+   "favorite": false,
+   "job": "見習い盾役",
+   "personality": "我慢強い",
+   "background": "門番見習い",
+   "memo": "判断は少し遅いが、一度決めると粘る。仲間の前に立ち、退路をふさがない位置を気にする。",
+   "status": "待機中",
+   "history": [],
+   "tendencies": {
+    "memory": 3,
+    "caution": 3,
+    "courage": 4,
+    "kindness": 3,
+    "curiosity": 2
+   },
+   "stats": {
+    "combat": 22,
+    "exploration": 12,
+    "investigation": 10,
+    "negotiation": 10,
+    "support": 12,
+    "survival": 25
+   },
+   "weapon": {
+    "name": "見習い盾と短槍",
+    "type": "盾 / 槍",
+    "range": "近距離",
+    "power": 30,
+    "guard": 50,
+    "control": 3,
+    "tags": [
+     "守り",
+     "足止め",
+     "前衛"
+    ]
+   },
+   "accessory": {
+    "name": "門番見習いの笛紐",
+    "effect": "合図と立ち位置の確認を忘れにくい。",
+    "tags": [
+     "合図",
+     "責任感",
+     "退路確認"
+    ]
+   },
+   "obsession": {
+    "label": "回帰",
+    "type": "return",
+    "core": "帰れる場所があると確認したい",
+    "lie": "帰り道を見失ったら、自分もそこに置き去りになる",
+    "triggerTags": [
+     {
+      "id": "row_check",
+      "label": "確かめるまで進まない",
+      "steps": [
+       {
+        "acts": [
+         "進む"
+        ]
+       }
+      ],
+      "questTags": [
+       "帰還",
+       "夜道",
+       "撤退判断",
+       "足跡"
+      ],
+      "lines": [
+       "{名前}は先へ進む前に、来た道の目印をひとつずつ確かめた。",
+       "分かれ道で、{名前}だけが振り返り、帰りの道を声に出して数えた。"
+      ]
+     },
+     {
+      "id": "row_close",
+      "label": "最後に閉める",
+      "steps": [
+       {
+        "acts": [
+         "前に立つ"
+        ],
+        "targets": [
+         "人"
+        ]
+       }
+      ],
+      "lines": [
+       "全員が通り抜けるまで、{名前}は道の口に立って動かなかった。",
+       "最後の一人が過ぎたのを見届けてから、{名前}は背を向けた。"
+      ]
+     }
+    ],
+    "positiveLine": "戦う前に、まず帰り道のぬかるみを確かめていた。",
+    "dangerLine": "敵を見るより先に、退路がまだ同じ場所にあるかを確かめてしまった。",
+    "idleLine": "ロウは古地図を畳んでは開き、同じ道を何度も指でなぞっていた。"
+   },
+   "traits": [
+    {
+     "name": "慎重に進む",
+     "type": "positive",
+     "tags": [
+      "退路",
+      "罠",
+      "夜道"
+     ]
+    },
+    {
+     "name": "道を覚える",
+     "type": "positive",
+     "tags": [
+      "地図",
+      "帰還",
+      "探索"
+     ]
+    },
+    {
+     "name": "退路を疑いすぎる",
+     "type": "flaw",
+     "tags": [
+      "迷子",
+      "帰還",
+      "撤退"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "adv_elsie",
+   "name": "エルシー",
+   "nickname": "",
+   "favorite": false,
+   "job": "ギルド犬",
+   "personality": "穏やか",
+   "background": "ギルド所属",
+   "species": "dog",
+   "special": true,
+   "canSolo": false,
+   "memo": "小柄で立ち耳のギルド犬。ふさふさの尾を振りおだやかな雰囲気だが、嗅覚と警戒に長け追跡や帰還を助ける。戦闘の主力にはならない。",
+   "status": "待機中",
+   "history": [],
+   "tendencies": {
+    "memory": 3,
+    "caution": 4,
+    "courage": 1,
+    "kindness": 4,
+    "curiosity": 3
+   },
+   "stats": {
+    "combat": 0,
+    "exploration": 32,
+    "investigation": 10,
+    "negotiation": 0,
+    "support": 0,
+    "survival": 30
+   },
+   "accessory": {
+    "name": "専用ハーネス",
+    "effect": "支給品を背負って運べる。",
+    "capacity": 1,
+    "tags": [
+     "支給品",
+     "運搬",
+     "救助"
+    ]
+   },
+   "obsession": {
+    "label": "散歩",
+    "type": "walk",
+    "core": "外に出て、誰かと一緒に歩きたい",
+    "lie": "置いていかれると、もう呼んでもらえない",
+    "triggerTags": [
+     {
+      "id": "elsie_trail",
+      "label": "足音を追う",
+      "inParty": true,
+      "steps": [
+       {
+        "acts": [
+         "察する"
+        ],
+        "targets": [
+         "人"
+        ]
+       }
+      ],
+      "lines": [
+       "{名前}は急に鼻を地面に寄せ、ひとりで茂みのほうへ数歩進んで、振り返った。",
+       "{名前}の耳が、同じ方角へ何度も立った。"
+      ]
+     },
+     {
+      "id": "elsie_lead",
+      "label": "帰り道を引く",
+      "inParty": true,
+      "anyStep": true,
+      "questTags": [
+       "帰還"
+      ],
+      "lines": [
+       "帰り道、{名前}は一行の先に立ち、ときどき振り返って全員がついてくるのを確かめた。",
+       "寄り道しかけた者の袖を、{名前}がそっと咥えて引いた。"
+      ]
+     }
+    ],
+    "positiveLine": "エルシーは門を出る前から、しっぽを大きく振っていた。",
+    "dangerLine": "エルシーは離れた足音を追いかけようとして、何度も振り返った。",
+    "idleLine": "エルシーは誰かの足元に鼻先を寄せて、出発を待っていた。"
+   },
+   "traits": [
+    {
+     "name": "穏やか",
+     "type": "positive",
+     "tags": [
+      "同行",
+      "住民",
+      "待機"
+     ]
+    },
+    {
+     "name": "賢さ",
+     "type": "positive",
+     "tags": [
+      "嗅覚",
+      "警戒",
+      "追跡"
+     ]
+    },
+    {
+     "name": "さみしがり",
+     "type": "flaw",
+     "tags": [
+      "単独",
+      "出発",
+      "帰還"
+     ]
+    }
+   ]
+  }
+ ],
+ "quests": [
+  {
+   "id": "quest_tavern_errand",
+   "title": "隣の酒場に買い出し",
+   "oneTime": true,
+   "category": "生活",
+   "danger": "低",
+   "area": "ギルドの隣の酒場",
+   "durationBand": "near_10s",
+   "fieldworkPhases": 2,
+   "fieldworkSteps": [
+    {
+     "label": "店主と話を通す",
+     "stat": "negotiation",
+     "humanOnly": true
+    },
+    {
+     "label": "樽を担ぐ",
+     "stat": "survival",
+     "humanOnly": true
+    }
+   ],
+   "recommended": [
+    "豪胆",
+    "世話焼き",
+    "慎重"
+   ],
+   "tags": [
+    "生活",
+    "買い出し",
+    "運搬",
+    "酒場",
+    "祝い"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 10,
+   "tensionRange": 10,
+   "summary": "記録員の就任祝いに出す酒樽を、ギルドの隣の酒場まで買いに行く。代金はギルドの財布から出る。",
+   "firstRunNeverFails": true,
+   "money": {
+    "fee": 30,
+    "feeLabel": "酒樽の代金",
+    "reward": 0
+   },
+   "outcomes": {
+    "full": [
+     "成功",
+     "上機嫌"
+    ],
+    "partial": [
+     "寄り道"
+    ],
+    "fail": [
+     "出直し"
+    ]
+   }
+  },
+  {
+   "id": "quest_herb",
+   "fieldworkHumanOnly": true,
+   "title": "森の薬草採集",
+   "category": "探索",
+   "danger": "低",
+   "area": "薄明の森",
+   "durationBand": "short_1h",
+   "unlockedBy": "quest_guild_cleanup",
+   "recommended": [
+    "斥候",
+    "薬草師"
+   ],
+   "tags": [
+    "探索",
+    "採集",
+    "観察"
+   ],
+   "observationTarget": "森喰い兎",
+   "tensionBase": 25,
+   "tensionRange": 20,
+   "summary": "森の浅い場所で薬草を採集する。小型の獣による荷荒らしが報告されている。",
+   "outcomes": {
+    "full": [
+     "成功",
+     "採集優先",
+     "観察優先"
+    ],
+    "partial": [
+     "小成功"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_unknown_grass",
+   "fieldworkHumanOnly": true,
+   "title": "森の際に出た見慣れない草の確認",
+   "category": "調査",
+   "danger": "低",
+   "area": "森の際の湿った窪地",
+   "durationBand": "short_30m",
+   "unlockedBy": "quest_herb",
+   "recommended": [
+    "薬草師",
+    "慎重"
+   ],
+   "tags": [
+    "調査",
+    "植物",
+    "記録",
+    "未同定"
+   ],
+   "observationTarget": "灰かぶりのような『なにか』",
+   "observationKind": "植物",
+   "tensionBase": 20,
+   "tensionRange": 14,
+   "summary": "森の際の窪地に、見たことのない草が出ているという。村の者が言うには、去年までは無かったらしい。名も毒の有無も分からない。",
+   "outcomes": {
+    "full": [
+     "群生確認",
+     "標本確保"
+    ],
+    "partial": [
+     "採取見送り"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_signpost",
+   "fieldworkHumanOnly": true,
+   "title": "古い道標の確認",
+   "category": "探索",
+   "danger": "低",
+   "area": "古い街道",
+   "durationBand": "short_30m",
+   "unlockedBy": "quest_old_house_cleanup",
+   "recommended": [
+    "斥候"
+   ],
+   "tags": [
+    "探索",
+    "街道",
+    "記録"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 18,
+   "tensionRange": 16,
+   "summary": "雨で傾いた道標を確認し、街道記録と照合する。戦闘は想定されていない。",
+   "outcomes": {
+    "full": [
+     "成功"
+    ],
+    "partial": [
+     "応急処置",
+     "照合保留",
+     "再確認"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_letter",
+   "title": "届けられなかった手紙",
+   "category": "生活",
+   "danger": "低",
+   "area": "雨待ちの街道",
+   "durationBand": "short_1h",
+   "unlockedBy": "quest_herb_delivery",
+   "recommended": [
+    "慎重",
+    "郵便配達人"
+   ],
+   "tags": [
+    "生活",
+    "配達",
+    "記録"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 16,
+   "tensionRange": 14,
+   "summary": "宿場に残された古い手紙を、記録上の宛先まで届ける。簡単な確認依頼。",
+   "outcomes": {
+    "full": [
+     "成功",
+     "持ち帰り"
+    ],
+    "partial": [
+     "再配達",
+     "部分成功"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_wedding_support",
+   "title": "結婚式の手伝い",
+   "category": "生活",
+   "danger": "低",
+   "area": "町の小さな祝宴会場",
+   "durationBand": "near_10m",
+   "unlockedBy": "quest_guild_cleanup",
+   "recommended": [
+    "世話焼き",
+    "郵便配達人",
+    "豪胆"
+   ],
+   "tags": [
+    "生活",
+    "祝宴",
+    "運搬",
+    "案内",
+    "地域"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 15,
+   "tensionRange": 15,
+   "summary": "町の小さな結婚式を手伝う。会場設営、料理の運搬、招待客の案内、夜間の見回り、迷子対応を行う。",
+   "outcomes": {
+    "full": [
+     "成功",
+     "感謝"
+    ],
+    "partial": [],
+    "fail": [
+     "小さな失敗"
+    ]
+   }
+  },
+  {
+   "id": "quest_guild_cleanup",
+   "title": "ギルドの掃除",
+   "category": "生活",
+   "danger": "低",
+   "area": "ギルドの中",
+   "durationBand": "near_20s",
+   "oneTime": true,
+   "unlockedBy": "quest_tavern_errand",
+   "reportAuthor": "receptionist",
+   "fixedReport": true,
+   "money": {
+    "fee": 0,
+    "reward": 0
+   },
+   "recommended": [
+    "世話焼き",
+    "記録",
+    "慎重"
+   ],
+   "tags": [
+    "生活",
+    "掃除",
+    "ギルド",
+    "地域"
+   ],
+   "observationTarget": "なし",
+   "summary": "ギルドの大掃除を行います。手すきの方はお手伝いください。お昼はこちらで用意します。——受付",
+   "outcomes": {
+    "full": [
+     "おつかれさまでした"
+    ],
+    "partial": [],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_old_house_cleanup",
+   "title": "廃屋の片付け",
+   "category": "生活",
+   "danger": "低",
+   "area": "町外れの古い家屋",
+   "durationBand": "near_1m",
+   "unlockedBy": "quest_guild_cleanup",
+   "recommended": [
+    "慎重",
+    "豪胆",
+    "記録"
+   ],
+   "tags": [
+    "生活",
+    "片付け",
+    "記録",
+    "荷運び",
+    "古物"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 28,
+   "tensionRange": 20,
+   "summary": "町外れの古い家屋を片付ける。壊れた家具、古い手紙、小物、埃をかぶった生活用品を整理する。",
+   "outcomes": {
+    "full": [
+     "成功",
+     "整理完了"
+    ],
+    "partial": [
+     "一部保留"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_field_mystery",
+   "title": "畑を荒らす「なにか」の追い払い",
+   "category": "戦闘",
+   "danger": "低",
+   "area": "村はずれの畑",
+   "durationBand": "short_30m",
+   "unlockedBy": "quest_signpost",
+   "recommended": [
+    "戦士",
+    "慎重",
+    "観察"
+   ],
+   "tags": [
+    "戦闘",
+    "追い払い",
+    "未同定",
+    "畑"
+   ],
+   "observationTarget": "「なにか」",
+   "tensionBase": 45,
+   "tensionRange": 15,
+   "enemyId": "enemy_field_pest",
+   "battleEffectiveItemIds": [
+    "item_bandage"
+   ],
+   "summary": "畑を荒らす未同定の小さな影を追い払う。討伐ではなく、畑の外へ押し返すことが目的。",
+   "outcomes": {
+    "full": [
+     "追い払い"
+    ],
+    "partial": [
+     "追い払い中止"
+    ],
+    "fail": [
+     "追い払い失敗"
+    ]
+   }
+  },
+  {
+   "id": "quest_barn_bite",
+   "title": "納屋に巣食う噛みつく「なにか」の討伐",
+   "category": "戦闘",
+   "danger": "中",
+   "area": "古い納屋",
+   "durationBand": "short_1h",
+   "unlockedBy": "quest_field_mystery",
+   "recommended": [
+    "戦士",
+    "豪胆",
+    "観察"
+   ],
+   "tags": [
+    "戦闘",
+    "討伐",
+    "未同定",
+    "納屋"
+   ],
+   "observationTarget": "嚙みつく「なにか」",
+   "observationKind": "獣",
+   "tensionBase": 72,
+   "tensionRange": 18,
+   "enemyId": "enemy_barn_biter",
+   "battleEffectiveItemIds": [
+    "item_bandage"
+   ],
+   "summary": "納屋の奥に巣食い、家畜や人に噛みつく未同定の相手を仕留める。追い払いではなく討伐が必要。",
+   "outcomes": {
+    "full": [
+     "討伐"
+    ],
+    "partial": [
+     "討伐中止"
+    ],
+    "fail": [
+     "討伐失敗"
+    ]
+   }
+  },
+  {
+   "id": "quest_old_bridge_repair",
+   "fieldworkHumanOnly": true,
+   "title": "古い小橋の応急修理",
+   "category": "保全",
+   "danger": "低",
+   "area": "村はずれの小川",
+   "durationBand": "short_30m",
+   "unlockedBy": "quest_guild_cleanup",
+   "recommended": [
+    "戦士",
+    "慎重",
+    "見習い盾役"
+   ],
+   "tags": [
+    "保全",
+    "修繕",
+    "水辺",
+    "足場",
+    "応急処置",
+    "地域"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 30,
+   "tensionRange": 20,
+   "summary": "村はずれの小川にかかる古い小橋を応急修理する。板の緩み、手すり、足場を確認し、通行できる状態に戻す。",
+   "outcomes": {
+    "full": [
+     "応急修理",
+     "通行可"
+    ],
+    "partial": [
+     "一部保留"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_church_patrol",
+   "fieldworkHumanOnly": true,
+   "title": "辺境教会周辺の定期巡回",
+   "category": "保全",
+   "danger": "低",
+   "area": "辺境教会の外縁",
+   "durationBand": "mid_2h",
+   "unlockedBy": "quest_old_bridge_repair",
+   "recommended": [
+    "斥候",
+    "慎重",
+    "見習い盾役"
+   ],
+   "tags": [
+    "保全",
+    "巡回",
+    "安全確認",
+    "定期",
+    "地域",
+    "辺境教会",
+    "祈り場"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 20,
+   "tensionRange": 15,
+   "summary": "辺境教会の周辺を巡回し、道、柵、鐘楼、花壇、礼拝堂外縁に異常がないか確認する。最近、夜明け前に小さな灯りを見たという話がある。",
+   "outcomes": {
+    "full": [
+     "異常なし",
+     "軽微な対処"
+    ],
+    "partial": [
+     "要再確認",
+     "小さな違和感"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_herb_delivery",
+   "title": "薬草包みの納品",
+   "category": "輸送",
+   "danger": "低",
+   "area": "雨待ちの街道",
+   "durationBand": "short_30m",
+   "unlockedBy": "quest_wedding_support",
+   "recommended": [
+    "薬草師",
+    "斥候",
+    "慎重"
+   ],
+   "tags": [
+    "輸送",
+    "配達",
+    "薬草",
+    "街道",
+    "壊れ物",
+    "地域"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 28,
+   "tensionRange": 22,
+   "summary": "村の調合所から受け取った薬草包みを、街道沿いの診療所へ届ける。濡れや揺れに気をつけながら、指定の時刻までに納品する。",
+   "outcomes": {
+    "full": [
+     "納品完了",
+     "時刻内納品"
+    ],
+    "partial": [
+     "一部注意"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_missing_herbalist",
+   "fieldworkHumanOnly": true,
+   "title": "帰ってこない薬草採りの確認",
+   "category": "捜索",
+   "danger": "中",
+   "area": "薄明の森の浅瀬",
+   "durationBand": "mid_2h",
+   "unlockedBy": "quest_barn_bite",
+   "recommended": [
+    "斥候",
+    "薬草師",
+    "慎重"
+   ],
+   "tags": [
+    "救助",
+    "捜索",
+    "薬草",
+    "森",
+    "足跡",
+    "帰還",
+    "地域"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 58,
+   "tensionRange": 28,
+   "summary": "朝に薬草を採りに出た村人が、夕方になっても戻らない。森の浅い場所を確認し、必要なら保護して連れ帰る。",
+   "outcomes": {
+    "full": [
+     "保護",
+     "発見"
+    ],
+    "partial": [
+     "痕跡確認"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_evening_market_escort",
+   "fieldworkHumanOnly": true,
+   "title": "夕市帰りの親子の付き添い",
+   "category": "護衛",
+   "danger": "低",
+   "area": "夕暮れの街道",
+   "durationBand": "near_10m",
+   "unlockedBy": "quest_guild_cleanup",
+   "recommended": [
+    "見習い盾役",
+    "斥候",
+    "慎重"
+   ],
+   "tags": [
+    "護衛",
+    "付き添い",
+    "夕方",
+    "街道",
+    "親子",
+    "地域",
+    "帰還"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 42,
+   "tensionRange": 25,
+   "summary": "夕市から帰る親子を、町外れの家まで付き添う。荷物を持ち、暗くなる前に安全な道を選んで帰す。",
+   "outcomes": {
+    "full": [
+     "無事帰宅",
+     "安全確認"
+    ],
+    "partial": [
+     "遠回り帰宅"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_caravan_escort",
+   "chainSlot": true,
+   "title": "街道の外れを行く隊商の護衛",
+   "category": "護衛",
+   "danger": "中",
+   "area": "生活圏の外縁を抜ける街道",
+   "durationBand": "mid_3h",
+   "unlockedBy": "quest_barn_bite",
+   "recommended": [
+    "戦士",
+    "見習い盾役",
+    "斥候"
+   ],
+   "tags": [
+    "護衛",
+    "隊商",
+    "戦闘",
+    "街道",
+    "撤退判断",
+    "掴み"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 55,
+   "tensionRange": 25,
+   "enemyId": "enemy_road_raiders",
+   "battleEffectiveItemIds": [
+    "item_bandage"
+   ],
+   "summary": "生活圏の外縁を抜ける隊商を護る。道中で野盗に会敵しうる。強行突破・煙幕での離脱回避・護り切れず撤退の三つに分かれる。",
+   "outcomes": {
+    "full": [
+     "護衛成功",
+     "護衛成功（負傷）"
+    ],
+    "partial": [
+     "隊商通過（遅延あり）",
+     "隊商通過（荷の一部損失）"
+    ],
+    "fail": [
+     "荷を置いて撤退",
+     "護衛失敗",
+     "交戦回避（依頼未達）"
+    ]
+   }
+  },
+  {
+   "id": "quest_caravan_search",
+   "chainSlot": true,
+   "fieldworkHumanOnly": true,
+   "title": "隊商の緊急捜索",
+   "category": "捜索",
+   "danger": "中",
+   "area": "生活圏の外縁を抜ける街道",
+   "durationBand": "mid_2h",
+   "recommended": [
+    "斥候"
+   ],
+   "tags": [
+    "捜索",
+    "隊商",
+    "緊急",
+    "護衛失敗"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 50,
+   "tensionRange": 25,
+   "hidden": true,
+   "summary": "護り切れなかった隊商を追う緊急の捜索依頼。足跡を読む斥候か、鼻の利く者が要る。",
+   "outcomeOverride": {
+    "rules": [
+     {
+      "when": [
+       "斥候かエルシーがいる"
+      ],
+      "outcome": "隊商奪還"
+     }
+    ],
+    "default": "手がかりのみ"
+   },
+   "outcomes": {
+    "full": [
+     "隊商奪還"
+    ],
+    "partial": [
+     "手がかりのみ"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_caravan_lastchance",
+   "chainSlot": true,
+   "fieldworkHumanOnly": true,
+   "title": "最後の手がかり",
+   "category": "捜索",
+   "danger": "高",
+   "area": "生活圏の外縁を抜ける街道",
+   "durationBand": "mid_3h",
+   "recommended": [
+    "斥候"
+   ],
+   "tags": [
+    "捜索",
+    "隊商",
+    "最後",
+    "緊急"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 60,
+   "tensionRange": 25,
+   "hidden": true,
+   "summary": "手がかりが尽きかけた再捜索。これを逃せば、隊商はもう戻らない。",
+   "outcomeOverride": {
+    "rules": [
+     {
+      "when": [
+       "斥候かエルシーがいる"
+      ],
+      "outcome": "辛くも奪還"
+     }
+    ],
+    "default": "隊商喪失"
+   },
+   "outcomes": {
+    "full": [],
+    "partial": [
+     "辛くも奪還"
+    ],
+    "fail": [
+     "隊商喪失"
+    ]
+   }
+  },
+  {
+   "id": "quest_old_stele_rubbing",
+   "title": "古い石碑の拓本",
+   "category": "記録",
+   "fieldworkHumanOnly": true,
+   "danger": "低",
+   "area": "旧街道脇の石碑",
+   "durationBand": "short_30m",
+   "unlockedBy": "quest_lingering_light",
+   "recommended": [
+    "斥候",
+    "薬草師",
+    "慎重"
+   ],
+   "tags": [
+    "記録",
+    "石碑",
+    "拓本",
+    "旧街道",
+    "文字",
+    "歴史",
+    "地域"
+   ],
+   "observationTarget": "なし",
+   "tensionBase": 34,
+   "tensionRange": 24,
+   "summary": "旧街道脇に残る古い石碑の文字を、拓本として写し取る。苔や欠けで読みにくいが、無理に削らず、読める範囲を記録する。",
+   "outcomes": {
+    "full": [
+     "拓本完了",
+     "保存優先"
+    ],
+    "partial": [
+     "一部判読"
+    ],
+    "fail": []
+   }
+  },
+  {
+   "id": "quest_lingering_light",
+   "title": "夜道に残る灯りの調査",
+   "category": "戦闘",
+   "danger": "高",
+   "area": "村はずれの道",
+   "durationBand": "near_10m",
+   "unlockedBy": "quest_guild_cleanup",
+   "recommended": [
+    "戦士",
+    "慎重",
+    "観察"
+   ],
+   "tags": [
+    "戦闘",
+    "夜道",
+    "怪異",
+    "記録"
+   ],
+   "observationTarget": "残る灯り",
+   "tensionBase": 78,
+   "tensionRange": 14,
+   "enemyId": "enemy_night_light",
+   "battleAmbush": true,
+   "reappearAfterCount": {
+    "min": 1,
+    "max": 3
+   },
+   "battleWeakenedBy": {
+    "itemId": "item_lantern",
+    "hp": 0.2,
+    "threat": 0.25
+   },
+   "summary": "夜になると誰も持っていない灯りが見えるという道を調べる。昼は何も起きない。灯りは近づく者を拒む。",
+   "outcomes": {
+    "full": [
+     "灯りの正体を確かめた"
+    ],
+    "partial": [
+     "接近調査は断念",
+     "昼に灯りは出ず"
+    ],
+    "fail": [
+     "夜道から押し戻された"
+    ]
+   }
+  },
+  {
+   "id": "quest_shopping",
+   "title": "隊商の大将に買い出しを頼む",
+   "shopping": true,
+   "category": "生活",
+   "danger": "低",
+   "area": "町の広場に荷を解いた隊商",
+   "durationBand": "near_1m",
+   "unlockedBy": "quest_caravan_escort",
+   "recommended": [
+    "世話焼き",
+    "豪胆"
+   ],
+   "tags": [
+    "生活",
+    "買い出し",
+    "運搬",
+    "隊商"
+   ],
+   "observationTarget": "なし",
+   "summary": "護衛した隊商の大将が、町の広場で荷を解いている。欲しい支給品を書き付けにして、買い付けを頼みに行く。",
+   "money": {
+    "reward": 0
+   },
+   "outcomes": {
+    "full": [
+     "買い付け"
+    ],
+    "partial": [],
+    "fail": [
+     "手ぶらで戻った"
+    ]
+   }
+  },
+  {
+   "id": "quest_relief_odd_jobs",
+   "title": "町の小口の頼まれごと",
+   "relief": true,
+   "category": "生活",
+   "danger": "低",
+   "area": "町なか",
+   "durationBand": "near_1m",
+   "recommended": [
+    "世話焼き",
+    "慎重"
+   ],
+   "tags": [
+    "生活",
+    "雑用",
+    "小口"
+   ],
+   "observationTarget": "なし",
+   "summary": "町の人から、ギルドへ小さな用が回ってきた。手間の割に謝礼は少ないが、断る理由もない。",
+   "money": {
+    "fee": 0,
+    "reward": 8
+   },
+   "outcomes": {
+    "full": [
+     "小口の用を済ませた"
+    ],
+    "partial": [],
+    "fail": []
+   }
+  }
+ ],
+ "items": [
+  {
+   "id": "item_bandage",
+   "name": "包帯",
+   "tags": [
+    "治療",
+    "負傷ログ"
+   ],
+   "note": "負傷時のログや撤退判断に影響する。",
+   "consumable": true,
+   "shopTier": 1
+  },
+  {
+   "id": "item_map",
+   "name": "古地図",
+   "tags": [
+    "道迷い",
+    "街道照合"
+   ],
+   "note": "街道・森・古い道標の記録照合に使える。",
+   "shopTier": 3
+  },
+  {
+   "id": "item_whistle",
+   "name": "笛",
+   "tags": [
+    "合流",
+    "撤退"
+   ],
+   "note": "視界が悪い場所での合流ログに影響する。",
+   "shopTier": 3
+  },
+  {
+   "id": "item_pot",
+   "name": "携帯鍋",
+   "tags": [
+    "休憩",
+    "士気"
+   ],
+   "note": "休憩ログや関係性ログに影響する。",
+   "shopTier": 2
+  },
+  {
+   "id": "item_oilcase",
+   "name": "油紙の手紙入れ",
+   "tags": [
+    "手紙",
+    "雨",
+    "記録保護"
+   ],
+   "note": "紙の依頼書や手紙を濡らさず運ぶ。",
+   "shopTier": 3
+  },
+  {
+   "id": "item_obs_sheet",
+   "name": "観察記録票",
+   "tags": [
+    "観察",
+    "記録",
+    "生物",
+    "生態目録"
+   ],
+   "note": "観察対象がいる依頼で持たせると、報告書に冒険者ごとの観察メモが追加される。",
+   "personal": true,
+   "unlockedBy": "quest_caravan_escort"
+  },
+  {
+   "id": "item_lantern",
+   "name": "ランタン",
+   "tags": [
+    "夜道",
+    "灯り",
+    "調査"
+   ],
+   "note": "夜道や暗所で足元と帰り道を確認するための支給品。",
+   "shopTier": 3
+  },
+  {
+   "id": "item_smoke",
+   "name": "煙幕",
+   "tags": [
+    "撤退",
+    "回避",
+    "戦闘"
+   ],
+   "note": "各人の撤退判断を早め、撤退が成立すれば煙幕を焚いて戦闘を回避し先へ進める。",
+   "consumable": true,
+   "shopTier": 1
+  }
+ ],
+ "reports": [
+  {
+   "id": "report_1792796738299_1qeg9",
+   "questId": "quest_guild_cleanup",
+   "adventurerIds": [
+    "adv_mina"
+   ],
+   "adventurerItemIds": {},
+   "itemIds": [],
+   "opened": true,
+   "applied": true,
+   "result": "おつかれさまでした",
+   "summary": "ギルドの大掃除。今日だけは、受付嬢が記録をつけました。",
+   "historyLine": "ギルドの大掃除が行われた。記録は受付嬢の手による。",
+   "adventurerHistoryLines": {
+    "adv_mina": "ミナはギルドの掃除に加わった。"
+   },
+   "logs": [
+    {
+     "kind": "",
+     "text": "本日は遠征をお休みして、ギルドの大掃除を行いました。記録は僭越ながら、私、アルメナがつけております。"
+    },
+    {
+     "kind": "",
+     "text": "参加してくださったのは、ともだち、ミナ、エルシーのみなさんです。"
+    },
+    {
+     "kind": "action",
+     "text": "窓を開け、床を掃き、掲示板の古い貼り紙を剥がしました。机の下からは、失くしたはずのペン先がふたつ出てきました。"
+    },
+    {
+     "kind": "action",
+     "text": "書棚の埃を払い、依頼書の綴りを年の順に並べ直しました。インク壺はみんなで磨いたので、どれも新品のように光っています。"
+    },
+    {
+     "kind": "drama",
+     "text": "エルシーは雑巾を運ぶお手伝いをしてくれましたが、途中から陽だまりで眠ってしまいました。起こさないように、その一角だけ最後に掃除しました。"
+    },
+    {
+     "kind": "drama",
+     "text": "ともだちさんは高いところの拭き掃除を引き受けてくださいました。着任したばかりで机にかじりつきのあなたの、良い気分転換になっていたら嬉しいです。"
+    },
+    {
+     "kind": "afterglow",
+     "text": "綺麗になったホールは、少しだけ広く見えます。明日からまた、ここで皆さんの帰りをお待ちします。"
+    }
+   ],
+   "observationNotes": null,
+   "departConditions": {
+    "timeOfDay": "夜",
+    "weather": "晴れ"
+   },
+   "highlight": "報告書を書く側ではなく、書かれる側になった一日。",
+   "hiddenTags": {
+    "fixedReport": true,
+    "reportAuthor": "receptionist",
+    "recordDensityGain": 8
+   },
+   "createdAt": "2026-10-23T23:05:38.299Z",
+   "money": {
+    "fee": 0,
+    "reward": 0,
+    "consumed": []
+   }
+  },
+  {
+   "id": "report_1792796735303_be7t6",
+   "questId": "quest_tavern_errand",
+   "adventurerIds": [
+    "adv_mina"
+   ],
+   "adventurerItemIds": {},
+   "itemIds": [],
+   "opened": true,
+   "applied": true,
+   "result": "上機嫌",
+   "summary": "酒場の主人が上機嫌で、頼んだより良い樽を出してくれた。",
+   "historyLine": "隣の酒場へ買い出し。主人の厚意で上等な樽を受け取った。",
+   "adventurerHistoryLines": {
+    "adv_mina": "隣の酒場に買い出し：上機嫌。ミナは丁寧な確認で記録に残った。"
+   },
+   "logs": [
+    {
+     "kind": "",
+     "text": "ミナが「隣の酒場に買い出し」のため、ギルドの隣の酒場へ向かった。"
+    },
+    {
+     "kind": "",
+     "text": "支給品：なし。"
+    },
+    {
+     "kind": "",
+     "text": "隣の酒場に入ると、床を拭いていた主人が顔を上げた。"
+    },
+    {
+     "kind": "action",
+     "text": "裏口の段差で一度持ち上げ直し、そのまま受付の脇へ置いた。"
+    },
+    {
+     "kind": "action",
+     "text": "ミナが用件を伝えると、主人は手を拭きながら「今日中でいいのかい」と聞き返した。"
+    },
+    {
+     "kind": "action",
+     "text": "酒場の台車を借りた。車輪が片方だけ鳴るので、道の段差でいちいち止まることになった。"
+    },
+    {
+     "kind": "action",
+     "text": "主人は樽を土間まで転がしてきて、「これで足りるだろう」と言った。代金はギルドの財布から出た。"
+    },
+    {
+     "kind": "action",
+     "text": "ミナは樽の焼き印を写し取ってから担いだ。銘柄は報告書に残った。"
+    },
+    {
+     "kind": "drama",
+     "text": "ミナは、道中で気になった細部を手帳の端に書き留めていた。"
+    },
+    {
+     "kind": "action",
+     "text": "話を聞いた酒場の主人は「新しい記録員さんに」と言って、頼んだのより一つ良い樽を出した。差額は取らなかった。"
+    },
+    {
+     "kind": "drama",
+     "text": "ミナは今回の依頼で、住民対応の勘を少しつかんだ。"
+    },
+    {
+     "kind": "afterglow",
+     "text": "報告書の末尾には「差額なし。主人の厚意」とだけ書いてある。こういう行はあとで効く。"
+    }
+   ],
+   "observationNotes": null,
+   "departConditions": {
+    "timeOfDay": "夜",
+    "weather": "小雨"
+   },
+   "highlight": "小雨の中、ミナは出かけた。帰還したとき、服はまだ乾いていなかった。",
+   "usedItemIds": [],
+   "hiddenTags": {
+    "workEvents": [
+     "裏口までの搬入",
+     "注文の伝達",
+     "台車の借り受け",
+     "樽の受け取り"
+    ],
+    "outcome": "上機嫌",
+    "fieldwork": {
+     "tier": "full",
+     "setbacks": 0,
+     "phases": 2,
+     "cause": null,
+     "capability": 10,
+     "stats": [
+      "negotiation",
+      "survival"
+     ],
+     "weatherLoad": 8,
+     "fatigue": 15
+    },
+    "battleHpRatios": {
+     "adv_mina": 1
+    },
+    "recordDensityGain": 12
+   },
+   "tensionValue": 17,
+   "tensionLevel": 1,
+   "createdAt": "2026-10-23T23:05:35.303Z",
+   "growthShown": [
+    {
+     "advId": "adv_mina",
+     "statKey": "negotiation",
+     "delta": 2
+    },
+    {
+     "advId": "adv_mina",
+     "statKey": "survival",
+     "delta": 2
+    }
+   ],
+   "growth": {
+    "advId": "adv_mina",
+    "statKey": "negotiation"
+   },
+   "money": {
+    "fee": 30,
+    "reward": 0,
+    "consumed": []
+   }
+  }
+ ],
+ "expeditions": [],
+ "activeResultReportIds": [],
+ "worldState": {
+  "daysPassed": 0,
+  "expeditionAnchorStart": null,
+  "totalReportsOpened": 2,
+  "totalExpeditions": 2,
+  "attachmentScore": 2,
+  "recordDensity": 2,
+  "anomalyPressure": 0,
+  "archiveSeed": 893332
+ },
+ "selectedQuestId": null,
+ "selectedAdventurerIds": [],
+ "selectedSharedItems": [],
+ "selectedObsHolders": [],
+ "ecologyRecord": {},
+ "reportMemos": [],
+ "searchChain": null,
+ "demoSpeed": 1,
+ "money": 270,
+ "moneyLedger": [
+  {
+   "at": 1792796734058,
+   "amount": -30,
+   "label": "酒樽の代金",
+   "detail": "隣の酒場に買い出し",
+   "balance": 270
+  }
+ ],
+ "debt": {
+  "active": null,
+  "timesBorrowed": 0
+ },
+ "moneyEvents": [],
+ "firstNameSeal": null,
+ "trialEnd": null,
+ "stock": {},
+ "gameOver": null,
+ "player": {
+  "name": "ともだち",
+  "personality": null,
+  "personalityLabel": null,
+  "personalityTags": [],
+  "interviewDone": true,
+  "appointedAt": 1792796732573
+ },
+ "activeReportId": "report_1792796738299_1qeg9"
+}
