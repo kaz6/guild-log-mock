@@ -39,9 +39,10 @@ for (const name of SAVES) {
     expect(home, "面接に戻された").not.toContain("ようこそ、西端ギルドへ！");
     expect(await page.evaluate(() => state.player.interviewDone)).toBe(true);
 
-    // 報告書が読める（あれば）
+    // 報告書が読める（全部）
     const reportIds = await page.evaluate(() => state.reports.map((r) => r.id));
-    for (const id of reportIds.slice(0, 3)) {
+    if (name !== "after-interview") expect(reportIds.length, "報告書が無い（fixture が変わった？）").toBeGreaterThan(0);
+    for (const id of reportIds) {
       await page.evaluate((x) => openReport(x), id);
       await page.waitForTimeout(300);
       await expect(page.locator(".paper-sub").first(), `報告書 ${id} が開けない`).toBeVisible();
@@ -53,6 +54,7 @@ for (const name of SAVES) {
     await page.evaluate(() => setRoute("ecology"));
     await page.waitForTimeout(200);
     const named = await page.evaluate(() => Object.values(state.ecologyRecord ?? {}).filter((e) => e.nameConfirmedAt).map((e) => e.name));
+    if (name === "after-name-seal") expect(named, "名前の封をした記録が無い（fixture が変わった？）").toEqual(["ふくみみ"]);
     for (const n of named) expect(await page.evaluate(() => document.body.innerText)).toContain(n);
 
     // 依頼が出せる（掲示板の先頭の依頼に、待機中の人間を1人出す）
@@ -62,10 +64,12 @@ for (const name of SAVES) {
     expect(titles.length, "掲示板が空").toBeGreaterThan(0);
     await page.locator(".quest-card").first().click();
     await page.waitForTimeout(250);
-    await page.evaluate(() => {
+    const picked = await page.evaluate(() => {
       const free = [...document.querySelectorAll(".adventurer-card")].filter((c) => /待機中/.test(c.innerText) && !/エルシー/.test(c.innerText));
       free[0]?.click();
+      return free.length;
     });
+    expect(picked, "待機中の冒険者が選べない").toBeGreaterThan(0);
     await page.waitForTimeout(250);
     const before = await page.evaluate(() => (state.expeditions ?? []).length);
     await page.getByRole("button", { name: "遠征開始" }).click();
