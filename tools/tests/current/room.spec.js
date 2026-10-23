@@ -137,7 +137,7 @@ test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
     await page.locator('button[data-room-object="receptionist"]').click({ force: true });
     await expect(notice).toHaveText("はい、なんでしょう。");
     await page.locator('button[data-room-object="receptionist"]').click({ force: true });
-    await expect(notice).toHaveText("記録係さん、今日もお疲れさまです。");
+    await expect(notice).toHaveText("記録員さん、今日もお疲れさまです。");
     await page.locator(".room-arrow.right").click();
     await page.locator(".room-arrow.right").click();
     await expect(notice).toBeHidden();

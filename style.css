@@ -1291,6 +1291,33 @@ hr.soft {
   color: var(--accent);
 }
 
+/* 面接でバッジを渡す場面の絵（EX-162・仮）。文字の入った丸いバッジ。将来ギルドの紋に差し替える */
+.interview-badge {
+  width: 96px;
+  height: 96px;
+  margin: 16px auto 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(21, 16, 13, 0.9);
+  box-shadow: inset 0 0 0 4px rgba(201, 150, 74, 0.25);
+}
+
+.interview-badge-mark {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.interview-badge-text {
+  color: var(--accent-2);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+}
+
 /* 再演出用。押せることを意識させるだけで、内容は変えない */
 .recorder-badge.glowing {
   color: var(--text);
