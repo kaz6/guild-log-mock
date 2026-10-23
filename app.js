@@ -477,7 +477,7 @@ const INTERVIEW_MOTIVES = [
 // 無記名のときの呼び名（台本の指定）。
 const INTERVIEW_UNNAMED = "記録員";
 let interviewStep = 0;
-let interviewDraft = { name: "", unnamed: false, motive: null };
+let interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
 // バッジを開いているか／光らせるか。どちらも画面だけの一時状態で保存しない。
 // ★ 光る状態はオープニング再演出のために形だけ用意したもので、今はどこからも on にしていない。
 let recorderBadgeOpen = false;
@@ -1932,7 +1932,7 @@ function renderRecorderBadge() {
   const dateText = appointedDateText();
   recorderBadgeCard.innerHTML = `
     <p class="recorder-badge-role">記録員</p>
-    <p class="recorder-badge-name">${escapeHtml(state.player?.name ?? "記録係")}</p>
+    <p class="recorder-badge-name">${escapeHtml(state.player?.name ?? "記録員")}</p>
     <p class="recorder-badge-date">${dateText ? `就任　${escapeHtml(dateText)}` : ""}</p>
   `;
 }
@@ -2106,6 +2106,7 @@ function renderInterview() {
   if (interviewStep === 7) {
     app.innerHTML = receptionCard(`
       ${speech(["そして、こちらが<strong>記録員バッジ</strong>！", "正式なギルドの記録員である証です！無くしちゃダメですよ！"])}
+      ${interviewBadgeHtml()}
       ${next()}
     `);
     return;
@@ -2155,7 +2156,7 @@ function renderInterview() {
   }
 
   if (interviewStep === 11) {
-    // 【名簿に記録】：名簿の「記録係メモ」と同じ欄を、1人ぶんだけここに出す。保存も名簿と同じ処理（saveAdventurerMemo）。
+    // 【名簿に記録】：名簿の「記録員メモ」と同じ欄を、1人ぶんだけここに出す。保存も名簿と同じ処理（saveAdventurerMemo）。
     //   ★ 書かなくても「あとで」で進める。
     //   ★ 欄には名簿と同じく今の値を入れておく（空で保存すると既存のメモを消してしまうため）。
     const advs = state.adventurers ?? [];
@@ -2178,16 +2179,19 @@ function renderInterview() {
       </div>
       <div class="button-row" style="margin-top: 14px;">
         <button class="primary-button" onclick="interviewSaveMemo()">記録を保存</button>
-        <button class="secondary-button" onclick="interviewNext()">あとで</button>
+        <button class="secondary-button" onclick="interviewSkipMemo()">あとで</button>
       </div>
     `);
     return;
   }
 
   if (interviewStep === 12) {
+    // ★「あとで」を選んだときは、書いていないので「うまく出来ましたね」は出さない（仮の変種。作者確認で差し替え可）。
     app.innerHTML = receptionCard(`
       ${speech(
-        ["うまく出来ましたね！これでトラブルがあっても記録を読むことで対処が可能になる、大事なお仕事です！"],
+        interviewDraft.memoSaved
+          ? ["うまく出来ましたね！これでトラブルがあっても記録を読むことで対処が可能になる、大事なお仕事です！"]
+          : ["あとで書いてくださっても大丈夫ですよ！名簿は、いつでも書けますからね。", "記録を読むことでトラブルにも対処が可能になる、大事なお仕事です！"],
         ["それでは、皆さん集まったことですし、お酒を買って祝賀会しましょう！今回はギルドの経費で落としちゃいましょう〜！"]
       )}
       ${next()}
@@ -2238,7 +2242,23 @@ function interviewFillMemo() {
 function interviewSaveMemo() {
   const id = document.getElementById("interviewMemoTarget")?.value;
   if (id) saveAdventurerMemo(id);
+  interviewDraft.memoSaved = true;
   interviewNext();
+}
+
+function interviewSkipMemo() {
+  interviewDraft.memoSaved = false;
+  interviewNext();
+}
+
+// 面接でバッジを渡す場面の絵（仮。文字の入った丸いバッジ）。★ 演出だけで、バッジの所持・就任日は面接の終わりで確定する。
+//   将来、ギルドの紋に差し替える前提。
+function interviewBadgeHtml() {
+  return `
+      <div class="interview-badge" aria-hidden="true">
+        <span class="interview-badge-mark">✦</span>
+        <span class="interview-badge-text">記録員</span>
+      </div>`;
 }
 
 function interviewComplete() {
@@ -2255,7 +2275,7 @@ function interviewComplete() {
   };
   saveState();
   interviewStep = 0;
-  interviewDraft = { name: "", unnamed: false, motive: null };
+  interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
   route = "home";
   render();
 }
@@ -2406,7 +2426,7 @@ const ROOM_MENUS = {
 };
 // タップの反応（段階3）。★ 文面は仮（チャット側が後で書き直す）。表で持ち、押すたびに順に替える（乱数は使わない）。
 const ROOM_REACTIONS = {
-  receptionist: ["はい、なんでしょう。", "記録係さん、今日もお疲れさまです。"],
+  receptionist: ["はい、なんでしょう。", "記録員さん、今日もお疲れさまです。"],
   elsie: ["エルシーは尻尾を振った。", "撫でると、エルシーは目を細めた。"]
 };
 const roomReactionCount = {};
@@ -3379,7 +3399,7 @@ function adventurerEditorHtml(adventurer) {
   const roleLabel = adventurer.species === "dog" ? "紹介" : "役割・紹介";
   const roleText = adventurer.species === "dog"
     ? adventurerRoleIntro(adventurer)
-    : `${adventurer.job ?? "冒険者"} / ${adventurer.background ?? "—"} — ${adventurer.memo?.trim() || "記録係メモはまだありません。"}`;
+    : `${adventurer.job ?? "冒険者"} / ${adventurer.background ?? "—"} — ${adventurer.memo?.trim() || "記録員メモはまだありません。"}`;
 
   return `
     <div class="card-title">
@@ -3434,7 +3454,7 @@ function adventurerEditorHtml(adventurer) {
 
     <hr class="soft" />
 
-    <p class="meta-label">記録係メモ</p>
+    <p class="meta-label">記録員メモ</p>
     <div class="form-row">
       <label for="nicknameInput">あだ名</label>
       <input id="nicknameInput" value="${escapeHtml(adventurer.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
@@ -4101,7 +4121,7 @@ function renderReportDetail(reportId) {
     <section class="paper-sheet" data-report-id="${escapeHtml(report.id)}">
       <div class="paper-docno"><span>遠征報告書　開封済み</span><span>${todayLabelText()}</span></div>
       <h3 class="paper-title">${escapeHtml(quest?.title ?? "報告書")}</h3>
-      <p class="paper-sub">記録係 ${escapeHtml(state.player?.name ?? "")}</p>
+      <p class="paper-sub">記録員 ${escapeHtml(state.player?.name ?? "")}</p>
       <dl class="paper-fields">
         ${fieldRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}
       </dl>
@@ -4989,7 +5009,7 @@ function workEventText(quest, eventName, party, itemIds, rng) {
   // ★ 最初のクエスト（2026-08-05・EX-053）。酒場は画面外の場所として、ログと会話の中にだけ出す。
   const tavernEvents = {
     注文の伝達: [
-      `酒場の主人に用件を伝えた。「ああ、聞いてるよ。新しい記録係さんの分だろう」と、すぐに奥へ引っ込んだ。`,
+      `酒場の主人に用件を伝えた。「ああ、聞いてるよ。新しい記録員さんの分だろう」と、すぐに奥へ引っ込んだ。`,
       `${solo ? name(humanMembers(party)[0] ?? party[0]) : name(caregiver)}が用件を伝えると、主人は手を拭きながら「今日中でいいのかい」と聞き返した。`
     ],
     樽の受け取り: [
@@ -5392,7 +5412,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
     } else {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げ、道標の位置を確認した。迷う前に違和感に気づけたのが大きい。`);
     }
-    lines.push(`古地図の余白には、前任の記録係らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
+    lines.push(`古地図の余白には、前任の記録員らしい細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
   }
   if (has("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
     if (solo) {
@@ -8102,7 +8122,7 @@ function generateReport(expedition) {
   if (quest.fixedReport) {
     // 参加者＝記録係＋出した冒険者＋エルシー。★ エルシーはギルド犬なので編成に入れていなくても名を連ねるが、
     //   ★ **別の遠征に出ている回は出さない**（2026-09-21・EX-140【1】。EX-064 の常駐をここで更新した）。
-    const keeperName = state.player?.name ?? "記録係";
+    const keeperName = state.player?.name ?? "記録員";
     const elsieName = getDisplayName(getAdventurer("adv_elsie") ?? { name: "エルシー" });
     const elsieInParty = party.some((adv) => adv.id === "adv_elsie");
     const elsiePresent = elsieInParty || isElsieAtGuild(expedition);
