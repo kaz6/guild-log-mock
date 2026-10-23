@@ -22,7 +22,8 @@ test.describe.serial("CLAUDE.md の動作確認8項目", () => {
   test.afterAll(async () => { await page.close(); });
 
   test("① 初回起動（localStorage が空）で面接画面が出る", async () => {
-    await expect(page.getByText("面接を始める").first()).toBeVisible();
+    // ★ 台本の文は会話の窓に1ページずつ出る（「面接を始める」は窓の最後のページ。EX-162 の続き）
+    await expect(page.getByText("ようこそ、西端ギルドへ！").first()).toBeVisible();
   });
 
   test("② 名前入力・志望動機を終えるとホーム画面（受付嬢）に移る", async () => {

@@ -141,17 +141,13 @@ function receiveReward(reward, detail) {
 //   【体験版のみ】`/trial/` のコピー（`STORAGE_SUFFIX` が `_trial`）でしか動かない。本体の画面には出ない＝製品版に外し忘れが残らない。
 //   条件：「隊商護衛の報告書を開いた（結末は問わない）」∧「名前の封が1つ以上」がそろった瞬間（後に来たほうで）、ホームのカード1枚を1度だけ出す。読んだら消える。
 //   ⚠️ 護衛の結末が fail でも条件に数える（失敗のあとは捜索チェーンへ続くが、この合図は「いまお見せできる記録」の締め）。遊び続けるのは縛らない。
-//   ★ 文面は確定稿（2026-10-23）。正本は Notion「オープニング面接の台本（確定稿・2026-10-23）」の末尾の節。空文字の行＝台本の空行。
+//   ★ 文面は確定稿（2026-10-23。夕に「命名の直後」と「終わりの合図」の2つへ分けた）。
+//     正本は Notion「オープニング面接の台本（確定稿・2026-10-23）」の末尾の節。配列の1要素＝台本の1段落（空行で区切られたまとまり）。
+//     命名の直後の一言は FIRST_NAME_SEAL_PARAGRAPHS（本体でも出る）。
 const IS_TRIAL_COPY = STORAGE_SUFFIX === "_trial";
-const TRIAL_END_LINES = [
-  "すごいです！",
-  "あなたがこの子の名付け親になったんですよ！",
-  "",
-  "名付けとは不確かさ溢れる振る舞いを枠に詰めて安定させる神聖な——っと、新しい発見に少し興奮してしまいましたね。",
-  "",
-  "でも、残念なことにいま歩める記録は、ここまでみたいです。",
-  "",
-  "また扉の音がしたら、お知らせしますね！"
+const TRIAL_END_PARAGRAPHS = [
+  ["さて、残念なことにいま歩める記録は、ここまでみたいです。"],
+  ["また扉の音がしたら、お知らせしますね！"]
 ];
 
 function trialEndReached() {
@@ -174,13 +170,57 @@ function trialEndCardHtml() {
         <div>
           <p class="eyebrow">Guild Reception</p>
           <h3>受付嬢</h3>
-          <div class="speech">${TRIAL_END_LINES.map((line) => escapeHtml(line)).join("<br />")}</div>
-          <div class="button-row" style="margin-top: 12px;">
-            <button class="secondary-button" onclick="dismissTrialEnd()">わかりました</button>
-          </div>
+          ${trialEndWindowHtml()}
         </div>
       </div>
     </section>`;
+}
+
+function trialEndWindowHtml() {
+  const w = speechWindow("trialEnd", TRIAL_END_PARAGRAPHS.map((p) => p.map(escapeHtml)));
+  return w.html + (w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissTrialEnd()">わかりました</button>
+          </div>` : w.more);
+}
+
+// ★ 命名の直後の一言（2026-10-23・作者の確定稿）。**最初に名前の封をした瞬間に1度だけ**、命名の画面の上に受付嬢のカードで出す。
+//   本体でも出す（命名は本編でも起きる）。`state.firstNameSeal = { name, at, read }` を保存し、リロードしても戻らない。
+//   ⚠️ 立てるのは封の操作（confirmEcologyRecordName）の中だけ。読み込み時に既存の封から立てない
+//     ——古いセーブで「いま名付けた」と言い出さないため。
+function firstNameSealParagraphs(name) {
+  return [
+    ["すごいです！", `あなたがこの子の、「${name}」の名付け親になったんですよ！`],
+    ["名付けとは不確かさ溢れる振る舞いを枠に詰めて安定させる神聖な——っと、新しい発見に少し興奮してしまいましたね。"]
+  ];
+}
+
+function firstNameSealCardHtml(entryId) {
+  const seal = state.firstNameSeal;
+  if (!seal || seal.read) return "";
+  const w = speechWindow("firstNameSeal",
+    firstNameSealParagraphs(seal.name).map((p) => p.map(escapeHtml)),
+    `openEcologyRecordEditor('${escapeJsArg(entryId)}')`);
+  return `
+    <section class="card money-event-card" data-first-name-seal="1">
+      <div class="card-body reception">
+        <div>
+          <p class="eyebrow">Guild Reception</p>
+          <h3>受付嬢</h3>
+          ${w.html}
+          ${w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissFirstNameSeal('${escapeJsArg(entryId)}')">わかりました</button>
+          </div>` : w.more}
+        </div>
+      </div>
+    </section>`;
+}
+
+function dismissFirstNameSeal(entryId) {
+  if (state.firstNameSeal) state.firstNameSeal.read = true;
+  saveState();
+  openEcologyRecordEditor(entryId);
 }
 
 function dismissTrialEnd() {
@@ -482,7 +522,92 @@ const INTERVIEW_MOTIVES = [
 // 無記名のときの呼び名（台本の指定）。
 const INTERVIEW_UNNAMED = "記録員";
 let interviewStep = 0;
+let speechWindowStep = -1; // 窓のページを段ごとに巻き戻すための控え
 let interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
+// 名前の長さの上限（2026-10-23・仮）。★ 数えるのは文字数（全角・半角とも1字。`[...s].length`）。
+//   止めるのは入力欄だけで、古いセーブの長い名前は切らない（読み込みでは触らない）。
+const PLAYER_NAME_MAX = 12;
+const ECOLOGY_NAME_MAX = 20;
+
+// ── 会話の窓（2026-10-23・EX-162 の続き）────────────────────────────────────
+// ★ 台本の文（面接・命名の直後の一言・体験版の終わりの合図）を、決まった大きさの窓に1ページずつ出す。
+//   段落（台本の空行）で改ページし、1段落が窓に入らなければ行で、1行が入らなければ「。！？」で割る。
+//   ★ 390px 幅の実測は1行16字。禁則で1字落ちる行を見込んで、見積もりは15字×4行（約60字）で行う。
+//   収まっているかは試験（tools/tests/current/speech-window.spec.js）が実際の描画で確かめる。
+const SPEECH_WINDOW_LINES = 4;
+const SPEECH_WINDOW_CHARS_PER_LINE = 15;
+const speechWindowPage = {}; // 窓 id → いま開いているページ。画面だけの一時状態（保存しない）
+function speechLinesNeeded(html) {
+  return Math.max(1, Math.ceil([...html.replace(/<[^>]+>/g, "")].length / SPEECH_WINDOW_CHARS_PER_LINE));
+}
+// 1行が窓に入らないときだけ「。！？」で割る。話し手の表示（「女性:」など）は続きのページにも付け直す。
+function splitSpeechLine(line) {
+  if (speechLinesNeeded(line) <= SPEECH_WINDOW_LINES) return [line];
+  const label = (line.match(/^[^:：<]{1,4}[:：]/) ?? [""])[0];
+  const sentences = line.slice(label.length).split(/(?<=[。！？][」』）]?)/).filter(Boolean);
+  const out = [];
+  let cur = "";
+  sentences.forEach((sentence) => {
+    if (cur && speechLinesNeeded(label + cur + sentence) > SPEECH_WINDOW_LINES) { out.push(label + cur); cur = sentence; }
+    else cur += sentence;
+  });
+  if (cur) out.push(label + cur);
+  return out;
+}
+function speechWindowPages(paragraphs) {
+  const pages = [];
+  paragraphs.forEach((paragraph) => {
+    let page = [];
+    let used = 0;
+    paragraph.flatMap(splitSpeechLine).forEach((unit) => {
+      const n = speechLinesNeeded(unit);
+      if (page.length > 0 && used + n > SPEECH_WINDOW_LINES) { pages.push(page); page = []; used = 0; }
+      page.push(unit);
+      used += n;
+    });
+    if (page.length > 0) pages.push(page);
+  });
+  return pages;
+}
+// 窓の HTML。最後のページでなければ「続き」のボタンを付ける（呼ぶ側は last のときだけ操作を出す）。
+//   onNext：ページを進めたあとの描き直し（既定は render。重ね画面のときは開き直す関数を渡す）。
+function speechWindow(id, paragraphs, onNext = "render()") {
+  const pages = speechWindowPages(paragraphs);
+  const index = Math.min(speechWindowPage[id] ?? 0, pages.length - 1);
+  const last = index >= pages.length - 1;
+  return {
+    last,
+    html: `<div class="speech speech-window" data-window="${escapeHtml(id)}" data-page="${index + 1}/${pages.length}">${pages[index].join("<br>")}</div>`,
+    more: last ? "" : `
+      <div class="button-row" style="margin-top: 12px;">
+        <button class="primary-button window-next" onclick="speechWindowNext('${escapeJsArg(id)}'); ${onNext}">続き ▼</button>
+      </div>`
+  };
+}
+function speechWindowNext(id) {
+  speechWindowPage[id] = (speechWindowPage[id] ?? 0) + 1;
+}
+
+// 文字数の上限つきの入力欄（data-char-limit）。★ 変換中（IME）は切らず、確定したときに切る。
+//   「あと〇字」の札（data-limit-hint の id）を一緒に書き換える。
+function charLimitHintText(value, limit) {
+  const rest = limit - [...value].length;
+  return rest > 0 ? `あと${rest}字` : "ここまでです";
+}
+function enforceCharLimit(input) {
+  const limit = Number(input.dataset.charLimit);
+  if (!limit) return;
+  const chars = [...input.value];
+  if (chars.length > limit) input.value = chars.slice(0, limit).join("");
+  const hint = input.dataset.limitHint && document.getElementById(input.dataset.limitHint);
+  if (hint) hint.textContent = charLimitHintText(input.value, limit);
+}
+document.addEventListener("input", (e) => {
+  if (e.target?.dataset?.charLimit && !e.isComposing) enforceCharLimit(e.target);
+});
+document.addEventListener("compositionend", (e) => {
+  if (e.target?.dataset?.charLimit) enforceCharLimit(e.target);
+});
 // バッジを開いているか／光らせるか。どちらも画面だけの一時状態で保存しない。
 // ★ 光る状態はオープニング再演出のために形だけ用意したもので、今はどこからも on にしていない。
 let recorderBadgeOpen = false;
@@ -531,6 +656,7 @@ function createInitialState() {
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     debt: { active: null, timesBorrowed: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
     trialEnd: null, // 体験版の終わりの合図（EX-158【3】。/trial/ のコピーだけが立てる）。{ at, read }
     stock: {},       // 在庫（品 id → 数）。★ 最初は空（2026-09-23・EX-144）
     gameOver: null,  // 運営不能（★ 記録の終わり方の一つ。「負け」ではない）
@@ -2005,15 +2131,26 @@ function renderInterview() {
         <div style="flex: 1;">
           <p class="eyebrow">Guild Reception</p>
           <h3>受付嬢</h3>
-          ${body}
+          ${interviewWindowCut(body)}
         </div>
       </div>
     </section>
   `;
-  // 台本の1段落＝吹き出し1つ。段落の中の改行はそのまま改行にする。
-  const speech = (...paragraphs) => paragraphs
-    .map((lines, i) => `<div class="speech"${i > 0 ? ' style="margin-top: 12px;"' : ""}>${lines.join("<br>")}</div>`)
-    .join("");
+  // 台本の文は会話の窓に出す（段落＝改ページ）。★ 最後のページまでは、窓より後ろ（入力欄・選択肢・次へ）を出さず「続き」だけ。
+  if (speechWindowStep !== interviewStep) {
+    Object.keys(speechWindowPage).filter((k) => k.startsWith("iv")).forEach((k) => delete speechWindowPage[k]);
+    speechWindowStep = interviewStep;
+  }
+  let windowMore = "";
+  const speech = (...paragraphs) => {
+    const w = speechWindow(`iv${interviewStep}`, paragraphs);
+    windowMore = w.more;
+    return `${w.html}<!--/window-->`;
+  };
+  const interviewWindowCut = (body) => {
+    const [head, rest = ""] = body.split("<!--/window-->");
+    return windowMore ? head + windowMore : head + rest;
+  };
   const next = (label = "次へ") => `
       <div class="button-row" style="margin-top: 16px;">
         <button class="primary-button" onclick="interviewNext()">${label}</button>
@@ -2040,7 +2177,8 @@ function renderInterview() {
       ])}
       <div class="form-row" style="margin-top: 14px;">
         <label for="interviewNameInput">お名前</label>
-        <input id="interviewNameInput" type="text" maxlength="24" placeholder="${INTERVIEW_UNNAMED}" value="${interviewDraft.unnamed ? "" : name}" />
+        <input id="interviewNameInput" type="text" data-char-limit="${PLAYER_NAME_MAX}" data-limit-hint="interviewNameHint" placeholder="${INTERVIEW_UNNAMED}" value="${interviewDraft.unnamed ? "" : name}" />
+        <p class="muted" id="interviewNameHint">${charLimitHintText(interviewDraft.unnamed ? "" : interviewDraft.name, PLAYER_NAME_MAX)}</p>
       </div>
       <div class="button-row" style="margin-top: 14px;">
         <button class="primary-button" onclick="interviewSubmitName()">次へ</button>
@@ -2219,7 +2357,7 @@ function interviewNext() {
 
 function interviewSubmitName() {
   const el = document.getElementById("interviewNameInput");
-  const value = (el?.value ?? "").trim();
+  const value = [...(el?.value ?? "").trim()].slice(0, PLAYER_NAME_MAX).join(""); // 入力欄でも止めているが、念のためここでも切る
   interviewDraft.unnamed = !value;
   interviewDraft.name = value || INTERVIEW_UNNAMED;
   interviewStep = 2;
@@ -3827,7 +3965,7 @@ function confirmEcologyRecordName(id) {
   const entry = getEcologyRecordEntry(id);
   if (!entry || isEcologyRecordNameConfirmed(entry)) return;
   if (!canNameEcologyRecordEntry(entry)) return;
-  const draft = (document.getElementById("er_name_draft")?.value ?? "").trim();
+  const draft = [...(document.getElementById("er_name_draft")?.value ?? "").trim()].slice(0, ECOLOGY_NAME_MAX).join("");
   if (!draft) return;
   if (!confirm(`「${draft}」で封をします。\n封をした名前は二度と変えられません。よろしいですか？`)) return;
   // ★ 先に書きかけの欄も保存する（確定だけ通って観察が消えるのを防ぐ）
@@ -3835,6 +3973,7 @@ function confirmEcologyRecordName(id) {
   entry.name = draft;
   entry.nameDraft = "";
   entry.nameConfirmedAt = Date.now();
+  if (!state.firstNameSeal) state.firstNameSeal = { name: draft, at: entry.nameConfirmedAt, read: false };
   saveState();
   render();
   openEcologyRecordEditor(entry.id); // 確定した姿をそのまま見せる
@@ -4011,7 +4150,8 @@ function ecologyRecordNameSectionHtml(entry) {
       <p class="er-static"><span>${escapeHtml(entry.target)}</span><span class="er-tag">仮称</span></p>
       <p class="muted er-hint">確かめられたことが ${filled} / ${ECOLOGY_RECORD_NAMING_AXES_REQUIRED} 軸（全12軸のうち）。${gate}</p>
       ${ready ? `
-      <input id="er_name_draft" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
+      <input id="er_name_draft" data-char-limit="${ECOLOGY_NAME_MAX}" data-limit-hint="er_name_hint" value="${escapeHtml(entry.nameDraft || "")}" placeholder="この生きものに名前を付ける" />
+      <p class="muted er-hint" id="er_name_hint">${charLimitHintText(entry.nameDraft || "", ECOLOGY_NAME_MAX)}</p>
       <div class="button-row" style="margin-top: 8px;">
         <button class="secondary-button" onclick="confirmEcologyRecordName('${escapeJsArg(entry.id)}')">名前に封をする</button>
       </div>
@@ -4052,6 +4192,7 @@ function ecologyRecordEditorHtml(entry) {
         <button class="ghost-button" onclick="closeEcologyRecordEditor()">✕ 閉じる</button>
       </div>
       <div class="er-modal-body">
+        ${firstNameSealCardHtml(entry.id)}
         <div class="er-form">
           ${ecologyRecordNameSectionHtml(entry)}
           ${categorySelect}
