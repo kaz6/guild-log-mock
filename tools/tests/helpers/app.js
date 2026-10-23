@@ -24,13 +24,24 @@ async function freshPage(page) {
 
 // 面接を通す（2026-10-23・EX-162 で台本の確定稿に合わせた）。
 //   名前 → 志望動機（返事だけ・保存しない）→ 名簿の記録は「あとで」で飛ばす。★ name を空にすると無記名（記録員）の道を通る。
+//   ★ 台本の文は会話の窓に1ページずつ出る（続き ▼）。押す相手が出るまで「続き」をめくる。
 async function interview(page, name = "カズ") {
+  const turnUntil = async (locator) => {
+    for (let i = 0; i < 10 && !(await locator.isVisible()); i++) {
+      await page.locator(".window-next").first().click();
+      await page.waitForTimeout(80);
+    }
+  };
   const click = async (text) => {
-    await page.getByRole("button", { name: text, exact: true }).first().click();
+    const target = page.getByRole("button", { name: text, exact: true }).first();
+    await turnUntil(target);
+    await target.click();
     await page.waitForTimeout(150);
   };
   await click("面接を始める");
-  await page.locator("#interviewNameInput").fill(name);
+  const nameInput = page.locator("#interviewNameInput");
+  await turnUntil(nameInput); // 名前の欄は窓の最後のページにだけ出る
+  await nameInput.fill(name);
   await click("次へ");
   if (!name) await click("このまま進む"); else await click("次へ");
   await click("お金のため");

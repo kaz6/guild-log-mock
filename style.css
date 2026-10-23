@@ -264,6 +264,15 @@ button {
   line-height: 1.8;
 }
 
+/* 会話の窓（2026-10-23）：台本の文を1ページずつ出す決まった大きさの枠。4行ぶん（約60字）。
+   ★ 収まるかは tools/tests/current/speech-window.spec.js が実際の描画で確かめる */
+.speech.speech-window {
+  box-sizing: content-box;
+  height: 7.2em;
+  height: 4lh;
+  overflow: hidden;
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button,

@@ -42,12 +42,12 @@ test.describe("体験版の終わりの合図（EX-158【3】）", () => {
     await expect(card(page)).toHaveCount(0);              // 護衛だけでは出ない
     await addName(page);
     await expect(card(page)).toHaveCount(1);
-    const text = await card(page).innerText();
-    expect(text).toContain("あなたがこの子の名付け親になったんですよ！");
-    expect(text).toContain("でも、残念なことにいま歩める記録は、ここまでみたいです。");
-    expect(text).toContain("また扉の音がしたら、お知らせしますね！");
+    // ★ 文面は会話の窓に1ページずつ出る（「続き ▼」でめくる。命名の直後の一言は別のカード＝2026-10-23 夕）
+    expect(await card(page).innerText()).toContain("さて、残念なことにいま歩める記録は、ここまでみたいです。");
     await page.reload(); await page.waitForTimeout(300);   // 読む前にリロードしても残る
     await expect(card(page)).toHaveCount(1);
+    await card(page).locator(".window-next").click();
+    expect(await card(page).innerText()).toContain("また扉の音がしたら、お知らせしますね！");
     await card(page).getByRole("button", { name: "わかりました" }).click();
     await expect(card(page)).toHaveCount(0);
     await page.reload(); await page.waitForTimeout(300);
