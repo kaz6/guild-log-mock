@@ -524,6 +524,11 @@ const INTERVIEW_UNNAMED = "記録員";
 let interviewStep = 0;
 let speechWindowStep = -1; // 窓のページを段ごとに巻き戻すための控え
 let interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
+// 報告書の紙の書き手欄。★ 無記名（名前が無い／既定の「記録員」）のときは「記録員」だけ——「記録員 記録員」と重ねない。
+function paperWriterLabel() {
+  const name = (state.player?.name ?? "").trim();
+  return !name || name === INTERVIEW_UNNAMED ? "記録員" : `記録員 ${name}`;
+}
 // 名前の長さの上限（2026-10-23・仮）。★ 数えるのは文字数（全角・半角とも1字。`[...s].length`）。
 //   止めるのは入力欄だけで、古いセーブの長い名前は切らない（読み込みでは触らない）。
 const PLAYER_NAME_MAX = 12;
@@ -4276,7 +4281,7 @@ function renderReportDetail(reportId) {
     <section class="paper-sheet" data-report-id="${escapeHtml(report.id)}">
       <div class="paper-docno"><span>遠征報告書　開封済み</span><span>${todayLabelText()}</span></div>
       <h3 class="paper-title">${escapeHtml(quest?.title ?? "報告書")}</h3>
-      <p class="paper-sub">記録員 ${escapeHtml(state.player?.name ?? "")}</p>
+      <p class="paper-sub">${escapeHtml(paperWriterLabel())}</p>
       <dl class="paper-fields">
         ${fieldRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}
       </dl>
