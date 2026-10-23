@@ -69,6 +69,10 @@ test("名前の上限：プレイヤー名12字・命名20字で止まり、「�
   await nameInput.pressSequentially("あいうえおかきくけこさしすせそ");     // 15字
   await expect(nameInput).toHaveValue("あいうえおかきくけこさし");         // 12字で止まる
   await expect(page.locator("#interviewNameHint")).toHaveText("ここまでです");
+  // 上限のまま途中に1字足しても、最後の字は消えない（足した字のほうが入らない）
+  await nameInput.evaluate((el) => el.setSelectionRange(3, 3));
+  await nameInput.press("x");
+  await expect(nameInput).toHaveValue("あいうえおかきくけこさし");
   await nameInput.fill("カズ");
   await nameInput.dispatchEvent("input");
   await expect(page.locator("#interviewNameHint")).toHaveText("あと10字");

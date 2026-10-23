@@ -597,8 +597,17 @@ function charLimitHintText(value, limit) {
 function enforceCharLimit(input) {
   const limit = Number(input.dataset.charLimit);
   if (!limit) return;
-  const chars = [...input.value];
-  if (chars.length > limit) input.value = chars.slice(0, limit).join("");
+  // ★ 超えたぶんは「いま入れた字」（カーソルの直前）から削る。末尾を切ると、途中に足したときに最後の字が消えてしまう。
+  const caret = input.selectionStart ?? input.value.length;
+  const before = [...input.value.slice(0, caret)];
+  const after = input.value.slice(caret);
+  const over = before.length + [...after].length - limit;
+  if (over > 0) {
+    const kept = before.slice(0, Math.max(0, before.length - over)).join("");
+    input.value = [...(kept + after)].slice(0, limit).join("");
+    const pos = Math.min(kept.length, input.value.length);
+    input.setSelectionRange(pos, pos);
+  }
   const hint = input.dataset.limitHint && document.getElementById(input.dataset.limitHint);
   if (hint) hint.textContent = charLimitHintText(input.value, limit);
 }
