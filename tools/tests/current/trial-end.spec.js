@@ -34,7 +34,7 @@ const card = (page) => page.locator("[data-trial-end]");
 const goHome = async (page) => { await page.evaluate(() => setRoute("home")); await page.waitForTimeout(200); };
 
 test.describe("体験版の終わりの合図（EX-158【3】）", () => {
-  test("コピー：護衛を開いてから名前の封→出る。3行・読んだら消え、リロードしても戻らない", async ({ page }) => {
+  test("コピー：護衛を開いてから名前の封→出る。確定稿の文面・読んだら消え、リロードしても戻らない", async ({ page }) => {
     const errors = await freshPage(page);
     await page.goto(trialUrl); await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(300);
     await interview(page);
@@ -43,9 +43,9 @@ test.describe("体験版の終わりの合図（EX-158【3】）", () => {
     await addName(page);
     await expect(card(page)).toHaveCount(1);
     const text = await card(page).innerText();
-    expect(text).toContain("最初の名前に、封をなさったんですね。");
-    expect(text).toContain("いまお見せできる記録は、ここまでです。");
-    expect(text).toContain("続きの頁は、まだ白紙のままです。");
+    expect(text).toContain("あなたがこの子の名付け親になったんですよ！");
+    expect(text).toContain("でも、残念なことにいま歩める記録は、ここまでみたいです。");
+    expect(text).toContain("また扉の音がしたら、お知らせしますね！");
     await page.reload(); await page.waitForTimeout(300);   // 読む前にリロードしても残る
     await expect(card(page)).toHaveCount(1);
     await card(page).getByRole("button", { name: "わかりました" }).click();
