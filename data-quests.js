@@ -82,7 +82,7 @@ window.masterQuests = [
     durationBand: "short_1h",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を「古い道標の確認」から掃除へ）。
     //   ★ 6枠目に1時間の依頼を置くのは裁定1＝A。所要が1分〜1時間に散り、同時遠征が活きる。
-    unlockedBy: "quest_guild_cleanup",
+    unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
     recommended: ["斥候", "薬草師"],
     tags: ["探索", "採集", "観察"],
     observationTarget: "森喰い兎",
@@ -160,7 +160,7 @@ window.masterQuests = [
     area: "町の小さな祝宴会場",
     durationBand: "near_10m",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
-    unlockedBy: "quest_guild_cleanup",
+    unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
     recommended: ["世話焼き", "郵便配達人", "豪胆"],
     tags: ["生活", "祝宴", "運搬", "案内", "地域"],
     observationTarget: "なし",
@@ -181,7 +181,9 @@ window.masterQuests = [
     //   ★ **この依頼が6件の解禁元**（廃屋・結婚式・夕市・夜道・小橋・森の薬草採集）。
     //   ★ **一度きり**。酒場と同じく、一度行ったら二度と掲示板に出ない。
     oneTime: true,
-    unlockedBy: "quest_tavern_errand",
+    // ★ 2026-10-23：**最初から酒場と並べて出し、同時に出発させられる**（作者が遊んで「買い出しと掃除は一緒にしたい」）。
+    //   旧：酒場の帰還で開く（`unlockedBy: "quest_tavern_errand"`）。6件は酒場と掃除の**両方**で開く（下の各依頼の `unlockedBy` が配列）。
+    //   ⚠️ 達成数（`unlockedAfterCount`）では表さない——EX-140 で廃屋から外した理由と同じく、依頼を足すと黙って前にずれる。
     // ★ 本作で唯一、報告書の書き手が受付嬢（アルメナ）になる例外（2026-08-18・EX-064）。
     //   文は定型で、可変部は参加者の名前だけ（記録係＋出した冒険者＋エルシー。記録係も現場にいる）。
     //   ★ 語彙の判定・工程エンジン・担い手の選出を使わない。app.js はこの2つの旗で分岐する
@@ -211,7 +213,7 @@ window.masterQuests = [
     //     さらに**将来ここへ依頼を足すと、廃屋の解禁が黙って前にずれる**（罠になる）。
     //   ★ 2026-08-06 の「廃屋を別の特定クエストに繋ぎ直す」は当時却下したが、却下理由（順路が塞がる）は
     //     **掃除が全員必ず通る地点なので今回は成立しない**。理由が無効になったうえでの撤回。
-    unlockedBy: "quest_guild_cleanup",
+    unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
     recommended: ["慎重", "豪胆", "記録"],
     tags: ["生活", "片付け", "記録", "荷運び", "古物"],
     observationTarget: "なし",
@@ -270,7 +272,7 @@ window.masterQuests = [
     area: "村はずれの小川",
     durationBand: "short_30m",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を「夕市帰りの親子の付き添い」から掃除へ）。
-    unlockedBy: "quest_guild_cleanup",
+    unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
     recommended: ["戦士", "慎重", "見習い盾役"],
     tags: ["保全", "修繕", "水辺", "足場", "応急処置", "地域"],
     observationTarget: "なし",
@@ -348,7 +350,7 @@ window.masterQuests = [
     area: "夕暮れの街道",
     durationBand: "near_10m",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
-    unlockedBy: "quest_guild_cleanup",
+    unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
     recommended: ["見習い盾役", "斥候", "慎重"],
     tags: ["護衛", "付き添い", "夕方", "街道", "親子", "地域", "帰還"],
     observationTarget: "なし",
@@ -472,7 +474,7 @@ window.masterQuests = [
     area: "村はずれの道",
     durationBand: "near_10m",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
-    unlockedBy: "quest_guild_cleanup",
+    unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
     recommended: ["戦士", "慎重", "観察"],
     tags: ["戦闘", "夜道", "怪異", "記録"],
     observationTarget: "残る灯り",

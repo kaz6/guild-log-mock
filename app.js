@@ -1369,6 +1369,9 @@ function setRoute(nextRoute) {
   roomMenu = null;
   roomNotice = ""; // ホームの窓の一言も、画面を移ったら捨てる（戻ってきたときに居残らせない）
   render();
+  // ★ 画面を移ったら一番上から見せる（2026-10-23・作者の指摘）。前の画面のスクロール位置が残ると、
+  //   移った先の頭が見えず、毎回上へ戻す手間がかかっていた。
+  window.scrollTo(0, 0);
 }
 
 function getDisplayName(adventurer) {
@@ -2102,6 +2105,7 @@ function render() {
   // オープニング面接が未完なら、他の画面より先に面接シーンを出す（ゲート）。
   if (!state.player || !state.player.interviewDone) {
     renderInterview();
+    scrollToInterviewWindowIfMoved();
     return;
   }
 
@@ -2132,6 +2136,17 @@ function render() {
   if (route === "ledger") renderLedger();
   if (route === "report") renderReportDetail(state.activeReportId);
   if (route === "result") renderResult(nextResultReportId());
+}
+
+// ★ 面接の段・ページが進んだら、会話の窓が見える位置まで動かす（2026-10-23・作者の指摘）。
+//   1秒ごとの描き直しでは動かさない（段とページが変わったときだけ）。最初の描画でも動かさない。
+let lastInterviewViewKey = null;
+function scrollToInterviewWindowIfMoved() {
+  const key = `${interviewStep}:${speechWindowPage[`iv${interviewStep}`] ?? 0}`;
+  const moved = lastInterviewViewKey !== null && key !== lastInterviewViewKey;
+  lastInterviewViewKey = key;
+  if (!moved) return;
+  document.querySelector(".speech-window")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
 }
 
 function renderInterview() {
@@ -2435,6 +2450,7 @@ function interviewComplete() {
   interviewDraft = { name: "", unnamed: false, motive: null, memoSaved: false };
   route = "home";
   render();
+  window.scrollTo(0, 0); // 就任したらホームの頭から見せる
 }
 
 // 綴じるカード（2026-09-21・EX-141）。★ ホームに置く（出発・帰還と同じ画面なので「出す前に綴じる」が自然）。
@@ -2927,10 +2943,11 @@ function setMockForceHooks(on) {
 // ★ `unlockedAfterCount`（2026-08-06）：達成した依頼の件数で開く。どの依頼かは問わない。
 //   `unlockedBy` と別の条件として持ち、**両方あるときは両方満たしたときだけ開く**。
 //   数えるのは `clearedQuestIds`＝**行った依頼の種類数**（同じ依頼を2回行っても1件）。
+// ★ `unlockedBy` は配列でもよい（2026-10-23）：**指す依頼をすべて**行っていれば解放（酒場と掃除の両方で開く6件）。
 function isQuestUnlocked(quest, clearedQuestIds) {
   if (typeof quest.unlockedAfterCount === "number" && clearedQuestIds.size < quest.unlockedAfterCount) return false;
   if (!quest.unlockedBy) return true;
-  return clearedQuestIds.has(quest.unlockedBy);
+  return [].concat(quest.unlockedBy).every((id) => clearedQuestIds.has(id));
 }
 
 // ★ 掃除の定型報告書で、エルシーがギルドにいたか（2026-09-21・EX-140【1】）。
@@ -2993,16 +3010,11 @@ function questBoardVisibility(quest, reports) {
 // ★ 解放の深さ。`unlockedBy` を辿った段数で、初期公開と `unlockedAfterCount` だけの依頼は 0。
 //   ★ 枠があふれたときは**浅い順**に出す（進行に要るものが先に出る）。
 //   ⚠️ 環（循環参照）があっても止まらないよう、辿った id を覚えながら進む。
-function questUnlockDepth(quest) {
-  const seen = new Set();
-  let cur = quest;
-  let depth = 0;
-  while (cur && cur.unlockedBy && !seen.has(cur.id)) {
-    seen.add(cur.id);
-    cur = getQuest(cur.unlockedBy);
-    depth += 1;
-  }
-  return depth;
+//   ★ `unlockedBy` が配列のときは、いちばん深い前提を辿る（2026-10-23）。
+function questUnlockDepth(quest, seen = new Set()) {
+  if (!quest || !quest.unlockedBy || seen.has(quest.id)) return 0;
+  seen.add(quest.id);
+  return 1 + Math.max(...[].concat(quest.unlockedBy).map((id) => questUnlockDepth(getQuest(id), new Set(seen))));
 }
 
 // ★ クールタイム。**一度行った依頼は引っ込み、消化数1〜3で戻る**（EX-049 の確定事項）。
@@ -3991,6 +4003,9 @@ function confirmEcologyRecordName(id) {
   saveState();
   render();
   openEcologyRecordEditor(entry.id); // 確定した姿をそのまま見せる
+  // ★ 命名の直後の一言は編集画面の一番上に出るので、上まで戻して見せる（2026-10-23・作者の指摘）
+  const overlay = document.getElementById("ecologyRecordOverlay");
+  if (overlay) { overlay.scrollTop = 0; overlay.querySelectorAll(".er-modal-box, .er-modal-body").forEach((el) => { el.scrollTop = 0; }); }
 }
 
 // O の1行（軸＋自由記述）。★ 行を足せば**同じ軸を何度でも選べる**——
