@@ -35,11 +35,11 @@ test.describe.serial("CLAUDE.md の動作確認8項目", () => {
       JSON.parse(JSON.stringify(state.adventurers.map((a) => ({ id: a.id, name: a.name, stats: a.stats })))));
   });
 
-  test("③ 掲示板に依頼が並ぶ（初回は「隣の酒場に買い出し」1件）", async () => {
+  test("③ 掲示板に依頼が並ぶ（初回は「隣の酒場に買い出し」と「ギルドの掃除」の2件。2026-10-23 に同時に出せる形へ）", async () => {
     await page.getByText("依頼を選ぶ").first().click();
     await page.waitForTimeout(600);
     const titles = await boardTitles(page);
-    expect(titles, `並んでいるのは: ${titles.join(" / ")}`).toEqual(["隣の酒場に買い出し"]);
+    expect(titles, `並んでいるのは: ${titles.join(" / ")}`).toEqual(["隣の酒場に買い出し", "ギルドの掃除"]);
   });
 
   test("④-a 依頼＋冒険者＋支給品を選んで遠征開始 → リザルト画面が出る", async () => {

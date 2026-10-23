@@ -64,7 +64,8 @@ function formatUnlock(quest, titleById) {
   // ★ 解放条件は3種ある（2026-09-13・EX-093）。1つしか見ないと生成物が事実と違うことを言う——
   //   実際、`unlockedAfterCount` だけを持つ廃屋の片付けが「なし（初期公開）」と出ていた。
   const parts = [];
-  if (quest.unlockedBy) parts.push(titleById.get(quest.unlockedBy) || `不明な依頼（\`${quest.unlockedBy}\`）`);
+  // ★ `unlockedBy` は配列でもよい（2026-10-23。すべてを行うと開く）
+  if (quest.unlockedBy) parts.push([].concat(quest.unlockedBy).map((id) => titleById.get(id) || `不明な依頼（\`${id}\`）`).join("＋"));
   if (typeof quest.unlockedAfterCount === "number") parts.push(`達成${quest.unlockedAfterCount}件`);
   if (quest.reappearAfterCount) {
     const r = quest.reappearAfterCount;
