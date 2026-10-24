@@ -1722,3 +1722,5 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 
 /* ホームの付箋（2026-10-23・EX-163）。★ 急かさない：動き・点滅・件数は付けない。押すと剝がせる */
 .sticky-note { display: block; width: fit-content; max-width: calc(100% - 24px); margin: 8px auto 0; padding: 8px 12px; font: inherit; font-size: 14px; line-height: 1.6; text-align: left; color: var(--paper-ink, #2b2620); background: #f1e3a8; border: 1px solid rgba(43, 38, 32, .35); box-shadow: 1px 2px 0 rgba(43, 38, 32, .18); transform: rotate(-1deg); cursor: pointer; }
+/* 生態目録は最初の生き物に出会うまでナビに出さない（EX-163）。.nav-button の display より強く */
+.nav-button[hidden] { display: none !important; }

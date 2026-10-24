@@ -223,6 +223,43 @@ function dismissFirstNameSeal(entryId) {
   openEcologyRecordEditor(entryId);
 }
 
+// ★ 生態目録は最初の生き物に出会うまで無い（2026-10-23・EX-163 段階3）。
+//   「出会った」＝**生態目録の最初の枠が立ったとき**（読了の封で、observationNotes が null でない報告書＝掲示板が観察対象を出すのと同じ印）。
+//   ⚠️ 帰還の時点（掲示板の印）にしない：枠は封のあとにしか無く、渡した本に書き込む先が無くなる。付箋の「報告書を読む」も先取りしてしまう。
+//   見せる条件＝渡した印がある（古いセーブは読み込みで印が立つ）か、枠が1つでもある。
+function isEcologyBookShown() {
+  return Boolean(state.ecologyBook) || ecologyRecordEntries().length > 0;
+}
+// 白紙の本を渡す一言（文面は仮＝台本ページの「追補」。配列の1要素＝1段落）
+const ECOLOGY_BOOK_PARAGRAPHS = [
+  ["あ、新しい生き物ですね！こちらをお渡ししておきます。", "西の未踏地域の生態目録——と言っても、まだ白紙ですけど。", "あなたが埋めていくんです！"]
+];
+function ecologyBookCardHtml() {
+  const book = state.ecologyBook;
+  if (!book || book.read || book.legacy) return "";
+  const w = speechWindow("ecologyBook", ECOLOGY_BOOK_PARAGRAPHS.map((p) => p.map(escapeHtml)));
+  return `
+    <section class="card money-event-card" data-ecology-book="1">
+      <div class="card-body reception">
+        <div class="reception-portrait" aria-hidden="true"></div>
+        <div>
+          <p class="eyebrow">Guild Reception</p>
+          <h3>受付嬢</h3>
+          ${w.html}
+          ${w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissEcologyBook()">わかりました</button>
+          </div>` : w.more}
+        </div>
+      </div>
+    </section>`;
+}
+function dismissEcologyBook() {
+  if (state.ecologyBook) state.ecologyBook.read = true;
+  saveState();
+  render();
+}
+
 function dismissTrialEnd() {
   if (state.trialEnd) state.trialEnd.read = true;
   saveState();
@@ -672,6 +709,9 @@ function createInitialState() {
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     debt: { active: null, timesBorrowed: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    // 生態目録を渡した印（2026-10-23・EX-163 段階3）。{ at, read, legacy? }。★ 最初の枠が立った封の操作の中でだけ立てる。
+    //   古いセーブ（この鍵が無く、面接を終えている）は読み込みで legacy を立てる＝目録を隠さない・一言も出さない。
+    ecologyBook: null,
     stickyDismissed: {}, // ホームの付箋を剝がした印（2026-10-23・EX-163）。区切りの id → true
     firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
     trialEnd: null, // 体験版の終わりの合図（EX-158【3】。/trial/ のコピーだけが立てる）。{ at, read }
@@ -743,6 +783,8 @@ function loadState() {
     if (!Array.isArray(merged.moneyEvents)) merged.moneyEvents = [];
     if (!Number.isFinite(merged.money)) merged.money = MONEY_RULES.initialMoney;
     merged.stock = normalizeStock(parsed.stock);
+    // ★ 生態目録の解禁（EX-163）：鍵の無い古いセーブで面接を終えているなら、目録はもう見たことがある＝隠さない
+    if (parsed.ecologyBook === undefined && parsed.player?.interviewDone) merged.ecologyBook = { at: null, read: true, legacy: true };
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
     delete merged.lastObservationUpdate;
@@ -2118,6 +2160,7 @@ function render() {
   if (route !== "report") stampedNowReportId = null; // 判子の直後の表示も、画面を離れたら捨てる
 
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.route === route));
+  navButtons.forEach((button) => { if (button.dataset.route === "ecology") button.hidden = !isEcologyBookShown(); }); // EX-163 段階3
 
   const titles = {
     home: "ギルド",
@@ -2577,11 +2620,13 @@ function bindCardHtml() {
 const ROOM_PANELS = ["左", "真ん中", "右"];
 const ROOM_START_PANEL = 1; // 起動時は真ん中（仮）
 // act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
+//   enabled: 触れる条件（偽のあいだは枠なし・反応なし。無ければ常に）。
 const ROOM_OBJECTS = [
   { id: "receptionist", panel: 0, label: "受付嬢", x: 8, y: 14, w: 40, h: 34, act: () => tapRoomReaction("receptionist") },
   { id: "counter", panel: 0, label: "カウンター", x: 4, y: 52, w: 56, h: 14 },
   { id: "backyard", panel: 0, label: "バックヤード", x: 62, y: 14, w: 32, h: 40 },
-  { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology") },
+  // ★ 本＝生態目録。最初の生き物に出会うまでは枠を付けず触れない（EX-163 段階3。enabled が偽のあいだは act が無い物と同じ扱い）
+  { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() },
   { id: "board", panel: 1, label: "掲示板", x: 14, y: 12, w: 72, h: 38, act: () => setRoute("quests") },
   { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14, act: () => toggleRoomMenu("papers") },
   { id: "badge", panel: 1, label: "証", x: 66, y: 60, w: 22, h: 14 },
@@ -2624,7 +2669,7 @@ let roomMenu = null; // 吹き出しを開いている物の id
 function roomWindowHtml() {
   const panels = ROOM_PANELS.map((name, i) => `
       <div class="room-panel" data-room-panel="${i}" aria-label="${name}">
-        ${ROOM_OBJECTS.filter((o) => o.panel === i && (!o.show || o.show())).map((o) => o.act
+        ${ROOM_OBJECTS.filter((o) => o.panel === i && (!o.show || o.show())).map((o) => o.act && (!o.enabled || o.enabled())
           ? `<button class="room-hit" type="button" data-room-object="${o.id}" style="left:${o.x - 3}%;top:${o.y - 3}%;width:${o.w + 6}%;height:${o.h + 6}%" onclick="tapRoomObject('${o.id}')"><span class="room-frame">${o.label}</span></button>`
           : `<span class="room-thing" data-room-object="${o.id}" style="left:${o.x}%;top:${o.y}%;width:${o.w}%;height:${o.h}%">${o.label}</span>`).join("")}
       </div>`).join("");
@@ -2679,7 +2724,7 @@ function shiftRoom(dir) {
 
 function tapRoomObject(id) {
   const o = ROOM_OBJECTS.find((x) => x.id === id);
-  if (o?.act) o.act();
+  if (o?.act && (!o.enabled || o.enabled())) o.act();
 }
 
 function showRoomNotice(text) {
@@ -2759,6 +2804,7 @@ function renderHome() {
     ${roomWindowHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
+    ${ecologyBookCardHtml()}
     ${trialEndCardHtml()}
     ${returnedReports.length > 1 ? `
     <div class="weather-bar">
@@ -2889,7 +2935,10 @@ function stampReport(id) {
   const report = state.reports.find((item) => item.id === id);
   if (!report || report.readStampAt) return; // 一度押したら押し直さない（消す操作は用意しない）
   report.readStampAt = Date.now();
+  const hadFrames = ecologyRecordEntries().length > 0;
   ensureEcologyRecordFrame(report); // ★ 初遭遇＝読んだ時点。生態目録の枠はここで現れる（2026-09-17 の裁定3）
+  // ★ 最初の枠が立った瞬間に、受付嬢が白紙の本を渡す（EX-163 段階3）。読み込み時の補完（backfill）では立てない
+  if (!hadFrames && ecologyRecordEntries().length > 0 && !state.ecologyBook) state.ecologyBook = { at: Date.now(), read: false };
   stampedNowReportId = report.id; // ★ 判子を押した瞬間の表示（上がった能力）だけに使う。保存しない
   saveState();
   vibrateShort(40);
@@ -4367,6 +4416,7 @@ function renderReportDetail(reportId) {
       </div>
       ${stampGrowthHtml(report)}
     </section>
+    ${ecologyBookCardHtml()}
     <div class="button-row paper-nav">
       <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
       <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
