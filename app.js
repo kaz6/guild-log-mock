@@ -1504,8 +1504,10 @@ function setRoute(nextRoute) {
   window.scrollTo(0, 0);
 }
 
+// 呼び名＝あだ名（プレイヤーが付けたもの）→ 呼び名（データの callName。本名が長い人だけ・5文字以内）→ 本名。
+//   ★ 2026-10-24・EX-164：呼び名は5文字以内（エルネ・シェルカ→エルネ）。名簿の「本名」欄は name のまま。
 function getDisplayName(adventurer) {
-  return adventurer.nickname?.trim() || adventurer.name;
+  return adventurer.nickname?.trim() || adventurer.callName || adventurer.name;
 }
 
 function isSoloParty(party) {
