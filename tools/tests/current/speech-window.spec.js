@@ -63,8 +63,12 @@ test("台本の文が、どのページも会話の窓（390px・4行）から�
   ];
   for (const p of paths) {
     const errors = await freshPage(page);
+    const from = seenTexts.length;
     await walkInterview(page, p, overflow, seen);
     expect(errors).toEqual([]);
+    // ★ 目的の一言（EX-163・仮）は、名簿を保存した道にも「あとで」の道にも出る
+    expect(seenTexts.slice(from).some((t) => t.includes("いつか西の未踏地域の生態目録になるんです")),
+      `目的の一言を見ていない（saveMemo=${p.saveMemo}）`).toBe(true);
   }
 
   // 命名の直後の一言（名前20字＝上限）
