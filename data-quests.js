@@ -73,6 +73,7 @@ window.masterQuests = [
   },
   {
     id: "quest_herb",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "森の薬草採集",
@@ -96,6 +97,7 @@ window.masterQuests = [
     //   「見たことのない草がある」と言ってきただけで、何なのかは誰も知らない。
     //   ★ 観察記録が主眼。仮称は命名の対象になりうる形で置く（正式名が付くのは体験版の後）。
     id: "quest_unknown_grass",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 担い手は人間だけ（2026-09-11・EX-074／2026-09-15・EX-106）。この依頼は category が「調査」で、
     //   効いた瞬間の文面は statKey（investigation）で選ばれる。investigation には犬固有の文が無いので、
     //   どの工程を犬が担っても人間用の記録の文が出る（古い石碑の拓本と同じ理由）。
@@ -120,6 +122,7 @@ window.masterQuests = [
   },
   {
     id: "quest_signpost",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い道標の確認",
@@ -286,6 +289,7 @@ window.masterQuests = [
   },
   {
     id: "quest_old_bridge_repair",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い小橋の応急修理",
@@ -305,6 +309,7 @@ window.masterQuests = [
   },
   {
     id: "quest_church_patrol",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "辺境教会周辺の定期巡回",
@@ -323,6 +328,7 @@ window.masterQuests = [
   },
   {
     id: "quest_herb_delivery",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 担い手に犬を許す（2026-08-18・EX-057 裁定）。においで薬草を見分けるのは犬の領分で、
     //   むしろエルシーの見せ場。犬が担い手のときは犬固有の文（fieldworkSupportTexts）が出る。
     //   （2026-08-06 の EX-056 で一度 fieldworkHumanOnly: true を付けたが、犬用の文面が入ったので外した）
@@ -342,6 +348,7 @@ window.masterQuests = [
   },
   {
     id: "quest_missing_herbalist",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "帰ってこない薬草採りの確認",
@@ -406,6 +413,7 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_search",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -432,6 +440,7 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_lastchance",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -458,6 +467,7 @@ window.masterQuests = [
   },
   {
     id: "quest_old_stele_rubbing",
+    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
     title: "古い石碑の拓本",
     category: "記録",
     // ★ 担い手は人間だけ（2026-09-11・EX-074 で追加。EX-056 と同じ宣言）。
