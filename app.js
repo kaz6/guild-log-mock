@@ -318,7 +318,7 @@ function receptionTalkCardHtml() {
   if (!state.player?.interviewDone) return "";
   const id = currentReceptionTalkId();
   if (!id) return "";
-  const w = speechWindow(`talk_${id}`, RECEPTION_TALKS[id].paragraphs(escapeHtml(receptionTalkName())).map((p) => p.map((line) => line)));
+  const w = speechWindow(`talk_${id}`, RECEPTION_TALKS[id].paragraphs(receptionTalkName()).map((p) => p.map(escapeHtml)));
   return `
     <section class="card reception-event-card" data-reception-talk="${escapeHtml(id)}">
       <div class="card-body reception">
