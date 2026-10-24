@@ -201,6 +201,28 @@ window.masterQuests = [
     // ★ 結末は1種（定型文なので分岐しない）。app.js の定型報告書と同じ語にする
     outcomes: { full: ["おつかれさまでした"], partial: [], fail: [] }
   },
+  // ★ 固有依頼（2026-10-24・EX-165）。相談 → 固有依頼 → 感謝の連鎖の1件目（鉄鍋）。文面は data-bonds.js（台本の確定稿）。
+  //   ★ 掲示板の6枠の外に「頼まれごと」として1枠で出す（`bond`）。通常の候補には入れない（`hidden`）。
+  //   ★ 鉄鍋が必ず入る（`requiresAdventurer`）。他の人も連れていける。鉄鍋が遠征中・負傷中なら出られるまで待つ（期限なし）。
+  //   ★ 定型の報告書（文面は揺れない）。費用0・報酬0（仮）。観察対象なし。
+  //   ⚠️ 仮：「塩の沢」（作者が仮と明記）・所要時間の帯（短い＝実10分）・分類・掲示板の概要（相談の1行を借りた）。
+  {
+    id: "quest_bond_gadd",
+    title: "宿場の粥の塩",
+    category: "生活",
+    danger: "低",
+    area: "塩の沢",
+    durationBand: "near_10m",
+    hidden: true,
+    bond: "bond_gadd",
+    requiresAdventurer: "adv_gadd",
+    money: { fee: 0, reward: 0 },
+    recommended: [],
+    tags: ["頼まれごと"],
+    observationTarget: "なし",
+    summary: "ただ、あの味には沢の岩塩が要る。俺が行く。誰か一緒に来てくれりゃ助かる。",
+    outcomes: { full: ["達成"], partial: [], fail: [] }
+  },
   {
     id: "quest_old_house_cleanup",
     title: "廃屋の片付け",

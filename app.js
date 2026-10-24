@@ -341,6 +341,109 @@ function dismissReceptionTalk(id) {
   render();
 }
 
+// ── 固有依頼の連鎖（相談 → 固有依頼 → 感謝。2026-10-24・EX-165）────────────────────
+// ★ 文面と順番は data-bonds.js（台本の確定稿）。★ 文面の無い人（consult が null）で連鎖は止まる。
+// ★ 始まる時機：受付嬢の②（初依頼の達成）を読んだあと、6件の依頼で「未達でない報告書」が
+//   1＋startAfterSixCleared 通になったとき（②の1通＋さらに2通）。始まったら旗を立てる（1度だけ）。
+// ★ 1人ぶん：相談（ホームの会話の窓で1度）→ 固有依頼（掲示板の6枠の外に「頼まれごと」）→
+//   感謝（固有依頼の報告書に読了の封をしたとき、会話の窓で1度）。感謝を読んだら次の人へ。
+// ★ 【主人公】＝プレイヤー名（無記名は「記録員」）。【鉄鍋】＝その人の呼び名（あだ名があればあだ名）。
+//   会話は描画のたびに今の呼び名で差し込む。報告書は作った時点の呼び名で閉じる。
+function bondChainEntries() {
+  return window.masterBondChain?.chain ?? [];
+}
+function bondProgress(id) {
+  const chain = state.bondChain ?? (state.bondChain = { started: false });
+  return chain[id] ?? (chain[id] = {});
+}
+function nonFailOpeningSixReportCount() {
+  return state.reports.filter((r) => OPENING_SIX_QUESTS.some((q) => q.id === r.questId)
+    && (GROWTH_TIER_BY_RESULT[r.result] ?? "full") !== "fail").length;
+}
+function bondChainStarted() {
+  const chain = state.bondChain ?? (state.bondChain = { started: false });
+  if (chain.started) return true;
+  const need = 1 + (window.masterBondChain?.startAfterSixCleared ?? 2);
+  if (state.receptionTalks?.firstSix?.read && nonFailOpeningSixReportCount() >= need) {
+    chain.started = true;
+    saveState();
+  }
+  return chain.started;
+}
+// いま進行中の人（感謝まで読み終えていない最初の人）。文面が無ければ null（＝連鎖はそこで止まる）
+function currentBondEntry() {
+  if (!bondChainStarted()) return null;
+  for (const entry of bondChainEntries()) {
+    if (!entry.consult) return null;
+    if (!bondProgress(entry.id).thanksRead) return entry;
+  }
+  return null;
+}
+function bondEntryByQuest(questId) {
+  return bondChainEntries().find((entry) => entry.questId && entry.questId === questId) ?? null;
+}
+function bondFill(text, entry) {
+  const adv = entry.adventurerId ? getAdventurer(entry.adventurerId) : null;
+  return text
+    .replaceAll("【主人公】", receptionTalkName())
+    .replaceAll("【鉄鍋】", adv ? getDisplayName(adv) : "");
+}
+// 掲示板の「頼まれごと」（6枠の外に1枠）。相談を読んだあと、その依頼の報告書が届くまで出る。出ている間は下ろす。
+function bondBoardQuest() {
+  const entry = currentBondEntry();
+  if (!entry || !bondProgress(entry.id).consultRead) return null;
+  const quest = getQuest(entry.questId);
+  if (!quest || isQuestOnExpedition(quest.id) || state.reports.some((r) => r.questId === quest.id)) return null;
+  return quest;
+}
+// 会話のカード（相談・感謝）。話し手は今の呼び名。
+function bondTalkCardHtml(entry, kind) {
+  const talk = entry[kind];
+  const adv = entry.adventurerId ? getAdventurer(entry.adventurerId) : null;
+  const w = speechWindow(`bond_${entry.id}_${kind}`, talk.paragraphs.map((p) => p.map((line) => escapeHtml(bondFill(line, entry)))));
+  return `
+    <section class="card reception-event-card" data-bond-talk="${escapeHtml(`${entry.id}:${kind}`)}">
+      <div class="card-body">
+        <div>
+          <p class="eyebrow">Guild Member</p>
+          <h3>${escapeHtml(bondFill(talk.speaker, entry))}</h3>
+          ${w.html}
+          ${w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissBondTalk('${escapeJsArg(entry.id)}', '${kind}')">わかりました</button>
+          </div>` : w.more}
+        </div>
+      </div>
+    </section>`;
+}
+// ホームに出すもの：相談（未読）か感謝（封のあと・未読）
+function bondHomeCardHtml() {
+  if (!state.player?.interviewDone) return "";
+  const entry = currentBondEntry();
+  if (!entry) return "";
+  const progress = bondProgress(entry.id);
+  if (!progress.consultRead) {
+    if (!progress.consultAt) { progress.consultAt = Date.now(); saveState(); }
+    return bondTalkCardHtml(entry, "consult");
+  }
+  if (progress.thanksAt && !progress.thanksRead) return bondTalkCardHtml(entry, "thanks");
+  return "";
+}
+// 報告書の画面に出す感謝（その固有依頼の報告書で、封のあと・未読のときだけ）
+function bondThanksOnReportHtml(report) {
+  const entry = bondEntryByQuest(report?.questId);
+  if (!entry || !entry.thanks) return "";
+  const progress = bondProgress(entry.id);
+  return progress.thanksAt && !progress.thanksRead ? bondTalkCardHtml(entry, "thanks") : "";
+}
+function dismissBondTalk(id, kind) {
+  const progress = bondProgress(id);
+  if (kind === "consult") progress.consultRead = true;
+  if (kind === "thanks") progress.thanksRead = true;
+  saveState();
+  render();
+}
+
 function dismissTrialEnd() {
   if (state.trialEnd) state.trialEnd.read = true;
   saveState();
@@ -797,6 +900,7 @@ function createInitialState() {
     // 生態目録を渡した印（2026-10-23・EX-163 段階3）。{ at, read, legacy? }。★ 最初の枠が立った封の操作の中でだけ立てる。
     //   古いセーブ（この鍵が無く、面接を終えている）は読み込みで legacy を立てる＝目録を隠さない・一言も出さない。
     ecologyBook: null,
+    bondChain: { started: false }, // 固有依頼の連鎖（2026-10-24・EX-165）。{ started, [連鎖の id]: { consultAt, consultRead, thanksAt, thanksRead } }
     receptionTalks: {}, // 序盤の受付嬢の会話（2026-10-24・EX-164）。{ sixOpen, firstSix } 各 { at, read }
     stickyDismissed: {}, // ホームの付箋を剝がした印（2026-10-23・EX-163）。区切りの id → true
     firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
@@ -1866,6 +1970,12 @@ function departRefusalMessage(adventurerIds) {
 function expeditionBlockedMessage(adventurerIds) {
   if (adventurerIds.length === 0) return null;
   const party = adventurerIds.map(getAdventurer).filter(Boolean);
+  // ★ 固有依頼は本人が必ず行く（EX-165）。いなければ出発できない（遠征中・負傷中なら、出られるまで待つ）
+  const required = getQuest(selectedQuestId)?.requiresAdventurer;
+  if (required && !adventurerIds.includes(required)) {
+    const adv = getAdventurer(required);
+    return `${adv ? getDisplayName(adv) : "依頼した本人"}が必ず行く依頼です。編成に入れてください。`;
+  }
   const needsCompanion = party.filter((a) => a.canSolo === false);
   if (needsCompanion.length > 0 && party.length === needsCompanion.length) {
     if (party.length === 1 && party[0].id === "adv_elsie") {
@@ -2899,6 +3009,7 @@ function renderHome() {
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
     ${receptionTalkCardHtml()}
+    ${bondHomeCardHtml()}
     ${ecologyBookCardHtml()}
     ${trialEndCardHtml()}
     ${returnedReports.length > 1 ? `
@@ -3034,6 +3145,9 @@ function stampReport(id) {
   ensureEcologyRecordFrame(report); // ★ 初遭遇＝読んだ時点。生態目録の枠はここで現れる（2026-09-17 の裁定3）
   // ★ 最初の枠が立った瞬間に、受付嬢が白紙の本を渡す（EX-163 段階3）。読み込み時の補完（backfill）では立てない
   if (!hadFrames && ecologyRecordEntries().length > 0 && !state.ecologyBook) state.ecologyBook = { at: Date.now(), read: false };
+  // ★ 固有依頼の報告書に封をしたら、感謝の会話を立てる（EX-165。1度だけ）
+  const bondEntry = bondEntryByQuest(report.questId);
+  if (bondEntry?.thanks && !bondProgress(bondEntry.id).thanksAt) bondProgress(bondEntry.id).thanksAt = Date.now();
   stampedNowReportId = report.id; // ★ 判子を押した瞬間の表示（上がった能力）だけに使う。保存しない
   saveState();
   vibrateShort(40);
@@ -3274,11 +3388,13 @@ function renderQuests() {
   //       ★ **いま出ている**＝2026-09-20・EX-138 の裁定2で、出撃中の依頼は掲示板から下ろす）。
   const clearedQuestIds = getClearedQuestIds();
   const boardQuests = buildBoardQuests(clearedQuestIds, state.reports);
+  // ★ 頼まれごと（固有依頼。EX-165）は6枠の外に1枠。選択の掃除では枠の中と同じに扱う
+  const bondQuest = bondBoardQuest();
   if (selectedQuestId) {
     const selected = getQuest(selectedQuestId);
     // ★ 枠あふれで落ちたものも掃除の対象（2026-09-15・EX-102）。表示判定だけを見ていると、
     //   枠から押し出された依頼が選ばれたまま残る。
-    if (selected && !boardQuests.some((quest) => quest.id === selected.id)) selectedQuestId = null;
+    if (selected && !boardQuests.some((quest) => quest.id === selected.id) && selected.id !== bondQuest?.id) selectedQuestId = null;
   }
   const selectedQuest = getQuest(selectedQuestId);
   const expeditionBlock = expeditionBlockedMessage(selectedAdventurerIds);
@@ -3360,6 +3476,18 @@ function renderQuests() {
         </div>
       </div>
     </section>
+    ${bondQuest ? `
+    <section class="card" data-bond-board="1">
+      <div class="card-body">
+        <div class="card-title">
+          <div>
+            <p class="eyebrow">Request</p>
+            <h3>頼まれごと</h3>
+          </div>
+        </div>
+        <div class="grid-3">${questCardHtml(bondQuest)}</div>
+      </div>
+    </section>` : ""}
 
     <div class="grid-2">
       <section class="card">
@@ -4513,6 +4641,7 @@ function renderReportDetail(reportId) {
       ${stampGrowthHtml(report)}
     </section>
     ${ecologyBookCardHtml()}
+    ${bondThanksOnReportHtml(report)}
     <div class="button-row paper-nav">
       <button class="primary-button" onclick="setRoute('home')">ギルドへ戻る</button>
       <button class="secondary-button" onclick="setRoute('observations')">報告メモを見る</button>
@@ -5718,6 +5847,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_guild_cleanup: [], // ★ ギルド内なので支給品は選べない（持たせる判断が発生しない。EX-064）
     quest_shopping: [], // ★ 買い出しは持っていかない。枠は「欲しい物の書き付け」（2026-09-23・EX-144）
     quest_relief_odd_jobs: ["item_bandage"], // ★ 救済（2026-09-23・EX-144）。町なかの雑用。仮
+    quest_bond_gadd: [], // ★ 固有依頼（EX-165）。定型の報告書なので支給品の行が出ない＝持たせる判断を作らない（意図して空）
 
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
@@ -8491,6 +8621,37 @@ function generateReport(expedition) {
   if (quest.shopping) return generateShoppingReport(expedition, quest, party, logs, add, tensionValue, tensionLevel);
   // ── 救済（2026-09-23・EX-144）。★ 文面は仮。乱数は引かない ──
   if (quest.relief) return generateReliefReport(expedition, quest, party, logs, add, tensionValue, tensionLevel);
+
+  // ── 固有依頼（2026-10-24・EX-165）。★ 定型の報告書：文は data-bonds.js の確定稿のまま、可変は名前だけ。乱数は引かない ──
+  //   ★ 【鉄鍋】は**作った時点の呼び名**で書いて閉じる（あとからあだ名を変えても、この報告書は変わらない）。
+  //   ★ hiddenTags.fixedReport を立てる＝在席・掛け合い・成長ログ・過去の合図を足さない（文を確定稿のまま保つため）。
+  //     そのぶん、この遠征は冒険者の過去の解放の回数にも数えない（掃除と同じ扱い。実装側の判断）。
+  //   ⚠️ 仮：あらすじ＝本文の1行目、歴史の行＝「依頼名：済ませた。」（救済と同じ形）、ハイライトは無し。
+  if (quest.bond) {
+    const entry = bondChainEntries().find((e) => e.id === quest.bond);
+    (entry?.reportLines ?? []).forEach((line) => add("", bondFill(line, entry)));
+    const historyLine = `${quest.title}：済ませた。`;
+    return {
+      id: newReportId(),
+      questId: quest.id,
+      adventurerIds: expedition.adventurerIds,
+      adventurerItemIds,
+      itemIds,
+      opened: false,
+      applied: false,
+      result: questOutcomes(quest).full[0],
+      summary: logs[0]?.text ?? quest.title,
+      historyLine,
+      adventurerHistoryLines: Object.fromEntries(party.map((adv) => [adv.id, historyLine])),
+      logs,
+      // ★ 観察記録を足さないのは意図（観察対象なしの定型の報告書。掃除と同じ扱い）
+      observationNotes: null,
+      departConditions,
+      highlight: null,
+      hiddenTags: { fixedReport: true, bond: quest.bond, recordDensityGain: 1 + logs.length },
+      createdAt: new Date().toISOString()
+    };
+  }
 
   // ── 定型報告書（2026-08-18・EX-064）─────────────────────────────────────
   // ★ 本作で唯一、書き手が受付嬢になる例外。データの旗（fixedReport / reportAuthor）で分岐し、
