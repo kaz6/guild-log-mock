@@ -654,6 +654,9 @@ const PLAYER_NAME_MAX = 12;
 // ★ 受付嬢が作品の目的を伝える一言（2026-10-23・EX-163。文面は仮＝台本ページ 401a8a5d… の「追補」。作者が書き直す）。
 const INTERVIEW_PURPOSE_LINES = ["そしてこの記録が、いつか西の未踏地域の生態目録になるんです。", "まだ真っ白ですけどね！"];
 const ECOLOGY_NAME_MAX = 20;
+// あだ名の上限（2026-10-24・EX-165。EX164-Q2 の裁定）。あだ名は報告書の呼び名を置き換えるので、呼び名と同じ5文字まで。
+//   ★ 止めるのは入力欄と保存だけ。古いセーブの長いあだ名は切らない（読み込みでは触らない）。
+const NICKNAME_MAX = 5;
 
 // ── 会話の窓（2026-10-23・EX-162 の続き）────────────────────────────────────
 // ★ 台本の文（面接・命名の直後の一言・体験版の終わりの合図）を、決まった大きさの窓に1ページずつ出す。
@@ -2476,7 +2479,8 @@ function renderInterview() {
       </div>
       <div class="form-row">
         <label for="nicknameInput">あだ名</label>
-        <input id="nicknameInput" value="${escapeHtml(first.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
+        <input id="nicknameInput" data-char-limit="${NICKNAME_MAX}" data-limit-hint="nicknameHint" value="${escapeHtml(first.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
+        <p class="muted" id="nicknameHint">${charLimitHintText(first.nickname ?? "", NICKNAME_MAX)}</p>
       </div>
       <div class="form-row">
         <label for="memoInput">メモ</label>
@@ -2544,6 +2548,8 @@ function interviewFillMemo() {
   const adv = getAdventurer(document.getElementById("interviewMemoTarget")?.value);
   if (!adv) return;
   document.getElementById("nicknameInput").value = adv.nickname ?? "";
+  const hint = document.getElementById("nicknameHint");
+  if (hint) hint.textContent = charLimitHintText(adv.nickname ?? "", NICKNAME_MAX);
   document.getElementById("memoInput").value = adv.memo ?? "";
 }
 
@@ -3818,7 +3824,8 @@ function adventurerEditorHtml(adventurer) {
     <p class="meta-label">記録員メモ</p>
     <div class="form-row">
       <label for="nicknameInput">あだ名</label>
-      <input id="nicknameInput" value="${escapeHtml(adventurer.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
+      <input id="nicknameInput" data-char-limit="${NICKNAME_MAX}" data-limit-hint="nicknameHint" value="${escapeHtml(adventurer.nickname ?? "")}" placeholder="例：ミナ、鉄鍋" />
+      <p class="muted" id="nicknameHint">${charLimitHintText(adventurer.nickname ?? "", NICKNAME_MAX)}</p>
     </div>
     <div class="form-row">
       <label for="memoInput">メモ</label>
@@ -5014,7 +5021,9 @@ function editAdventurer(id) {
 function saveAdventurerMemo(id) {
   const adv = getAdventurer(id);
   if (!adv) return;
-  const nextNickname = document.getElementById("nicknameInput").value.trim();
+  const typed = document.getElementById("nicknameInput").value.trim();
+  // ★ 入力欄でも止めているが、念のためここでも切る（EX-165）。打ち直さずに保存した古い長いあだ名は、そのまま残す
+  const nextNickname = typed === (adv.nickname ?? "") ? typed : [...typed].slice(0, NICKNAME_MAX).join("");
   const nextMemo = document.getElementById("memoInput").value.trim();
   if (nextNickname !== adv.nickname && nextNickname) state.worldState.attachmentScore += 2;
   if (nextMemo !== adv.memo && nextMemo) {
