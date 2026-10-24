@@ -4,7 +4,7 @@
 //   窓は4行ぶん（約60字）。段落で改ページし、入らない段落は行で、入らない行は「。！？」で割る（app.js の speechWindowPages）。
 // ★ 見るのは「ページの中身が窓からはみ出していないか」（scrollHeight ≤ clientHeight）。文字数ではなく描画で見る
 //   ——禁則で行頭に来られない字（「っ」など）が1行を押し出すことがあるため。
-// ★ 通る道：無記名／記名（12字）・志望動機3通り・名簿の記録を保存／あとで（目的の一言を含む）・命名の直後の一言（名前20字）・白紙の本の一言・終わりの合図（/trial/）。
+// ★ 通る道：無記名／記名（12字）・志望動機3通り・名簿の記録を保存／あとで（目的の一言を含む）・命名の直後の一言（名前20字）・白紙の本の一言・序盤の受付嬢の会話2つ・終わりの合図（/trial/）。
 const { test, expect } = require("@playwright/test");
 const { execFileSync } = require("child_process");
 const fs = require("fs");
@@ -98,6 +98,25 @@ test("台本の文が、どのページも会話の窓（390px・4行）から�
     await more.click();
   }
   expect(seenTexts.some((t) => t.includes("あなたが埋めていくんです")), "白紙の本の一言を見ていない").toBe(true);
+
+  // 序盤の受付嬢の会話（EX-164）：名前12字・「お金のため」の一言つき
+  for (const id of ["sixOpen", "firstSix"]) {
+    await page.evaluate((id) => {
+      state.ecologyBook = { at: Date.now(), read: true };
+      state.player.name = "あいうえおかきくけこさし"; state.player.motive = "money";
+      state.receptionTalks = { sixOpen: { at: Date.now(), read: id !== "sixOpen" } };
+      if (id === "firstSix") state.receptionTalks.firstSix = { at: Date.now(), read: false };
+      saveState(); setRoute("home");
+    }, id);
+    for (let i = 0; i < 5; i++) {
+      await checkWindows(page, overflow, seen);
+      const more = page.locator(`[data-reception-talk="${id}"] .window-next`);
+      if (!(await more.isVisible())) break;
+      await more.click();
+    }
+  }
+  expect(seenTexts.some((t) => t.includes("あいうえおかきくけこさしさん！")), "①の会話を見ていない").toBe(true);
+  expect(seenTexts.some((t) => t.includes("お金も入って、懐も温まりましたね！")), "②の会話を見ていない").toBe(true);
 
   // 終わりの合図（/trial/ のコピーでだけ出る）
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-window-"));

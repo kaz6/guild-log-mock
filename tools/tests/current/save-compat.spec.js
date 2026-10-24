@@ -39,6 +39,10 @@ for (const name of SAVES) {
     expect(home, "面接に戻された").not.toContain("ようこそ、西端ギルドへ！");
     expect(await page.evaluate(() => state.player.interviewDone)).toBe(true);
 
+    // 序盤の受付嬢の会話（EX-164）：もう過ぎた会話を言い出さない
+    if (name !== "after-interview") await expect(page.locator('[data-reception-talk="sixOpen"]'), "6件が開いたあとのセーブで①を言い出した").toHaveCount(0);
+    if (name === "after-name-seal") await expect(page.locator("[data-reception-talk]"), "名前の封のあとのセーブで会話を言い出した").toHaveCount(0);
+
     // 報告書が読める（全部）
     const reportIds = await page.evaluate(() => state.reports.map((r) => r.id));
     if (name !== "after-interview") expect(reportIds.length, "報告書が無い（fixture が変わった？）").toBeGreaterThan(0);
