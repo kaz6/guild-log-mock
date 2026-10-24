@@ -123,6 +123,9 @@ window.masterAdventurers = [
   {
     id: "adv_elne",
     name: "エルネ・シェルカ",
+    // ★ 呼び名（報告書・会話・名簿の表示）は5文字以内（2026-10-24・EX-164）。本名が長い人だけ持つ。
+    //   nickname（プレイヤーが付けるあだ名）が空のときに使う。古いセーブの nickname は "" なので、こちらに置く。
+    callName: "エルネ",
     nickname: "",
     favorite: false,
     job: "薬草師",
@@ -161,7 +164,7 @@ window.masterAdventurers = [
       ],
       positiveLine: "曖昧な輪郭を、震える字で報告書の余白に残した。",
       dangerLine: "逃げるべき場面で、もう一度だけ対象を見ようとした。",
-      idleLine: "エルネ・シェルカは、消えかけた名前を何度も書き直していた。"
+      idleLine: "エルネは、消えかけた名前を何度も書き直していた。"
     },
     traits: [
       { name: "記録が正確", type: "positive", tags: ["記録", "報告書", "観察"] },
