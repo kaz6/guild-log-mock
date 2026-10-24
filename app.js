@@ -239,7 +239,7 @@ function ecologyBookCardHtml() {
   if (!book || book.read || book.legacy) return "";
   const w = speechWindow("ecologyBook", ECOLOGY_BOOK_PARAGRAPHS.map((p) => p.map(escapeHtml)));
   return `
-    <section class="card money-event-card" data-ecology-book="1">
+    <section class="card reception-event-card" data-ecology-book="1">
       <div class="card-body reception">
         <div class="reception-portrait" aria-hidden="true"></div>
         <div>
@@ -256,6 +256,87 @@ function ecologyBookCardHtml() {
 }
 function dismissEcologyBook() {
   if (state.ecologyBook) state.ecologyBook.read = true;
+  saveState();
+  render();
+}
+
+// ── 序盤の受付嬢の会話（2026-10-24・EX-164。文面は作者の確定稿＝台本ページ 401a8a5d… の「序盤の会話イベント：受付嬢」）──
+// ★ それぞれ1度だけ、ホームに会話の窓で出す。`state.receptionTalks = { sixOpen, firstSix }`（各 { at, read }）。
+//   ① sixOpen：酒場と掃除の両方を終え、6件が開いたとき（掲示板の解放と同じ判定 `isQuestUnlocked`）
+//   ② firstSix：6件のどれかを初めて終えたとき。★ 段が「未達」でない報告書で数える（「達成おめでとう」「お金も入って」が
+//     嘘にならないように。報酬の段と同じ表 `GROWTH_TIER_BY_RESULT`）。①を読んでから出す（2枚を重ねない）。
+//   【主人公】＝プレイヤー名（無記名なら「記録員」）。「お金のため」を選んだ人にだけ一言足す（`state.player.motive`）。
+// ★ 立てるのは描画の中（条件がそろった最初の描画）。古いセーブ（鍵が無い）は読み込みで null にしておき、
+//   最初の描画で「条件がもう満たされている会話」を既読にする（言い出さない）。読み込みの中で判定しないのは、
+//   判定に使う表（GROWTH_TIER_BY_RESULT など）がまだ評価されていないため。
+const OPENING_FIRST_QUESTS = ["quest_tavern_errand", "quest_guild_cleanup"]; // 最初から並ぶ2件（2026-10-23）
+const OPENING_SIX_QUESTS = (window.masterQuests ?? []).filter((q) =>
+  Array.isArray(q.unlockedBy) && OPENING_FIRST_QUESTS.every((id) => q.unlockedBy.includes(id)));
+const RECEPTION_TALKS = {
+  sixOpen: {
+    ready: (cleared) => OPENING_SIX_QUESTS.length > 0 && isQuestUnlocked(OPENING_SIX_QUESTS[0], cleared),
+    paragraphs: (name) => [["改めて歓迎します！", `${name}さん！`, "まずは掲示板に貼られている依頼を選んで、冒険者さんを送り出しましょう！"]]
+  },
+  firstSix: {
+    after: "sixOpen",
+    ready: () => state.reports.some((r) => OPENING_SIX_QUESTS.some((q) => q.id === r.questId) && (GROWTH_TIER_BY_RESULT[r.result] ?? "full") !== "fail"),
+    paragraphs: () => [
+      [`初依頼の達成おめでとうございます！${state.player?.motive === "money" ? "お金も入って、懐も温まりましたね！" : ""}`],
+      ["このように依頼をこなして、地域の皆さんの困りごとを解決するのが私たちのお仕事です！", "どんどん解決していきましょう！"]
+    ]
+  }
+};
+function receptionTalkName() {
+  const name = (state.player?.name ?? "").trim();
+  return name || INTERVIEW_UNNAMED;
+}
+// いま出す会話の id（無ければ null）。条件がそろったものはここで立てる。
+function currentReceptionTalkId() {
+  if (state.receptionTalks === null) markPassedReceptionTalks();
+  const talks = state.receptionTalks ?? (state.receptionTalks = {});
+  const cleared = getClearedQuestIds();
+  let changed = false;
+  for (const [id, talk] of Object.entries(RECEPTION_TALKS)) {
+    if (!talks[id] && (!talk.after || talks[talk.after]?.read) && talk.ready(cleared)) {
+      talks[id] = { at: Date.now(), read: false };
+      changed = true;
+    }
+  }
+  if (changed) saveState();
+  return Object.keys(RECEPTION_TALKS).find((id) => talks[id] && !talks[id].read) ?? null;
+}
+// 古いセーブ（読み込みで null にした）：条件がもう満たされている会話は既読にする（新たに立てはしない）
+function markPassedReceptionTalks() {
+  const cleared = getClearedQuestIds();
+  state.receptionTalks = {};
+  for (const [id, talk] of Object.entries(RECEPTION_TALKS)) {
+    if (talk.ready(cleared)) state.receptionTalks[id] = { at: null, read: true, legacy: true };
+  }
+  saveState();
+}
+function receptionTalkCardHtml() {
+  if (!state.player?.interviewDone) return "";
+  const id = currentReceptionTalkId();
+  if (!id) return "";
+  const w = speechWindow(`talk_${id}`, RECEPTION_TALKS[id].paragraphs(escapeHtml(receptionTalkName())).map((p) => p.map((line) => line)));
+  return `
+    <section class="card reception-event-card" data-reception-talk="${escapeHtml(id)}">
+      <div class="card-body reception">
+        <div class="reception-portrait" aria-hidden="true"></div>
+        <div>
+          <p class="eyebrow">Guild Reception</p>
+          <h3>受付嬢</h3>
+          ${w.html}
+          ${w.last ? `
+          <div class="button-row" style="margin-top: 12px;">
+            <button class="secondary-button" onclick="dismissReceptionTalk('${escapeJsArg(id)}')">わかりました</button>
+          </div>` : w.more}
+        </div>
+      </div>
+    </section>`;
+}
+function dismissReceptionTalk(id) {
+  if (state.receptionTalks?.[id]) state.receptionTalks[id].read = true;
   saveState();
   render();
 }
@@ -550,11 +631,12 @@ let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻�
 // オープニング面接（2026-10-23・EX-162）。★ 文面は Notion「オープニング面接の台本（確定稿・2026-10-23）」
 //   （401a8a5dfd458167858af138886f724c）が正本。一字一句そのまま写す。直したいときは台本の側を直してから。
 //   ★ 旧実装の「気質」の選択は台本に無いので無くした（state.player の形は旧セーブのために残す）。
-// 志望動機の返事。★ 返事を出すだけで、選んだ内容は保存しない（作者の指示）。
+// 志望動機の返事。★ 選んだものは `state.player.motive` に id で保存する（2026-10-24・EX-164。10-23 の「保存しない」を変更＝
+//   序盤の受付嬢の一言「お金も入って…」の出し分けに使う）。古いセーブ（欄が無い）は「お金のため」ではない扱い。
 const INTERVIEW_MOTIVES = [
-  { label: "お金のため", reply: ["お金はだいじですからね！", "ただ、あんまり稼げるお仕事じゃないかもですね！"] },
-  { label: "家が近いから", reply: ["正直でいいですね！私はここに住んでるので、ご近所さんですね！"] },
-  { label: "この地域に興味あって", reply: ["わかります！わたしもそうなんですよ！まだまだ未開拓なのはこちらの方角ですからね！"] }
+  { id: "money", label: "お金のため", reply: ["お金はだいじですからね！", "ただ、あんまり稼げるお仕事じゃないかもですね！"] },
+  { id: "near", label: "家が近いから", reply: ["正直でいいですね！私はここに住んでるので、ご近所さんですね！"] },
+  { id: "interest", label: "この地域に興味あって", reply: ["わかります！わたしもそうなんですよ！まだまだ未開拓なのはこちらの方角ですからね！"] }
 ];
 // 無記名のときの呼び名（台本の指定）。
 const INTERVIEW_UNNAMED = "記録員";
@@ -712,12 +794,13 @@ function createInitialState() {
     // 生態目録を渡した印（2026-10-23・EX-163 段階3）。{ at, read, legacy? }。★ 最初の枠が立った封の操作の中でだけ立てる。
     //   古いセーブ（この鍵が無く、面接を終えている）は読み込みで legacy を立てる＝目録を隠さない・一言も出さない。
     ecologyBook: null,
+    receptionTalks: {}, // 序盤の受付嬢の会話（2026-10-24・EX-164）。{ sixOpen, firstSix } 各 { at, read }
     stickyDismissed: {}, // ホームの付箋を剝がした印（2026-10-23・EX-163）。区切りの id → true
     firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
     trialEnd: null, // 体験版の終わりの合図（EX-158【3】。/trial/ のコピーだけが立てる）。{ at, read }
     stock: {},       // 在庫（品 id → 数）。★ 最初は空（2026-09-23・EX-144）
     gameOver: null,  // 運営不能（★ 記録の終わり方の一つ。「負け」ではない）
-    player: { name: null, personality: null, personalityLabel: null, personalityTags: [], interviewDone: false }
+    player: { name: null, personality: null, personalityLabel: null, personalityTags: [], motive: null, interviewDone: false }
   };
 }
 
@@ -785,6 +868,8 @@ function loadState() {
     merged.stock = normalizeStock(parsed.stock);
     // ★ 生態目録の解禁（EX-163）：鍵の無い古いセーブで面接を終えているなら、目録はもう見たことがある＝隠さない
     if (parsed.ecologyBook === undefined && parsed.player?.interviewDone) merged.ecologyBook = { at: null, read: true, legacy: true };
+    // ★ 序盤の受付嬢の会話（EX-164）：鍵の無い古いセーブで、条件がもう満たされている会話は既読にする（言い出さない）
+    if (parsed.receptionTalks === undefined) merged.receptionTalks = null;
     // 削除済みの observations 系統（体験版①）の残骸キーを落とす
     delete merged.observations;
     delete merged.lastObservationUpdate;
@@ -2448,7 +2533,7 @@ function interviewBackToName() {
 }
 
 function interviewPickMotive(index) {
-  interviewDraft.motive = index; // ★ 返事を選ぶためだけ。保存しない
+  interviewDraft.motive = index; // 返事を選び、面接の終わりに id で保存する（EX-164）
   interviewStep = 4;
   render();
 }
@@ -2489,6 +2574,7 @@ function interviewComplete() {
     personality: null,
     personalityLabel: null,
     personalityTags: [],
+    motive: INTERVIEW_MOTIVES[interviewDraft.motive]?.id ?? null, // 志望動機（EX-164）
     interviewDone: true,
     // 就任日（2026-08-09・EX-065）。バッジの表示にしか使わない。
     // ★ 面接を終えた瞬間＝就任なので、ここ以外では発行しない。
@@ -2757,7 +2843,7 @@ const STICKY_NOTES = [
 ];
 // 「2つの依頼」＝最初から並ぶ酒場と掃除（2026-10-23）。両方を出した（遠征中か、報告書が届いた）ら、次の区切り「出発」へ進む。
 //   ★ 1本だけ出した人には「2つの依頼を」が残る（pr-review の指摘）。報告書が届けば「帰還」の区切りが先に来る。
-const STICKY_FIRST_QUESTS = ["quest_tavern_errand", "quest_guild_cleanup"];
+const STICKY_FIRST_QUESTS = OPENING_FIRST_QUESTS;
 function stickyFirstTwoDispatched() {
   return STICKY_FIRST_QUESTS.every((id) =>
     getExpeditions().some((e) => e.questId === id) || state.reports.some((r) => r.questId === id));
@@ -2804,6 +2890,7 @@ function renderHome() {
     ${roomWindowHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
+    ${receptionTalkCardHtml()}
     ${ecologyBookCardHtml()}
     ${trialEndCardHtml()}
     ${returnedReports.length > 1 ? `
