@@ -30,6 +30,12 @@ test.describe("ホームの窓（EX-161）", () => {
     await page.locator('[data-room-object="board"]').click({ force: true });
     expect(await page.evaluate(() => route)).toBe("quests");
     await page.evaluate(() => { setRoute("home"); roomPanel = 0; render(); });
+    // ★ 本（生態目録）は最初の生き物に出会うまで枠も反応も無い（EX-163 段階3）。枠を1つ立ててから押す
+    expect(await page.locator('button[data-room-object="book"]').count(), "出会う前の本は触れない").toBe(0);
+    await page.evaluate(() => {
+      state.ecologyRecord = { er_t: { id: "er_t", target: "森喰い兎", name: null, nameDraft: "", nameConfirmedAt: null, area: "", category: "", confirmed: [], guess: "", nextCheck: "", legacy: "" } };
+      saveState(); render();
+    });
     await page.locator('[data-room-object="book"]').click({ force: true });
     expect(await page.evaluate(() => route)).toBe("ecology");
     await page.evaluate(() => { setRoute("home"); roomPanel = 2; render(); });
