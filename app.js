@@ -5846,8 +5846,8 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_tavern_errand: ["item_bandage", "item_whistle"],
     quest_guild_cleanup: [], // ★ ギルド内なので支給品は選べない（持たせる判断が発生しない。EX-064）
     quest_shopping: [], // ★ 買い出しは持っていかない。枠は「欲しい物の書き付け」（2026-09-23・EX-144）
-    quest_relief_odd_jobs: ["item_bandage"],
-    quest_bond_gadd: [], // ★ 固有依頼（EX-165）。定型の報告書なので支給品の行が出ない＝持たせる判断を作らない（意図して空） // ★ 救済（2026-09-23・EX-144）。町なかの雑用。仮
+    quest_relief_odd_jobs: ["item_bandage"], // ★ 救済（2026-09-23・EX-144）。町なかの雑用。仮
+    quest_bond_gadd: [], // ★ 固有依頼（EX-165）。定型の報告書なので支給品の行が出ない＝持たせる判断を作らない（意図して空）
 
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
