@@ -439,9 +439,53 @@ function bondThanksOnReportHtml(report) {
 function dismissBondTalk(id, kind) {
   const progress = bondProgress(id);
   if (kind === "consult") progress.consultRead = true;
-  if (kind === "thanks") progress.thanksRead = true;
+  if (kind === "thanks") {
+    progress.thanksRead = true;
+    // ★ 報酬のアビリティは感謝を読んだときに開く（EX-165 の追加）。報酬の金は 0 のまま
+    const entry = bondChainEntries().find((e) => e.id === id);
+    const ability = entry?.ability ? window.masterAbilities?.[entry.ability] : null;
+    if (ability) {
+      if (!state.abilities || typeof state.abilities !== "object") state.abilities = {};
+      if (!state.abilities[entry.ability]) state.abilities[entry.ability] = { adventurerId: ability.adventurerId, at: Date.now() };
+    }
+  }
   saveState();
   render();
+}
+
+// ── アビリティ（固有依頼の報酬。EX-165 の追加）──────────────────────────────
+// ★ 持っているかは state.abilities。出発のときに、編成に持ち主がいるものだけ遠征へ写す（abilities）。
+//   報告書の生成は遠征に写した分だけを読む（過去の記録も今の state も読まない＝PR #150 と EX-138 の流儀）。
+function ownedAbilityIds(adventurerId) {
+  const owned = state.abilities && typeof state.abilities === "object" ? state.abilities : {};
+  return Object.keys(owned).filter((id) => window.masterAbilities?.[id] && owned[id]?.adventurerId === adventurerId);
+}
+function partyAbilityIds(adventurerIds) {
+  return adventurerIds.flatMap((id) => ownedAbilityIds(id));
+}
+// 冬越えの粥：野外で休みを挟む遠出（outdoorRest）で、持ち主が編成にいて、出発のときに持っていた回だけ効く。
+//   効くなら { scale, line }、効かなければ null。行は出発の種で選ぶ（報告書の乱数を引かない）。
+function winterPorridgeFor(quest, party, expedition) {
+  const ability = window.masterAbilities?.winter_porridge;
+  if (!ability || quest?.outdoorRest !== true) return null;
+  if (!Array.isArray(expedition?.abilities) || !expedition.abilities.includes("winter_porridge")) return null;
+  const owner = party.find((adv) => adv.id === ability.adventurerId);
+  if (!owner) return null;
+  const lines = ability.lines ?? [];
+  const pick = lines.length > 0 ? lines[Math.abs(expedition.seed ?? 0) % lines.length] : null;
+  return {
+    scale: ability.fatigueStepScale ?? 1,
+    line: pick ? pick.replaceAll("【鉄鍋】", getDisplayName(owner)) : null
+  };
+}
+function adventurerAbilitiesHtml(adventurer) {
+  const names = ownedAbilityIds(adventurer.id).map((id) => window.masterAbilities[id].name);
+  if (names.length === 0) return "";
+  return `
+    <section class="adventurer-detail-section" data-abilities>
+      <p class="meta-label">アビリティ</p>
+      <p>${names.map(escapeHtml).join("・")}</p>
+    </section>`;
 }
 
 function dismissTrialEnd() {
@@ -900,6 +944,7 @@ function createInitialState() {
     // 生態目録を渡した印（2026-10-23・EX-163 段階3）。{ at, read, legacy? }。★ 最初の枠が立った封の操作の中でだけ立てる。
     //   古いセーブ（この鍵が無く、面接を終えている）は読み込みで legacy を立てる＝目録を隠さない・一言も出さない。
     ecologyBook: null,
+    abilities: {}, // 持っているアビリティ（固有依頼の報酬。EX-165 の追加）。{ [アビリティの id]: { adventurerId, at } }。感謝を読んだときに立てる
     bondChain: { started: false }, // 固有依頼の連鎖（2026-10-24・EX-165）。{ started, [連鎖の id]: { consultAt, consultRead, thanksAt, thanksRead } }
     receptionTalks: {}, // 序盤の受付嬢の会話（2026-10-24・EX-164）。{ sixOpen, firstSix } 各 { at, read }
     stickyDismissed: {}, // ホームの付箋を剝がした印（2026-10-23・EX-163）。区切りの id → true
@@ -3940,6 +3985,7 @@ function adventurerEditorHtml(adventurer) {
       <p class="meta-label">${adventurer.species === "dog" ? "いまの様子" : "冒険譚"}</p>
       ${adventurerTaleHtml(adventurer)}
     </section>
+    ${adventurerAbilitiesHtml(adventurer)}
     ${adventurerPastHtml(adventurer)}
 
     <section class="adventurer-detail-section">
@@ -5028,6 +5074,9 @@ function startExpedition() {
     // ★ Mock用の「フックを必ず引く」は出発時に確定して書く（切り替えても出発済みの遠征は動かない）
     mockForceHooks
   };
+  // ★ アビリティは出発のときに確定して書く（EX-165 の追加）。持っていなければ鍵ごと書かない
+  const abilityIds = partyAbilityIds(expedition.adventurerIds);
+  if (abilityIds.length > 0) expedition.abilities = abilityIds;
   // ★ 遠征費は出発した瞬間に引く（2026-09-23・EX-144）。**同時遠征は1本ずつ引いて判定する**（細則4）
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
   expedition.fee = questFee(quest);
@@ -5377,7 +5426,8 @@ const lifeQuestEventPools = {
   }
 };
 
-function roadEventText(quest, eventName, party, itemIds, rng) {
+// ★ options.porridge：冬越えの粥が効いた回（EX-165 の追加）。休憩の行で「温かいものはない」と書かない
+function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
   const humans = humanMembers(party);
   const soloAdv = humans[0] ?? party[0];
   const solo = isSoloHumanParty(party);
@@ -5446,7 +5496,7 @@ function roadEventText(quest, eventName, party, itemIds, rng) {
       `泥をかぶった茸ほど香りが強い。${name(herbalist)}はその違いを報告書の余白に書き残した。`
     ],
     休憩地点: [
-      `${has("item_pot") ? `${name(herbalist)}は携帯鍋で薄いスープを作った。${soloStyle ? "温かさが足取りを少し軽くした。" : `${name(warrior)}は文句を言いながらも、最後まで飲み干した。`}` : soloStyle ? `${name(soloAdv)}は倒木のそばで短い休憩を取った。靴紐を結び直し、また歩き始めた。` : `${group}は倒木のそばで短い休憩を取った。温かいものはないが、靴紐を結び直す余裕はあった。`}`,
+      `${has("item_pot") ? `${name(herbalist)}は携帯鍋で薄いスープを作った。${soloStyle ? "温かさが足取りを少し軽くした。" : `${name(warrior)}は文句を言いながらも、最後まで飲み干した。`}` : soloStyle ? `${name(soloAdv)}は倒木のそばで短い休憩を取った。靴紐を結び直し、また歩き始めた。` : (options.porridge ? `${group}は倒木のそばで短い休憩を取った。靴紐を結び直す余裕はあった。` : `${group}は倒木のそばで短い休憩を取った。温かいものはないが、靴紐を結び直す余裕はあった。`)}`,
       `休憩中、${name(scout)}は森の音が途切れる場所を記録した。採集路としては使えそうだ。`
     ],
     道標の傾き: [
@@ -9212,7 +9262,9 @@ function generateReport(expedition) {
     //   依頼データの outcomeOverride が持つ（2026-08-01・段階3）。
     const searchOutcome = overriddenOutcome(quest, { party, itemIds });
     const found = searchOutcome !== quest.outcomeOverride.default;
-    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ" });
+    const porridge = winterPorridgeFor(quest, party, expedition);
+    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ", ...(porridge ? { fatigueScale: porridge.scale } : {}) });
+    if (porridge?.line) fw.porridgeLine = porridge.line;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -9226,6 +9278,7 @@ function generateReport(expedition) {
 
     const searchLogs = generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, stage, found });
     searchLogs.forEach((text) => add("action", text));
+    if (fw.porridgeLine) add("action", fw.porridgeLine);
     fieldworkLogLines(fw, rng).forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = questOutcomeText(quest.id, searchOutcome, party, itemIds);
@@ -9516,7 +9569,7 @@ function generateReport(expedition) {
   }).filter(Boolean);
   add("", `編成：${formatNames(party)}。支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
   add("", generateWeatherLog(quest, party, weather, rng), "weather"); // ★ 天候の行の印（EX-157【2】）
-  roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng)));
+  roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng, { porridge: field.porridge })));
   field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
@@ -10338,8 +10391,10 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
     events.push({ type: "item", itemId: "item_map" });
   }
 
-  const fatigueStep = FIELDWORK_TUNING.fatigueBase +
+  // ★ fatigueScale：冬越えの粥（EX-165 の追加）が効く回だけ 1 未満。それ以外は掛けない（既存の値を1桁も動かさない）
+  const baseFatigueStep = FIELDWORK_TUNING.fatigueBase +
     FIELDWORK_TUNING.fatigueSmallPartyExtra * Math.max(0, MAX_PARTY_SIZE - party.length);
+  const fatigueStep = typeof options.fatigueScale === "number" ? baseFatigueStep * options.fatigueScale : baseFatigueStep;
   let fatigue = 0;
   let potLeft = held.filter((id) => id === "item_pot").length;
   let whistleLeft = Math.min(FIELDWORK_TUNING.whistleRecoverMax, held.filter((id) => id === "item_whistle").length);
@@ -10700,7 +10755,8 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   // ★ 初回だけの例外（2026-08-06 裁定／EX-131）。依頼データが `firstRunNeverFails` を持つ回だけ見る。
   //   ★ 「初回か」は出発時に確定した旗を優先する（2026-09-20・EX-138）。
   const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest, expedition);
-  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail });
+  const porridge = winterPorridgeFor(quest, party, expedition);
+  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail, ...(porridge ? { fatigueScale: porridge.scale } : {}) });
   // ★ 特殊裁定のフック（段階2＝文面／段階3の試行＝ミナ①・ロウ①だけ取引）。
   //   取引は結末の段と帰還時の負傷を動かすので、結末を選ぶ前に当てる。乱数は引かない（結末を選ぶ乱数の消費は変わらない）。
   const hook = drawFieldworkHook(quest, party, fw, expedition);
@@ -10712,11 +10768,12 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   }
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   const logLines = fieldworkLogLines(fw, rng);
+  if (porridge?.line) logLines.unshift({ kind: "action", text: porridge.line });
   if (hook) {
     logLines.push({ kind: "action", text: hook.text });
     if (tradeLine) logLines.push({ kind: "action", text: tradeLine });
   }
-  return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines };
+  return { fw, outcome: picked.outcome, turnBack: picked.turnBack, logLines, porridge: porridge != null };
 }
 
 // 特殊裁定のフックを引く（2026-10-14・EX-148 段階2。裁定: DECISION_LOG 2026-09-29「取引」＋EX148-Q1〜Q3）。

@@ -42,7 +42,9 @@ window.masterBondChain = {
           "おかわりもある。余るくらい作ったからな！",
           "【主人公】、あんたの分は大盛りだ。……付き合ってくれて、ありがとよ。"
         ]]
-      }
+      },
+      // 報酬（感謝を読んだときに開く。報酬の金は 0 のまま）。中身は下の masterAbilities
+      ability: "winter_porridge"
     },
     // ★ 以下は文面が未作成（台本ページで「未作成」）。consult が null なので連鎖はここで止まる
     { id: "bond_mina", adventurerId: "adv_mina", consult: null, questId: null, reportLines: null, thanks: null },
@@ -53,4 +55,24 @@ window.masterBondChain = {
     // 受付嬢：本人は行かない（依頼主が受付嬢で、誰でも行ける）
     { id: "bond_reception", adventurerId: null, consult: null, questId: null, reportLines: null, thanks: null }
   ]
+};
+
+// アビリティ（固有依頼の報酬。2026-10-24・EX-165 の追加）。
+// ★ 設計：DECISION_LOG 2026-10-24「鉄鍋の固有依頼の報酬は、アビリティ「冬越えの粥」（疲労を少し軽くする）」。
+// ★ 持っているかは state.abilities（感謝を読んだときに立てる）。出発のときに遠征へ写し、報告書はそれだけを読む
+//   （報告書の生成で過去の記録を読まない＝PR #150）。
+// ★ 効くのは野外で休みを挟む遠出だけ（依頼データの outdoorRest）。町なかの用事には効かない。
+window.masterAbilities = {
+  winter_porridge: {
+    name: "冬越えの粥",
+    adventurerId: "adv_gadd",
+    // 工程ごとに積もる疲労に掛ける倍率。★ 仮の値（制作の最後に調整する）。
+    fatigueStepScale: 0.75,
+    // 効いた遠征の報告書に1行（★ 仮の文面。したことだけを書き、結果は書かない）。【鉄鍋】＝呼び名。
+    //   どちらを出すかは出発の種で決める（報告書の乱数を引かない）。
+    lines: [
+      "休みのたびに、【鉄鍋】が冬越えの粥を配った。",
+      "【鉄鍋】は火の番をしながら、鍋の粥をかき混ぜていた。"
+    ]
+  }
 };
