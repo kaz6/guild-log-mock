@@ -672,6 +672,7 @@ function createInitialState() {
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     debt: { active: null, timesBorrowed: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
+    stickyDismissed: {}, // ホームの付箋を剝がした印（2026-10-23・EX-163）。区切りの id → true
     firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
     trialEnd: null, // 体験版の終わりの合図（EX-158【3】。/trial/ のコピーだけが立てる）。{ at, read }
     stock: {},       // 在庫（品 id → 数）。★ 最初は空（2026-09-23・EX-144）
@@ -2686,6 +2687,49 @@ function showRoomNotice(text) {
   render();
 }
 
+// ── ホームの付箋（2026-10-23・EX-163 段階2）──────────────────────────────────
+// ★ 「次にすること」を1枚だけ貼る。件数・期限・点滅は出さない（急かさない）。タップで剝がせる。
+// ★ 区切りは5つ（台本ページの「追補」）。どれも**今ある記録から読む**（新しく持つのは剝がした印だけ）：
+//   面接のあと＝player.interviewDone ／ 出発＝遠征が1本でもある・報告書が1通でもある ／ 帰還＝報告書が1通でもある
+//   ／ 最初の生き物＝生態目録の枠が1つでもある ／ 名前を付けられる＝命名の条件（7軸）を満たす枠がある
+//   ／ 最初の封のあと＝nameConfirmedAt のある枠がある → 付箋は出さない。
+// ★ 出すのは**いちばん先まで来た区切りの1枚だけ**。それをやり終えた（done）か剝がしたら、次の区切りまで何も貼らない。
+//   ⚠️ 前の区切りに戻って貼り直さない（酒場だけ出した人に、あとで「2つの依頼を」が戻ってくるのを避ける）。
+// ★ 文面は仮（作者が書き直す）。表で持つ。
+const STICKY_NOTES = [
+  { id: "afterInterview", text: "次：依頼掲示板で、2つの依頼を出してみましょう",
+    reached: () => Boolean(state.player?.interviewDone), done: () => stickyHasDeparted() },
+  { id: "departed", text: "出発しました。戻るまで、閉じていても大丈夫です",
+    reached: () => stickyHasDeparted(), done: () => state.reports.length > 0 },
+  { id: "returned", text: "次：届いた報告書を読んでみましょう",
+    reached: () => state.reports.length > 0, done: () => state.reports.some((r) => r.opened) },
+  { id: "firstCreature", text: "次：生態目録に、観察を書き込んでみましょう",
+    reached: () => ecologyRecordEntries().length > 0, done: () => ecologyRecordEntries().some((e) => ecologyRecordFilledAxes(e).size > 0) },
+  { id: "canName", text: "次：十分に観察できたら、名前に封をしてみましょう",
+    reached: () => ecologyRecordEntries().some(canNameEcologyRecordEntry), done: () => false },
+  { id: "afterSeal", text: null, // 最初の封のあとは貼らない（終わりの合図で足りる）
+    reached: () => ecologyRecordEntries().some(isEcologyRecordNameConfirmed), done: () => true }
+];
+function stickyHasDeparted() {
+  return getExpeditions().length > 0 || state.reports.length > 0;
+}
+function currentStickyNote() {
+  const note = [...STICKY_NOTES].reverse().find((n) => n.reached());
+  if (!note || !note.text || note.done() || (state.stickyDismissed ?? {})[note.id]) return null;
+  return note;
+}
+function stickyNoteHtml() {
+  const note = currentStickyNote();
+  if (!note) return "";
+  return `
+    <button class="sticky-note" type="button" data-sticky="${escapeHtml(note.id)}" aria-label="付箋（押すと剝がせます）" onclick="dismissStickyNote('${escapeJsArg(note.id)}')">${escapeHtml(note.text)}</button>`;
+}
+function dismissStickyNote(id) {
+  state.stickyDismissed = { ...(state.stickyDismissed ?? {}), [id]: true };
+  saveState();
+  render();
+}
+
 // 届いた報告書（ホームの報告書棚）へ。★ 今ある画面を開くだけ（新しい画面は作らない）
 function openReportShelf() {
   document.getElementById("reportShelf")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
@@ -2707,6 +2751,7 @@ function renderHome() {
 
   app.innerHTML = `
     ${paperSignboardHtml()}
+    ${stickyNoteHtml()}
     ${roomWindowHtml()}
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}

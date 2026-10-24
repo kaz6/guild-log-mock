@@ -1719,3 +1719,6 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 .room-bubble-item { min-height: 44px; padding: 8px 14px; font-size: 14px; letter-spacing: .15em; text-align: left; color: var(--paper-ink, #2b2620); background: none; border: 0; border-bottom: 1px solid var(--paper-rule, #cfc3aa); cursor: pointer; }
 .room-bubble-item:last-child { border-bottom: 0; }
 .room-bubble-item:active { background: rgba(43, 38, 32, .08); }
+
+/* ホームの付箋（2026-10-23・EX-163）。★ 急かさない：動き・点滅・件数は付けない。押すと剝がせる */
+.sticky-note { display: block; width: fit-content; max-width: calc(100% - 24px); margin: 8px auto 0; padding: 8px 12px; font: inherit; font-size: 14px; line-height: 1.6; text-align: left; color: var(--paper-ink, #2b2620); background: #f1e3a8; border: 1px solid rgba(43, 38, 32, .35); box-shadow: 1px 2px 0 rgba(43, 38, 32, .18); transform: rotate(-1deg); cursor: pointer; }
