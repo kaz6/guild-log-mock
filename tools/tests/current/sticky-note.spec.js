@@ -19,6 +19,8 @@ test("面接のあと→出発→帰還→開封：いつも1枚だけで、や�
   expect(await notes(page)).toEqual(["afterInterview"]);
 
   await departQuest(page, "隣の酒場に買い出し", "等倍");
+  expect(await notes(page), "1本だけ出したときは「2つの依頼を」が残る").toEqual(["afterInterview"]);
+  await departQuest(page, "ギルドの掃除", "等倍");
   expect(await notes(page), "出発しているあいだ").toEqual(["departed"]);
 
   // 帰還（報告書が1通届いた）。遠征は畳んでおく
@@ -69,6 +71,7 @@ test("タップで剝がせて、リロードしても戻らない", async ({ pa
   await page.reload(); await page.waitForTimeout(300);
   expect(await notes(page)).toEqual([]);
   // 次の区切りでは次の1枚が貼られる
+  await departQuest(page, "隣の酒場に買い出し", "等倍");
   await departQuest(page, "ギルドの掃除", "等倍");
   expect(await notes(page)).toEqual(["departed"]);
   expect(errors).toEqual([]);

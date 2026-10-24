@@ -2690,7 +2690,7 @@ function showRoomNotice(text) {
 // ── ホームの付箋（2026-10-23・EX-163 段階2）──────────────────────────────────
 // ★ 「次にすること」を1枚だけ貼る。件数・期限・点滅は出さない（急かさない）。タップで剝がせる。
 // ★ 区切りは5つ（台本ページの「追補」）。どれも**今ある記録から読む**（新しく持つのは剝がした印だけ）：
-//   面接のあと＝player.interviewDone ／ 出発＝遠征が1本でもある・報告書が1通でもある ／ 帰還＝報告書が1通でもある
+//   面接のあと＝player.interviewDone ／ 出発＝酒場と掃除の両方を出した（遠征中か報告書あり） ／ 帰還＝報告書が1通でもある
 //   ／ 最初の生き物＝生態目録の枠が1つでもある ／ 名前を付けられる＝命名の条件（7軸）を満たす枠がある
 //   ／ 最初の封のあと＝nameConfirmedAt のある枠がある → 付箋は出さない。
 // ★ 出すのは**いちばん先まで来た区切りの1枚だけ**。それをやり終えた（done）か剝がしたら、次の区切りまで何も貼らない。
@@ -2698,9 +2698,9 @@ function showRoomNotice(text) {
 // ★ 文面は仮（作者が書き直す）。表で持つ。
 const STICKY_NOTES = [
   { id: "afterInterview", text: "次：依頼掲示板で、2つの依頼を出してみましょう",
-    reached: () => Boolean(state.player?.interviewDone), done: () => stickyHasDeparted() },
+    reached: () => Boolean(state.player?.interviewDone), done: () => stickyFirstTwoDispatched() },
   { id: "departed", text: "出発しました。戻るまで、閉じていても大丈夫です",
-    reached: () => stickyHasDeparted(), done: () => state.reports.length > 0 },
+    reached: () => stickyFirstTwoDispatched(), done: () => state.reports.length > 0 },
   { id: "returned", text: "次：届いた報告書を読んでみましょう",
     reached: () => state.reports.length > 0, done: () => state.reports.some((r) => r.opened) },
   { id: "firstCreature", text: "次：生態目録に、観察を書き込んでみましょう",
@@ -2710,8 +2710,12 @@ const STICKY_NOTES = [
   { id: "afterSeal", text: null, // 最初の封のあとは貼らない（終わりの合図で足りる）
     reached: () => ecologyRecordEntries().some(isEcologyRecordNameConfirmed), done: () => true }
 ];
-function stickyHasDeparted() {
-  return getExpeditions().length > 0 || state.reports.length > 0;
+// 「2つの依頼」＝最初から並ぶ酒場と掃除（2026-10-23）。両方を出した（遠征中か、報告書が届いた）ら、次の区切り「出発」へ進む。
+//   ★ 1本だけ出した人には「2つの依頼を」が残る（pr-review の指摘）。報告書が届けば「帰還」の区切りが先に来る。
+const STICKY_FIRST_QUESTS = ["quest_tavern_errand", "quest_guild_cleanup"];
+function stickyFirstTwoDispatched() {
+  return STICKY_FIRST_QUESTS.every((id) =>
+    getExpeditions().some((e) => e.questId === id) || state.reports.some((r) => r.questId === id));
 }
 function currentStickyNote() {
   const note = [...STICKY_NOTES].reverse().find((n) => n.reached());
