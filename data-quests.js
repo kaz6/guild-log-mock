@@ -252,7 +252,7 @@ window.masterQuests = [
     title: "廃屋の片付け",
     category: "生活",
     danger: "低",
-    area: "町はずれの古い家屋",
+    area: "町外れの古い家屋",
     durationBand: "near_1m",
     // ★ 2026-09-21・EX-140【3】裁定2：`unlockedAfterCount: 2` をやめ、掃除へ付け替えた。
     //   ⚠️ 新しい流れでは達成数2件は**酒場＋掃除でしか満たせない**ので、条件としては意味を失っていた。
@@ -274,7 +274,7 @@ window.masterQuests = [
     title: "畑を荒らす「なにか」の追い払い",
     category: "戦闘",
     danger: "低",
-    area: "町はずれの畑",
+    area: "村はずれの畑",
     durationBand: "short_30m",
     unlockedBy: "quest_signpost",
     recommended: ["戦士", "慎重", "観察"],
@@ -318,7 +318,7 @@ window.masterQuests = [
     title: "古い小橋の応急修理",
     category: "保全",
     danger: "低",
-    area: "町はずれの小川",
+    area: "村はずれの小川",
     durationBand: "short_30m",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を「夕市帰りの親子の付き添い」から掃除へ）。
     unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
@@ -529,7 +529,7 @@ window.masterQuests = [
     category: "戦闘",
     // ★ 危険度は「高」。ランタンなしでは押し戻される依頼を「低」で掲示すると掲示板が嘘をつく。
     danger: "高",
-    area: "町はずれの道",
+    area: "村はずれの道",
     durationBand: "near_10m",
         // ★ 2026-09-21・EX-140【3】：掃除クリアで開く6件のひとつ（親を酒場から掃除へ付け替えた）。
     unlockedBy: ["quest_tavern_errand", "quest_guild_cleanup"], // ★ 2026-10-23：酒場と掃除の**両方**を終えてから開く
