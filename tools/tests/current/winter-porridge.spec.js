@@ -1,7 +1,9 @@
 // 鉄鍋のアビリティ「冬越えの粥」（EX-165 の追加）。中身は data-bonds.js の masterAbilities。
 // ★ 開く：宿場の粥の塩の感謝を読んだとき。state.abilities に立てる（リロードで残る）。名簿の鉄鍋の頁に名前が出る。
-// ★ 効く：野外で休みを挟む遠出（依頼データの outdoorRest）で、出発のときに遠征へ写した回だけ。疲労が少し軽くなり、報告書に1行。
-// ★ 町なかの用事には効かない（行も出ない・報告書は1字も変わらない）。【鉄鍋】はあだ名に追従。
+// ★ 効く：場所のタグが「遠出」（data-quests.js の masterPlaces）の依頼で、出発のときに遠征へ写した回だけ。
+//   工程の依頼は疲労が少し軽くなり、報告書に1行。
+// ★ 遠出の戦闘の依頼（隊商の護衛）には、撤退の閾値を一律で上げる形で効く（休みの場面が無いので行は出さない）。
+// ★ 近場の用事には効かない（行も出ない・報告書は1字も変わらない）。【鉄鍋】はあだ名に追従。
 const { test, expect } = require("@playwright/test");
 const { freshPage, interview } = require("../helpers/app");
 
@@ -46,23 +48,42 @@ test("出発のときに写す：持ち主が編成にいる回だけ abilities 
   expect(errors).toEqual([]);
 });
 
-test("効く依頼の一覧：遠出（帯が near_ でない）∧ 携帯鍋が許可 ∧ 工程エンジンを通る 依頼だけに outdoorRest", async ({ page }) => {
+test("全依頼に場所のタグ（place）があり、タグはどれも近場か遠出に割り当てられている（書き忘れたら落ちる）", async ({ page }) => {
   const errors = await freshPage(page);
-  const got = await page.evaluate(() => masterQuests.filter((q) => q.outdoorRest).map((q) => q.id).sort());
+  const bad = await page.evaluate(() => masterQuests.filter((q) => !["近場", "遠出"].includes(questReach(q))).map((q) => `${q.id}:${q.place}`));
+  expect(bad).toEqual([]);
+  const tags = await page.evaluate(() => Object.entries(window.masterPlaces));
+  expect(tags.every(([, v]) => v === "近場" || v === "遠出")).toBe(true);
+  expect(tags.map(([k]) => k).sort()).toEqual(["ギルド", "生活圏の外縁", "教会周辺", "森", "沢", "村", "町", "町はずれ", "街道", "都市"].sort());
+  expect(errors).toEqual([]);
+});
+
+test("粥の行が出る依頼の一覧＝遠出の工程の依頼（休みの場面がある）。手紙が入り、村の小橋は外れる", async ({ page }) => {
+  const errors = await freshPage(page);
+  const got = await page.evaluate(() => masterQuests.filter((q) => {
+    const on = generateReport({ questId: q.id, adventurerIds: ["adv_gadd", "adv_mina"], adventurerItemIds: {}, seed: 1, departTimeOfDay: "昼", departWeather: "晴れ", startTime: 0, durationMs: 1, abilities: ["winter_porridge"] });
+    return on.logs.some((l) => /冬越えの粥を配った|鍋の粥をかき混ぜていた/.test(l.text));
+  }).map((q) => q.id).sort());
   expect(got).toEqual([
     "quest_caravan_lastchance", "quest_caravan_search", "quest_church_patrol", "quest_herb", "quest_herb_delivery",
-    "quest_missing_herbalist", "quest_old_bridge_repair", "quest_old_stele_rubbing", "quest_signpost", "quest_unknown_grass"
+    "quest_letter", "quest_missing_herbalist", "quest_old_stele_rubbing", "quest_signpost", "quest_unknown_grass"
   ]);
-  // 規則と食い違っていないか（新しい依頼を足したときの見落としを拾う）
-  const rule = await page.evaluate(() => masterQuests.filter((q) => !String(q.durationBand).startsWith("near_")
-    && canUseItemInQuest(q, "item_pot", "晴れ")).map((q) => q.id).sort());
-  expect(rule).toEqual(got);
+  expect(errors).toEqual([]);
+});
+
+test("粥を配った回は「温かいものはない」の類を書かない（薬草採集・道標・手紙）", async ({ page }) => {
+  const errors = await freshPage(page);
+  for (const q of ["quest_herb", "quest_signpost", "quest_letter"]) for (let seed = 0; seed < 40; seed++) {
+    const on = await gen(page, q, ["adv_gadd", "adv_mina", "adv_row"], true, seed);
+    expect(on.some((t) => LINE.test(t)), `${q} seed${seed}：効く`).toBe(true);
+    expect(on.some((t) => /温かいものはない|温かいものもない|火も焚けない|冷えた食事/.test(t)), `${q} seed${seed}`).toBe(false);
+  }
   expect(errors).toEqual([]);
 });
 
 test("効く依頼では行が出て疲労が軽くなる。町なかの用事では行も効果も無く、報告書が1字も変わらない", async ({ page }) => {
   const errors = await freshPage(page);
-  for (const q of ["quest_herb", "quest_church_patrol", "quest_caravan_search"]) {
+  for (const q of ["quest_herb", "quest_church_patrol", "quest_caravan_search", "quest_letter"]) {
     const on = await gen(page, q, ["adv_gadd", "adv_mina"], true);
     expect(on.filter((t) => LINE.test(t)), `${q}：1行だけ`).toHaveLength(1);
     expect((await gen(page, q, ["adv_gadd", "adv_mina"], false)).some((t) => LINE.test(t)), `${q}：持っていなければ出ない`).toBe(false);
@@ -76,7 +97,7 @@ test("効く依頼では行が出て疲労が軽くなる。町なかの用事�
     return { off: run(null), on: run(window.masterAbilities.winter_porridge.fatigueStepScale) };
   });
   expect(fatigue.on).toBeLessThan(fatigue.off);
-  for (const q of ["quest_tavern_errand", "quest_wedding_support", "quest_evening_market_escort", "quest_old_house_cleanup", "quest_letter", "quest_caravan_escort"]) {
+  for (const q of ["quest_tavern_errand", "quest_wedding_support", "quest_evening_market_escort", "quest_old_house_cleanup", "quest_old_bridge_repair", "quest_lingering_light", "quest_field_mystery", "quest_barn_bite"]) {
     for (const seed of [1, 2, 3]) {
       const on = await gen(page, q, ["adv_gadd", "adv_mina"], true, seed);
       const off = await gen(page, q, ["adv_gadd", "adv_mina"], false, seed);
@@ -84,6 +105,26 @@ test("効く依頼では行が出て疲労が軽くなる。町なかの用事�
       expect(on.some((t) => LINE.test(t))).toBe(false);
     }
   }
+  expect(errors).toEqual([]);
+});
+
+test("戦闘の依頼（遠出＝隊商の護衛）にも効く：撤退が減る。休みの場面が無いので行は出さない", async ({ page }) => {
+  const errors = await freshPage(page);
+  const got = await page.evaluate(() => {
+    let diff = 0, wOff = 0, wOn = 0, lineSeen = 0;
+    for (let seed = 0; seed < 60; seed++) for (const ids of [["adv_gadd", "adv_mina"], ["adv_gadd", "adv_mina", "adv_row"], ["adv_gadd", "adv_elne"]]) {
+      const mk = (on) => generateReport({ questId: "quest_caravan_escort", adventurerIds: ids, adventurerItemIds: {}, seed, departTimeOfDay: "昼", departWeather: "晴れ", startTime: 0, durationMs: 1, ...(on ? { abilities: ["winter_porridge"] } : {}) });
+      const off = mk(false), on = mk(true);
+      if (JSON.stringify(off.logs) !== JSON.stringify(on.logs)) diff++;
+      if (String(off.hiddenTags.battleOutcome).startsWith("withdraw")) wOff++;
+      if (String(on.hiddenTags.battleOutcome).startsWith("withdraw")) wOn++;
+      if (on.logs.some((l) => /冬越えの粥|鍋の粥/.test(l.text))) lineSeen++;
+    }
+    return { diff, wOff, wOn, lineSeen };
+  });
+  expect(got.diff, "効いて結果が変わる回がある").toBeGreaterThan(0);
+  expect(got.wOn, "撤退が減る").toBeLessThan(got.wOff);
+  expect(got.lineSeen, "行は出ない").toBe(0);
   expect(errors).toEqual([]);
 });
 
