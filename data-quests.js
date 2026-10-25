@@ -17,12 +17,28 @@ window.masterBoardRules = {
   cooldown: { min: 1, max: 3 }
 };
 
+// 場所のタグ（2026-10-25・EX-165 の追加2・改）。★ 依頼には place（このタグ）だけを書き、近場／遠出はここに1回だけ持つ。
+//   area は報告書の本文（「〜へ向かった」）・掲示板の「地域」・生態目録に出る**文章用の言葉**で、こちらとは別。
+//   ★ 新しい依頼は place を必ず書く（書き忘れは試験で落ちる）。新しい場所が要るときはここに足す。
+//   使い道：冬越えの粥は「遠出」かつ疲労の仕組みがある依頼（工程エンジンを通る依頼）でだけ効く。
+window.masterPlaces = {
+  "ギルド": "近場",
+  "町": "近場",
+  "町はずれ": "近場",
+  "街道": "遠出",
+  "森": "遠出",
+  "教会周辺": "遠出",
+  "生活圏の外縁": "遠出",
+  "沢": "遠出"
+};
+
 window.masterQuests = [
   {
     // ★ 最初のクエスト（2026-08-05・EX-053）。記録係の就任祝いの酒樽を買いに行く。
     //   初期公開はこの1件だけで、クリアすると結婚式・夕市・夜道が開く。
     //   ★ 酒場はギルド内画面として持たず、画面外の場所としてログと会話の中にだけ出す。
     id: "quest_tavern_errand",
+    place: "ギルド",
     title: "隣の酒場に買い出し",
     // ★ 2026-09-21・EX-140【3】：**一度きり**（一度行ったら二度と掲示板に出ない）。
     //   ⚠️ これで下の `firstRunNeverFails` の「2回目以降は通常の判定に戻る」は**到達しなくなる**が、
@@ -73,7 +89,7 @@ window.masterQuests = [
   },
   {
     id: "quest_herb",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "森",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "森の薬草採集",
@@ -97,7 +113,7 @@ window.masterQuests = [
     //   「見たことのない草がある」と言ってきただけで、何なのかは誰も知らない。
     //   ★ 観察記録が主眼。仮称は命名の対象になりうる形で置く（正式名が付くのは体験版の後）。
     id: "quest_unknown_grass",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "森",
     // ★ 担い手は人間だけ（2026-09-11・EX-074／2026-09-15・EX-106）。この依頼は category が「調査」で、
     //   効いた瞬間の文面は statKey（investigation）で選ばれる。investigation には犬固有の文が無いので、
     //   どの工程を犬が担っても人間用の記録の文が出る（古い石碑の拓本と同じ理由）。
@@ -122,7 +138,7 @@ window.masterQuests = [
   },
   {
     id: "quest_signpost",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "街道",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い道標の確認",
@@ -141,6 +157,7 @@ window.masterQuests = [
   },
   {
     id: "quest_letter",
+    place: "街道",
     title: "届けられなかった手紙",
     category: "生活",
     danger: "低",
@@ -157,6 +174,7 @@ window.masterQuests = [
   },
   {
     id: "quest_wedding_support",
+    place: "町",
     title: "結婚式の手伝い",
     category: "生活",
     danger: "低",
@@ -174,6 +192,7 @@ window.masterQuests = [
   },
   {
     id: "quest_guild_cleanup",
+    place: "ギルド",
     title: "ギルドの掃除",
     category: "生活",
     danger: "低",
@@ -211,6 +230,7 @@ window.masterQuests = [
   //   ⚠️ 仮：「塩の沢」（作者が仮と明記）・所要時間の帯（短い＝実10分）・分類・掲示板の概要（相談の1行を借りた）。
   {
     id: "quest_bond_gadd",
+    place: "沢",
     title: "宿場の粥の塩",
     category: "生活",
     danger: "低",
@@ -228,6 +248,7 @@ window.masterQuests = [
   },
   {
     id: "quest_old_house_cleanup",
+    place: "町はずれ",
     title: "廃屋の片付け",
     category: "生活",
     danger: "低",
@@ -249,6 +270,7 @@ window.masterQuests = [
   },
   {
     id: "quest_field_mystery",
+    place: "町はずれ",
     title: "畑を荒らす「なにか」の追い払い",
     category: "戦闘",
     danger: "低",
@@ -267,6 +289,7 @@ window.masterQuests = [
   },
   {
     id: "quest_barn_bite",
+    place: "町はずれ",
     title: "納屋に巣食う噛みつく「なにか」の討伐",
     category: "戦闘",
     danger: "中",
@@ -289,7 +312,7 @@ window.masterQuests = [
   },
   {
     id: "quest_old_bridge_repair",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "町はずれ",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い小橋の応急修理",
@@ -309,7 +332,7 @@ window.masterQuests = [
   },
   {
     id: "quest_church_patrol",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "教会周辺",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "辺境教会周辺の定期巡回",
@@ -328,7 +351,7 @@ window.masterQuests = [
   },
   {
     id: "quest_herb_delivery",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "街道",
     // ★ 担い手に犬を許す（2026-08-18・EX-057 裁定）。においで薬草を見分けるのは犬の領分で、
     //   むしろエルシーの見せ場。犬が担い手のときは犬固有の文（fieldworkSupportTexts）が出る。
     //   （2026-08-06 の EX-056 で一度 fieldworkHumanOnly: true を付けたが、犬用の文面が入ったので外した）
@@ -348,7 +371,7 @@ window.masterQuests = [
   },
   {
     id: "quest_missing_herbalist",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "森",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "帰ってこない薬草採りの確認",
@@ -371,6 +394,7 @@ window.masterQuests = [
   },
   {
     id: "quest_evening_market_escort",
+    place: "町はずれ",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "夕市帰りの親子の付き添い",
@@ -390,6 +414,7 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_escort",
+    place: "生活圏の外縁",
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -413,7 +438,7 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_search",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "生活圏の外縁",
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -440,7 +465,7 @@ window.masterQuests = [
   },
   {
     id: "quest_caravan_lastchance",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "生活圏の外縁",
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -467,7 +492,7 @@ window.masterQuests = [
   },
   {
     id: "quest_old_stele_rubbing",
-    outdoorRest: true, // 野外で休みを挟む遠出（冬越えの粥が効く。EX-165 の追加）
+    place: "街道",
     title: "古い石碑の拓本",
     category: "記録",
     // ★ 担い手は人間だけ（2026-09-11・EX-074 で追加。EX-056 と同じ宣言）。
@@ -495,6 +520,7 @@ window.masterQuests = [
   //   ランタンは特殊分岐ではなく `battleWeakenedBy`（敵の弱体化）で表す＝育成で越えられる形が自動的に成立する。
   {
     id: "quest_lingering_light",
+    place: "町はずれ",
     title: "夜道に残る灯りの調査",
     // ★ category は「調査」ではなく「戦闘」（2026-09-13・裁定）。
     //   ⚠️ **2026-09-13・EX-093 以降、この依頼の成長は category ではなく
@@ -544,6 +570,7 @@ window.masterQuests = [
     //     （自分のための買い物。酒場の酒樽と同じ扱い）。**値はすべて仮置き。**
     //   ⚠️ 文面（本文・結末）は仮。チャット側が書き直す待ち。
     id: "quest_shopping",
+    place: "町",
     title: "隊商の大将に買い出しを頼む",
     shopping: true,
     category: "生活",
@@ -569,6 +596,7 @@ window.masterQuests = [
     //   ★ `relief` の旗で分岐する（id のハードコードでは分岐しない）。解放条件は持たない（直前かどうかだけで出る）。
     //   ⚠️ 文面（題名・本文・結末）はすべて仮。チャット側が書き直す待ち。
     id: "quest_relief_odd_jobs",
+    place: "町",
     title: "町の小口の頼まれごと",
     relief: true,
     category: "生活",

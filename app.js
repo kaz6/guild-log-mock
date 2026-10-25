@@ -463,11 +463,17 @@ function ownedAbilityIds(adventurerId) {
 function partyAbilityIds(adventurerIds) {
   return adventurerIds.flatMap((id) => ownedAbilityIds(id));
 }
-// 冬越えの粥：野外で休みを挟む遠出（outdoorRest）で、持ち主が編成にいて、出発のときに持っていた回だけ効く。
+// 依頼の場所が近場か遠出か（場所のタグ masterPlaces を引く。2026-10-25・EX-165 の追加2・改）。タグが無ければ null
+function questReach(quest) {
+  return window.masterPlaces?.[quest?.place] ?? null;
+}
+// 冬越えの粥：場所が「遠出」の依頼で、持ち主が編成にいて、出発のときに持っていた回だけ効く。
+//   ★ 「疲労の仕組みがある依頼」の条件は呼ぶ側が持つ（工程エンジンの経路＝resolveFieldwork と隊商捜索からしか呼ばない）。
+//     戦闘の依頼（隊商の護衛など）は遠出でも疲労の仕組みが無いので、ここに来ない。
 //   効くなら { scale, line }、効かなければ null。行は出発の種で選ぶ（報告書の乱数を引かない）。
 function winterPorridgeFor(quest, party, expedition) {
   const ability = window.masterAbilities?.winter_porridge;
-  if (!ability || quest?.outdoorRest !== true) return null;
+  if (!ability || questReach(quest) !== "遠出") return null;
   if (!Array.isArray(expedition?.abilities) || !expedition.abilities.includes("winter_porridge")) return null;
   const owner = party.find((adv) => adv.id === ability.adventurerId);
   if (!owner) return null;

@@ -61,7 +61,7 @@ window.masterBondChain = {
 // ★ 設計：DECISION_LOG 2026-10-24「鉄鍋の固有依頼の報酬は、アビリティ「冬越えの粥」（疲労を少し軽くする）」。
 // ★ 持っているかは state.abilities（感謝を読んだときに立てる）。出発のときに遠征へ写し、報告書はそれだけを読む
 //   （報告書の生成で過去の記録を読まない＝PR #150）。
-// ★ 効くのは野外で休みを挟む遠出だけ（依頼データの outdoorRest）。町なかの用事には効かない。
+// ★ 効くのは場所が「遠出」（data-quests.js の masterPlaces）で、疲労の仕組みがある依頼（工程エンジン）だけ。近場の用事には効かない。
 window.masterAbilities = {
   winter_porridge: {
     name: "冬越えの粥",
