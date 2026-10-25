@@ -18,18 +18,22 @@ window.masterBoardRules = {
 };
 
 // 場所のタグ（2026-10-25・EX-165 の追加2・改）。★ 依頼には place（このタグ）だけを書き、近場／遠出はここに1回だけ持つ。
+//   地理（作者の整理・2026-10-25）：西端の町（ギルド・市場）→ 近場に村 → はずれに廃墟 → 少し離れて沢 →
+//   さらに離れて辺境教会 → かなり遠くに都市。
 //   area は報告書の本文（「〜へ向かった」）・掲示板の「地域」・生態目録に出る**文章用の言葉**で、こちらとは別。
 //   ★ 新しい依頼は place を必ず書く（書き忘れは試験で落ちる）。新しい場所が要るときはここに足す。
-//   使い道：冬越えの粥は「遠出」かつ疲労の仕組みがある依頼（工程エンジンを通る依頼）でだけ効く。
+//   使い道：冬越えの粥は「遠出」の依頼で効く（工程の依頼は疲労を軽く、戦闘の依頼は撤退を少し減らす）。
 window.masterPlaces = {
   "ギルド": "近場",
   "町": "近場",
   "町はずれ": "近場",
+  "村": "近場",
   "街道": "遠出",
   "森": "遠出",
   "教会周辺": "遠出",
   "生活圏の外縁": "遠出",
-  "沢": "遠出"
+  "沢": "遠出",
+  "都市": "遠出" // 今は入る依頼なし
 };
 
 window.masterQuests = [
@@ -270,7 +274,7 @@ window.masterQuests = [
   },
   {
     id: "quest_field_mystery",
-    place: "町はずれ",
+    place: "村",
     title: "畑を荒らす「なにか」の追い払い",
     category: "戦闘",
     danger: "低",
@@ -289,7 +293,7 @@ window.masterQuests = [
   },
   {
     id: "quest_barn_bite",
-    place: "町はずれ",
+    place: "村",
     title: "納屋に巣食う噛みつく「なにか」の討伐",
     category: "戦闘",
     danger: "中",
@@ -312,7 +316,7 @@ window.masterQuests = [
   },
   {
     id: "quest_old_bridge_repair",
-    place: "町はずれ",
+    place: "村",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い小橋の応急修理",
@@ -394,7 +398,7 @@ window.masterQuests = [
   },
   {
     id: "quest_evening_market_escort",
-    place: "町はずれ",
+    place: "町",
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "夕市帰りの親子の付き添い",
@@ -520,7 +524,7 @@ window.masterQuests = [
   //   ランタンは特殊分岐ではなく `battleWeakenedBy`（敵の弱体化）で表す＝育成で越えられる形が自動的に成立する。
   {
     id: "quest_lingering_light",
-    place: "町はずれ",
+    place: "村",
     title: "夜道に残る灯りの調査",
     // ★ category は「調査」ではなく「戦闘」（2026-09-13・裁定）。
     //   ⚠️ **2026-09-13・EX-093 以降、この依頼の成長は category ではなく

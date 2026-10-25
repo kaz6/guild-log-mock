@@ -468,9 +468,10 @@ function questReach(quest) {
   return window.masterPlaces?.[quest?.place] ?? null;
 }
 // 冬越えの粥：場所が「遠出」の依頼で、持ち主が編成にいて、出発のときに持っていた回だけ効く。
-//   ★ 「疲労の仕組みがある依頼」の条件は呼ぶ側が持つ（工程エンジンの経路＝resolveFieldwork と隊商捜索からしか呼ばない）。
-//     戦闘の依頼（隊商の護衛など）は遠出でも疲労の仕組みが無いので、ここに来ない。
-//   効くなら { scale, line }、効かなければ null。行は出発の種で選ぶ（報告書の乱数を引かない）。
+//   ★ 何に効くかは呼ぶ側が決める：工程の依頼（resolveFieldwork・隊商捜索）は疲労を軽く（scale）、
+//     戦闘の依頼（隊商の護衛）は撤退の閾値を一律で上げる（retreatShift。2026-10-25・作者の決定）。
+//   ★ 行（line）は休みの場面がある報告書でだけ使う（工程の依頼）。隊商の護衛では使わない。
+//   効くなら { scale, retreatShift, line }、効かなければ null。行は出発の種で選ぶ（報告書の乱数を引かない）。
 function winterPorridgeFor(quest, party, expedition) {
   const ability = window.masterAbilities?.winter_porridge;
   if (!ability || questReach(quest) !== "遠出") return null;
@@ -481,6 +482,7 @@ function winterPorridgeFor(quest, party, expedition) {
   const pick = lines.length > 0 ? lines[Math.abs(expedition.seed ?? 0) % lines.length] : null;
   return {
     scale: ability.fatigueStepScale ?? 1,
+    retreatShift: ability.retreatThresholdShift ?? 0,
     line: pick ? pick.replaceAll("【鉄鍋】", getDisplayName(owner)) : null
   };
 }
@@ -9187,7 +9189,9 @@ function generateReport(expedition) {
 
   // 護衛依頼：夕市帰りの親子の付き添い
   if (quest.id === "quest_caravan_escort") {
-    const battle = simulateBattle(quest, party, itemIds, rng);
+    // ★ 冬越えの粥（遠出の戦闘）：撤退の閾値を一律で上げる。報告書に休みの場面が無いので行は足さない。
+    const porridge = winterPorridgeFor(quest, party, expedition);
+    const battle = simulateBattle(quest, party, itemIds, rng, porridge ? { retreatThresholdShift: porridge.retreatShift } : {});
     // 煙幕S1（2026-07-25）：煙幕による離脱は時点を問わず部分成功。完全成功は戦って勝つしかない。
     // 部分成功は捜索チェーンを発火させない（fail/bailのみが発火）。
     let branch;
@@ -9841,7 +9845,7 @@ function computeBattleResolveDecision(fighters, enemyHpNow, enemy, context, at =
   const votes = alive.map((f) => {
     const jobBase = BATTLE_TUNING.retreatJobBase[f.job] ?? BATTLE_TUNING.retreatJobDefault;
     const shift = BATTLE_TUNING.retreatPersonalityShift[f.personality] ?? 0;
-    const threshold = jobBase + shift;
+    const threshold = jobBase + shift + (context.retreatThresholdShift ?? 0);
     return { id: f.id, name: f.name, threshold, score, retreat: score >= threshold };
   });
   const retreatCount = votes.filter((v) => v.retreat).length;
@@ -9885,7 +9889,7 @@ function battleStatusWord(hp, maxHp, gotCrit = false) {
   return hp / maxHp > 0.70 ? "健在" : "手負い";
 }
 
-function simulateBattle(quest, party, itemIds, rng) {
+function simulateBattle(quest, party, itemIds, rng, options = {}) {
   // ⚠️ heldItems の宣言はこの下なので、ここでは引数をそのまま渡す（順番を入れ替えない）。
   const enemy = getEnemyForQuest(quest, Array.isArray(itemIds) ? itemIds : []);
   if (!enemy) return null;
@@ -9901,6 +9905,8 @@ function simulateBattle(quest, party, itemIds, rng) {
   let medicalLeft = heldItems.filter((id) => effectiveIds.includes(id)).length;
   const bandageIsEffective = effectiveIds.includes("item_bandage");
   const context = { hasElsie, hasSmoke, medicalLeft };
+  // ★ 撤退の閾値に一律で足す値（冬越えの粥。EX-165 の追加2・改）。渡されたときだけ持つ（無ければ今の式のまま）
+  if (typeof options.retreatThresholdShift === "number" && options.retreatThresholdShift !== 0) context.retreatThresholdShift = options.retreatThresholdShift;
 
   const fighters = humans.map((a) => {
     const combatStat = a.stats?.combat ?? 10;
