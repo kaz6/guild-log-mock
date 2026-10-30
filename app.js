@@ -496,6 +496,22 @@ function adventurerAbilitiesHtml(adventurer) {
     </section>`;
 }
 
+// 名簿の詳細の「願い」（2026-10-30・EX-167）。解禁前は「願い：＊＊＊」、解禁後は本人の望み（data-bonds.js の masterWishes）。
+// ★ 解禁は、その人の固有依頼の感謝を読んだとき。state は増やさず連鎖の thanksRead から導く
+//   （感謝を既に読んだ古いセーブでも、読み込んだ時点で開いている）。
+function wishUnlocked(adventurerId) {
+  const entry = bondChainEntries().find((e) => e.adventurerId === adventurerId);
+  return entry ? state.bondChain?.[entry.id]?.thanksRead === true : false;
+}
+function adventurerWishHtml(adventurer) {
+  const text = window.masterWishes?.[adventurer.id];
+  const open = typeof text === "string" && wishUnlocked(adventurer.id);
+  return `
+    <section class="adventurer-detail-section" data-wish="${open ? "open" : "closed"}">
+      <p>願い：${open ? escapeHtml(text) : "＊＊＊"}</p>
+    </section>`;
+}
+
 function dismissTrialEnd() {
   if (state.trialEnd) state.trialEnd.read = true;
   saveState();
@@ -3995,6 +4011,7 @@ function adventurerEditorHtml(adventurer) {
     </section>
     ${adventurerAbilitiesHtml(adventurer)}
     ${adventurerPastHtml(adventurer)}
+    ${adventurerWishHtml(adventurer)}
 
     <section class="adventurer-detail-section">
       <p class="meta-label">履歴</p>
