@@ -5526,7 +5526,7 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       `${name(post)}は家の並びを見て、表通りより裏道に残っている家だと判断した。`
     ],
     犬の遠吠え: [
-      `遠くで犬が吠えた。危険はなかったが、${solo ? name(soloAdv) : group}は少し歩く速度を上げた。`,
+      `遠くで犬が吠えた。危険はなかったが、${solo ? name(soloAdv) : partySubject(party)}は少し歩く速度を上げた。`,
       `${name(warrior)}は剣の柄に手を置いたが、吠え声はすぐに遠ざかった。`
     ],
     湿った足跡: [
@@ -6116,6 +6116,7 @@ function outcomeSlotValues(quest, party) {
   const named = (key, value) => getDisplayName(findByTrait(party, key, value));
   return {
     "{一行}": partyActorSubject(party), // 結末の行は人の行動（受け取る・伝える・石を積む）なので、エルシーを主語に入れない（EX-169）
+    "{一行と犬}": partySubject(party), // 歩く・回る・物を渡される側など、エルシーも一緒でよい行（「〇〇とエルシー」のまま）
     "{全員}": formatNames(party),
     "{斥候}": named("job", "斥候"),
     "{薬草師}": named("job", "薬草師"),
@@ -8442,7 +8443,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
       // 「予定の仕事を終えた」は仕事を終えた回だけ（引き返し・護衛失敗などの回に出さない。EX-169）
       (GROWTH_TIER_BY_RESULT[result] ?? "full") === "full"
         ? `足元の悪い中での遠征だった。それでも${subject}は、予定の仕事を終えた。`
-        : `足元の悪い中での遠征だった。${subject}の靴は、帰り道まで泥を落とせなかった。`,
+        : `足元の悪い中での遠征だった。${partyActorSubject(party)}の靴は、帰り道まで泥を落とせなかった。`,
       `${departConditions.weather}の中、${subject}は出かけた。帰還したとき、服はまだ乾いていなかった。`
     ], rng);
   }
@@ -8584,7 +8585,7 @@ function generateShoppingReport(expedition, quest, party, logs, add, tensionValu
     // 書き付けが空のとき（「書き付け：なし」）は渡さない（EX-169）
     add("action", wishNames.length
       ? `${getDisplayName(negotiator)}が書き付けを大将に渡すと、大将は品目を一つずつ読み上げてから荷を解いた。`
-      : `${getDisplayName(negotiator)}が用件を伝えると、大将は「いつもの分だな」と言って荷を解いた。`);
+      : `${getDisplayName(negotiator)}が用件だけを伝えると、大将は見繕った品の荷を解いた。`);
     add("afterglow", `${partyActorSubject(party)}は品を受け取り、ギルドまで運び込んだ。`);
   } else {
     add("action", `${subject}は広場まで行ったが、書き付けを渡せる者がいなかった。`);
