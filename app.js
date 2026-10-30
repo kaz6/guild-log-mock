@@ -5637,7 +5637,7 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     裏口までの搬入: [
       `ギルドの裏口は狭く、樽を横向きにしないと通らなかった。`,
       // 受付の脇へ置くのは結末の行のあと（工程の行は受け取りより前に出る。EX-169）
-      `裏口には段差があった。樽を運び込むときは、一度持ち上げ直すことになりそうだ。`
+      `ギルドの裏口の段差を、先に確かめておいた。`
     ]
   };
 
@@ -8585,8 +8585,9 @@ function generateShoppingReport(expedition, quest, party, logs, add, tensionValu
     // 書き付けが空のとき（「書き付け：なし」）は渡さない（EX-169）
     add("action", wishNames.length
       ? `${getDisplayName(negotiator)}が書き付けを大将に渡すと、大将は品目を一つずつ読み上げてから荷を解いた。`
-      : `${getDisplayName(negotiator)}が用件だけを伝えると、大将は見繕った品の荷を解いた。`);
-    add("afterglow", `${partyActorSubject(party)}は品を受け取り、ギルドまで運び込んだ。`);
+      : `${getDisplayName(negotiator)}は大将に声をかけたが、頼む品は書き付けに無かった。`);
+    // 書き付けが空なら何も買わない（settleShopping）ので、品を受け取ったと書かない
+    add("afterglow", wishNames.length ? `${partyActorSubject(party)}は品を受け取り、ギルドまで運び込んだ。` : `${partyActorSubject(party)}は何も受け取らずにギルドへ戻った。`);
   } else {
     add("action", `${subject}は広場まで行ったが、書き付けを渡せる者がいなかった。`);
     add("afterglow", `書き付けは、そのまま持ち帰られた。`);
@@ -8597,7 +8598,7 @@ function generateShoppingReport(expedition, quest, party, logs, add, tensionValu
     party,
     logs,
     result,
-    summary: negotiator ? "隊商の大将に買い付けを頼み、品を受け取って戻った。" : "書き付けを渡せず、手ぶらで戻った。",
+    summary: negotiator ? (wishNames.length ? "隊商の大将に買い付けを頼み、品を受け取って戻った。" : "頼む品が無く、何も受け取らずに戻った。") : "書き付けを渡せず、手ぶらで戻った。",
     historyLine: negotiator ? `${quest.title}：買い付け。` : `${quest.title}：手ぶらで戻った。`,
     adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, { result }),
     tensionValue,
