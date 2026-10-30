@@ -1,6 +1,6 @@
 // 固有依頼の連鎖（相談 → 固有依頼 → 感謝。2026-10-24・EX-165）。文面は data-bonds.js（台本の確定稿・鉄鍋だけ）。
 // ★ 始まる時機：受付嬢の②を読んだあと、6件の依頼で未達でない報告書が②の1通＋さらに2通（計3通）。1度だけ。
-// ★ 頼まれごとは掲示板の6枠の外に1枠。鉄鍋がいないと出発できない。感謝は読了の封のあと1度だけ。ミナ（文面なし）で止まる。
+// ★ 頼まれごとは掲示板の6枠の外に1枠。鉄鍋がいないと出発できない。感謝は読了の封のあと1度だけ。ミナの続きは bond-mina.spec.js。
 // ★ 【鉄鍋】はあだ名に追従（会話は描画のたび、報告書は作った時点で閉じる）。
 const { test, expect } = require("@playwright/test");
 const { freshPage, interview, seedClearedQuests } = require("../helpers/app");
@@ -104,7 +104,7 @@ test("頼まれごとは6枠の外に1枠。鉄鍋がいないと出発できず
   expect(errors).toEqual([]);
 });
 
-test("感謝は読了の封のあとに1度だけ（報告書の画面とホーム）。そのあとミナ（文面なし）で止まる", async ({ page }) => {
+test("感謝は読了の封のあとに1度だけ（報告書の画面とホーム）。感謝の直後にはミナの相談も頼まれごとも出ない", async ({ page }) => {
   const errors = await setup(page);
   await addSix(page, 3);
   await home(page);
@@ -120,7 +120,7 @@ test("感謝は読了の封のあとに1度だけ（報告書の画面とホー�
   expect(text).toContain("よう、できたぜ。「宿場の冬の粥」だ。みんな、食ってくれ。");
   expect(text).toContain("カズ、あんたの分は大盛りだ。……付き合ってくれて、ありがとよ。");
   await page.reload(); await page.waitForTimeout(300); await home(page);
-  await expect(talk(page), "感謝は1度だけ・ミナは文面が無いので何も出ない").toHaveCount(0);
+  await expect(talk(page), "感謝は1度だけ・ミナの相談は報告書がもう1通届くまで出ない").toHaveCount(0);
   await page.evaluate(() => setRoute("quests"));
   await expect(page.locator("[data-bond-board]"), "次の頼まれごとも出ない").toHaveCount(0);
   expect(await page.evaluate(() => state.bondChain.bond_gadd.thanksRead)).toBe(true);
