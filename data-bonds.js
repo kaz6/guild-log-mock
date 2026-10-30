@@ -92,9 +92,8 @@ window.masterBondChain = {
     { id: "bond_elne", adventurerId: "adv_elne", consult: null, questId: null, reportLines: null, thanks: null },
     { id: "bond_row", adventurerId: "adv_row", consult: null, questId: null, reportLines: null, thanks: null },
     // エルシー：人の言葉を話させない（相談と感謝は行動の描写と受付嬢の通訳で書く）
-    { id: "bond_elsie", adventurerId: "adv_elsie", consult: null, questId: null, reportLines: null, thanks: null },
-    // 受付嬢：本人は行かない（依頼主が受付嬢で、誰でも行ける）
-    { id: "bond_reception", adventurerId: null, consult: null, questId: null, reportLines: null, thanks: null }
+    { id: "bond_elsie", adventurerId: "adv_elsie", consult: null, questId: null, reportLines: null, thanks: null }
+    // ★ 受付嬢には固有依頼を作らない（DECISION_LOG 2026-10-30「受付嬢は固有依頼なし（連鎖は5人）」）。連鎖はエルシーで終わる
   ]
 };
 

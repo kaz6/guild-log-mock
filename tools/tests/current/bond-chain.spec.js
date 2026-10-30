@@ -42,6 +42,12 @@ const returnBond = (page) => page.evaluate(() => {
   return r.logs.map((l) => l.text).join("\n");
 });
 
+test("連鎖は5人（鉄鍋→ミナ→エルネ→ロウ→エルシー）。受付嬢の枠は無い（2026-10-30 の決定）", async ({ page }) => {
+  await freshPage(page);
+  const chain = await page.evaluate(() => window.masterBondChain.chain.map((b) => b.adventurerId));
+  expect(chain).toEqual(["adv_gadd", "adv_mina", "adv_elne", "adv_row", "adv_elsie"]);
+});
+
 test("始まる時機：②のあと2通目までは始まらず、3通目で相談が出る。読んだら二度と出ない", async ({ page }) => {
   const errors = await setup(page);
   await addSix(page, 2);

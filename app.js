@@ -6033,7 +6033,7 @@ function supplyEventText(quest, party, adventurerItemIds, rng, weather = null) {
     } else {
       lines.push(`${h("item_map")}は自分に預けられた古地図を広げ、道標の位置を確認した。迷う前に違和感に気づけたのが大きい。`);
     }
-    lines.push(`古地図の余白には、細い線が残っていた。${h("item_map")}はその線を目印に進んだ。`);
+    lines.push(`古地図には、細い線で小道が描かれていた。${h("item_map")}はその線を目印に進んだ。`);
   }
   if (has("item_whistle") && canUseItemInQuest(quest, "item_whistle", weather)) {
     if (solo) {
