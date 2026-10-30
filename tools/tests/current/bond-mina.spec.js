@@ -80,6 +80,16 @@ test("頼まれごと「急ぎの印の一通」は6枠の外に1枠。ミナが
   await page.evaluate(() => { selectQuest("quest_bond_mina"); selectedAdventurerIds = ["adv_gadd"]; render(); });
   await expect(page.getByRole("button", { name: "遠征開始" })).toBeDisabled();
   await expect(page.locator("body")).toContainText("ミナが必ず行く依頼です。");
+  // 本人と人間もう1人以上で出す（EX-169）。ミナひとり・ミナとエルシーでは出られず、理由を一言出す
+  for (const ids of [["adv_mina"], ["adv_mina", "adv_elsie"]]) {
+    await page.evaluate((ids) => { selectedAdventurerIds = ids; render(); }, ids);
+    await expect(page.getByRole("button", { name: "遠征開始" })).toBeDisabled();
+    await expect(page.locator("body")).toContainText("ミナのほかに、人がもう1人要る依頼です（エルシーは数えません）。");
+    expect(await page.evaluate(() => { startExpedition(); return (state.expeditions ?? []).length; })).toBe(0);
+  }
+  await page.evaluate(() => { selectedAdventurerIds = ["adv_mina", "adv_gadd"]; render(); });
+  await expect(page.getByRole("button", { name: "遠征開始" })).toBeEnabled();
+  await page.evaluate(() => { selectedAdventurerIds = []; render(); });
   // ミナが負傷中（出られない）でも頼まれごとは消えない
   await page.evaluate(() => { getAdventurer("adv_mina").status = "負傷"; selectedAdventurerIds = []; saveState(); render(); });
   await expect(bond).toHaveCount(1);

@@ -1730,8 +1730,17 @@ function isSoloHumanParty(party) {
   return humanMembers(party).length === 1 && !partyHasElsie(party);
 }
 
+// 人の行動の主語（EX-169）。エルシーは人の行動（受け取る・相談する・道具をまとめる・伝える…）をしないので、
+//   人間1人＋エルシーでも人間の名前だけにする（partySubject は「X とエルシー」）。歩く・向かうなど犬も一緒にする行動は partySubject のまま
+function partyActorSubject(party) {
+  const humans = humanMembers(party);
+  if (humans.length >= 2) return "一行";
+  if (humans.length === 1) return getDisplayName(humans[0]);
+  return partySubject(party);
+}
+
 function partyGroupLabel(party) {
-  return isMultiHumanParty(party) ? "一行" : partySubject(party);
+  return partyActorSubject(party);
 }
 
 function usesSoloHumanStyle(party) {
@@ -2062,6 +2071,12 @@ function expeditionBlockedMessage(adventurerIds) {
   if (required && !adventurerIds.includes(required)) {
     const adv = getAdventurer(required);
     return `${adv ? getDisplayName(adv) : "依頼した本人"}が必ず行く依頼です。編成に入れてください。`;
+  }
+  // ★ 固有依頼は本人と人間もう1人以上で出す（EX-169・チャット側の仮の裁定）。エルシーは数えない。
+  //   台本（確定稿）が「一行は、【本人】を先頭に…」「誰かが休もうと言いかけても」と複数の人を前提にしているため
+  if (required && humanMembers(party).length < 2) {
+    const adv = getAdventurer(required);
+    return `${adv ? getDisplayName(adv) : "依頼した本人"}のほかに、人がもう1人要る依頼です（エルシーは数えません）。`;
   }
   const needsCompanion = party.filter((a) => a.canSolo === false);
   if (needsCompanion.length > 0 && party.length === needsCompanion.length) {
@@ -5511,7 +5526,7 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       `${name(post)}は家の並びを見て、表通りより裏道に残っている家だと判断した。`
     ],
     犬の遠吠え: [
-      `遠くで犬が吠えた。危険はなかったが、${solo ? name(soloAdv) : group}は少し歩く速度を上げた。`,
+      `遠くで犬が吠えた。危険はなかったが、${solo ? name(soloAdv) : partySubject(party)}は少し歩く速度を上げた。`,
       `${name(warrior)}は剣の柄に手を置いたが、吠え声はすぐに遠ざかった。`
     ],
     湿った足跡: [
@@ -5613,7 +5628,7 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     ],
     樽の受け取り: [
       `奥から出てきた樽は、思ったより小ぶりだった。主人が栓の締まりを一度確かめてから渡してきた。`,
-      `主人は樽を土間まで転がしてきて、「これで足りるだろう」と言った。代金はギルドの財布から出た。`
+      `主人は樽を土間まで転がしてきて、「これで足りるだろう」と言った。`
     ],
     台車の借り受け: [
       `酒場の台車を借りた。車輪が片方だけ鳴るので、道の段差でいちいち止まることになった。`,
@@ -5621,7 +5636,8 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     ],
     裏口までの搬入: [
       `ギルドの裏口は狭く、樽を横向きにしないと通らなかった。`,
-      `裏口の段差で一度持ち上げ直し、そのまま受付の脇へ置いた。`
+      // 受付の脇へ置くのは結末の行のあと（工程の行は受け取りより前に出る。EX-169）
+      `ギルドの裏口の段差を、先に確かめておいた。`
     ]
   };
 
@@ -5667,7 +5683,10 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     ],
     床板の確認: [
       `${name(careful)}は床板を一枚ずつ踏んで、軋む場所を報告書に記録した。危険な箇所には印をつけた。`,
-      `床板の下が空洞になっている場所があった。${name(brave)}が先に踏んで確かめ、他の者を安全な位置から歩かせた。`
+      // ひとり（と犬）の編成では「他の者」がいない（EX-169）
+      usesSoloHumanStyle(party)
+        ? `床板の下が空洞になっている場所があった。${name(brave)}は先に踏んで確かめ、安全な場所だけを歩いた。`
+        : `床板の下が空洞になっている場所があった。${name(brave)}が先に踏んで確かめ、他の者を安全な位置から歩かせた。`
     ],
     古い手紙の整理: [
       `古い手紙が数通出てきた。宛名の部分は雨染みで読めなかった。${name(post)}はそのまま袋に入れ、依頼人へ渡すことにした。封は開けなかった。`,
@@ -5817,7 +5836,8 @@ function statsPersonalityLog(party, rng) {
     courage: [
       `${name}は、物音のした方へ迷わず一歩進んだ。`,
       `${name}は先頭に立ち、確認が必要な場所を率先して調べた。`,
-      `${name}は、他の者が足を止めた場面でも躊躇わなかった。`
+      // ひとり（と犬）の編成では「他の者」がいない（EX-169）
+      soloStyle ? `${name}は、足のすくみそうな場面でも躊躇わなかった。` : `${name}は、他の者が足を止めた場面でも躊躇わなかった。`
     ],
     kindness: soloStyle ? [
       `${name}は、疲れを感じたら早めに手を止め、自分のペースで作業を続けた。`,
@@ -6078,7 +6098,8 @@ const OUTCOME_CONDITIONS = {
   //   （2026-09-14・EX-096 で夜道 v1 を退避したため）。**未使用に見えても消さないこと**——
   //   `data-quests.js` の `masterQuestsRetired.quest.outcomeOverride` が参照している。
   夜である: (ctx) => ctx.timeOfDay === "夜",
-  斥候かエルシーがいる: (ctx) => ctx.party.some((adv) => adv.job === "斥候") || partyHasElsie(ctx.party)
+  斥候かエルシーがいる: (ctx) => ctx.party.some((adv) => adv.job === "斥候") || partyHasElsie(ctx.party),
+  人間が2人以上いる: (ctx) => isMultiHumanParty(ctx.party) // ひとり（と犬）の編成で「相談し」と書かない（EX-169）
 };
 
 // 結末を条件で直接決める依頼（工程や戦闘の結果を見ない例外）を、依頼データの outcomeOverride で表す。
@@ -6094,7 +6115,8 @@ function overriddenOutcome(quest, ctx) {
 function outcomeSlotValues(quest, party) {
   const named = (key, value) => getDisplayName(findByTrait(party, key, value));
   return {
-    "{一行}": partySubject(party),
+    "{一行}": partyActorSubject(party), // 結末の行は人の行動（受け取る・伝える・石を積む）なので、エルシーを主語に入れない（EX-169）
+    "{一行と犬}": partySubject(party), // 歩く・回る・物を渡される側など、エルシーも一緒でよい行（「〇〇とエルシー」のまま）
     "{全員}": formatNames(party),
     "{斥候}": named("job", "斥候"),
     "{薬草師}": named("job", "薬草師"),
@@ -6840,7 +6862,7 @@ function battleOutcomeLines(party, adventurerItemIds, behavior, rng, tensionValu
   // パターン3：深追いせず・安全確認優先（caution or kindness 優位）
   return pickTensionLines([
     [`${subject}は畑の外まで追い払ったところで足を止めた。`, `依頼は達成したが、巣や出どころの確認は次回に回された。`],
-    [`「なにか」は畑の外へ出た。${solo ? "深追いはしなかった。" : `${subject}は深追いせず、その場で状況を確認した。`}`, `畑の被害はそこで止まっている。`],
+    [`「なにか」は畑の外へ出た。${solo ? "深追いはしなかった。" : `${partyActorSubject(party)}は深追いせず、その場で状況を確認した。`}`, `畑の被害はそこで止まっている。`],
     { lines: [`「なにか」は畑の外へ消えた。`, `深追いはせず、畑の奥の確認は次回に回された。`], minTension: 40, maxTension: 70 }
   ], tensionValue, rng);
 }
@@ -7036,13 +7058,13 @@ function generateBarnHuntLogs(quest, party, adventurerItemIds, rng, context = {}
   logs.push(pickTensionOne([
     solo
       ? `${fname}は追い払うだけでは依頼を終えられないと判断し、最後まで仕留めることを選んだ。`
-      : `${subject}は「ここで終わらせる」と判断し、追い払いではなく仕留める方を選んだ。`,
+      : `${partyActorSubject(party)}は「ここで終わらせる」と判断し、追い払いではなく仕留める方を選んだ。`,
     { text: solo
         ? `${fname}は一言も増やさず、最後の一撃だけを選んだ。`
-        : `${subject}は短く合図を交わし、ここで終わらせる方を選んだ。`, minTension: 70 },
+        : `${partyActorSubject(party)}は短く合図を交わし、ここで終わらせる方を選んだ。`, minTension: 70 },
     { text: solo
         ? `${fname}は退路を確認してから、仕留める手だけを残した。`
-        : `${subject}は退路を確かめたうえで、仕留める判断に踏み切った。`, minTension: 80 }
+        : `${partyActorSubject(party)}は退路を確かめたうえで、仕留める判断に踏み切った。`, minTension: 80 }
   ], tensionValue, rng));
 
   // 6. 結果
@@ -7136,7 +7158,7 @@ function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context 
   logs.push(pick([
     `${quest.area}に着いた。道端の花壇は手入れされ、祈りの跡だけが静かに残っていた。`,
     `辺境教会の外縁へ向かうと、風に鐘の音が一度だけ届き、すぐに静けさに戻った。`,
-    `${subject}は礼拝堂の扉を遠くから確かめ、柵の向こうから巡回を始めた。`
+    `${partyActorSubject(party)}は礼拝堂の扉を遠くから確かめ、柵の向こうから巡回を始めた。`
   ]));
 
   logs.push(pick([
@@ -7171,7 +7193,7 @@ function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context 
   if (timeOfDay === "夜" || timeOfDay === "夕方" || weather === "霧") {
     logs.push(pick([
       `外縁の道で、消えかけた灯りのような揺れが一度だけ見えた。近づく前に消えた。`,
-      `夜明け前に見えたという話の場所で、${subject}は足元と帰り道だけを確かめた。`
+      `夜明け前に見えたという話の場所で、${partyActorSubject(party)}は足元と帰り道だけを確かめた。`
     ]));
   }
 
@@ -7337,7 +7359,7 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
   ]));
 
   logs.push(pick([
-    `${partySubject(party)}は納品書と宛先を確かめ、${quest.area}へ向かった。`,
+    `${partyActorSubject(party)}は納品書と宛先を確かめ、${quest.area}へ向かった。`,
     `出発前に、診療所の表札と街道の分岐をもう一度読み直した。`
   ]));
 
@@ -7696,6 +7718,10 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   party.forEach((a) => { jobById[a.id] = a.job; });
   const hasElsie = party.some((a) => a.id === "adv_elsie");
   const smokeHeld = battle.smoke?.held ?? false;
+  // ★ 人間がひとりの回（エルシーは数えない）は「一行」「誰かが」「声が半分を超えた」と書かない（EX-169）。
+  //   複数のときの文はそのまま（grp＝「一行」）。候補の数は変えないので抽選は変わらない
+  const loneHuman = humanMembers(party).length === 1 ? humanMembers(party)[0] : null;
+  const grp = loneHuman ? getDisplayName(loneHuman) : "一行";
 
   // ★ 変化のない被弾はラウンド単位で1行に畳む（2026-08-04・EX-052／裁定B）。
   //   EX-046 の「防げた瞬間」と同型＝変化のない事象を1行にまとめる形の、別の場所への適用。
@@ -7714,9 +7740,9 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     plainByRound[ev.round].total += ev.damage;
   });
   const attritionLine = (total) => pick([
-    `${enemyN}の攻めは止まず、一行はじりじりと削られていった（一行に合計${total}ダメージ）`,
-    `決定打はない。それでも手数が多く、浅い傷が積み上がっていく（一行に合計${total}ダメージ）`,
-    `${enemyN}は数で押してくる。細かい傷が重なった（一行に合計${total}ダメージ）`
+    `${enemyN}の攻めは止まず、${grp}はじりじりと削られていった（${grp}に合計${total}ダメージ）`,
+    `決定打はない。それでも手数が多く、浅い傷が積み上がっていく（${grp}に合計${total}ダメージ）`,
+    `${enemyN}は数で押してくる。細かい傷が重なった（${grp}に合計${total}ダメージ）`
   ]);
 
   // 深手の者の攻撃行は専用文（損耗が動作に出る書き方・メタ用語なし）。連続で同じ文は使わない。
@@ -7819,29 +7845,40 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     //   ここで決まるのは「引こうとなった」までで、実際に退くかは段階4（at:"resolve"）が決める。
     if (ev.at === "emergency") {
       const cname = ev.causeName ?? "仲間";
+      const selfHit = loneHuman != null && cname === grp; // ひとりの回で、倒れたのが本人
       out.push(ev.causeTo === "戦闘不能"
-        ? pick([`${cname}が倒れたのを見て、一行の動きが一瞬止まった。`, `${cname}が崩れ落ち、一行の足並みが乱れた。`])
-        : pick([`${cname}の傷を見て、一行の動きが一瞬止まった。`, `${cname}の傷の深さに、一行の間に迷いがよぎった。`]));
+        ? pick(selfHit
+          ? [`${cname}は膝をつき、しばらく立てなかった。`, `${cname}が崩れ落ち、構えが解けた。`]
+          : [`${cname}が倒れたのを見て、${grp}の動きが一瞬止まった。`, `${cname}が崩れ落ち、${grp}の足並みが乱れた。`])
+        : pick(selfHit
+          ? [`自分の傷を見て、${grp}の動きが一瞬止まった。`, `傷の深さに、${grp}の胸を迷いがよぎった。`]
+          : loneHuman
+            ? [`${cname}の傷を見て、${grp}の動きが一瞬止まった。`, `${cname}の傷の深さに、${grp}の胸を迷いがよぎった。`]
+            : [`${cname}の傷を見て、${grp}の動きが一瞬止まった。`, `${cname}の傷の深さに、${grp}の間に迷いがよぎった。`]));
       out.push(ev.retreat
-        ? pick([`これ以上は人が保たない――誰かがそう口にした。`, `退こう、と誰かが言った。反論は出なかった。`])
-        : pick([`それでも、荷馬車の前を空けるわけにはいかなかった。`, `誰も口には出さず、ただ持ち場に戻った。`]));
+        ? pick(loneHuman
+          ? [`これ以上は保たない――${grp}はそう判断した。`, `退くしかない、と${grp}は思った。`]
+          : [`これ以上は人が保たない――誰かがそう口にした。`, `退こう、と誰かが言った。反論は出なかった。`])
+        : pick(loneHuman
+          ? [`それでも、荷馬車の前を空けるわけにはいかなかった。`, `${grp}は何も言わず、ただ持ち場に戻った。`]
+          : [`それでも、荷馬車の前を空けるわけにはいかなかった。`, `誰も口には出さず、ただ持ち場に戻った。`]));
       return out;
     }
     // ★段階1＝接敵。挑まずに引き返す判断がここで下りる（負傷も報酬もなく帰る）。
     if (ev.at === "first") {
       if (!ev.retreat) {
         out.push(pick([
-          `相手の数と構えを測り、押し切れると見て、一行は荷馬車の前に出た。`,
-          `やれる、と誰かが短く言った。一行は荷馬車の前に並んだ。`
+          `相手の数と構えを測り、押し切れると見て、${grp}は荷馬車の前に出た。`,
+          loneHuman ? `やれる、と${grp}は短く呟いた。荷馬車の前に立った。` : `やれる、と誰かが短く言った。一行は荷馬車の前に並んだ。`
         ]));
         return out;
       }
       out.push(smokeHeld ? pick([
-        `やり合う前に煙幕で視界を塞ぎ、一行は隊商を裏道へ回した。`,
+        `やり合う前に煙幕で視界を塞ぎ、${grp}は隊商を裏道へ回した。`,
         `数が多すぎると見て煙幕を焚き、隊商ごと道を変えた。`
       ]) : pick([
-        `相手の構えを見て、これは自分たちの手には合わないと判断した。`,
-        `倒し切る前にこちらが保たない――そう見て、一行は矛を収めた。`
+        `相手の構えを見て、これは${loneHuman ? "自分" : "自分たち"}の手には合わないと判断した。`,
+        `倒し切る前にこちらが保たない――そう見て、${grp}は矛を収めた。`
       ]));
       return out;
     }
@@ -7854,20 +7891,20 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
     if (ev.retreat) {
       out.push(smokeHeld ? pick([
         `これ以上は保たないと見て煙幕を焚き、${enemyN}の足が止まるうちに隊商を先へ急がせた。`,
-        `煙が視界を塞ぐあいだに隊商を先に行かせ、一行は退いた。`
+        `煙が視界を塞ぐあいだに隊商を先に行かせ、${grp}は退いた。`
       ]) : pick([
-        `これ以上は保たないと見て、隊商を先に行かせ、一行は退いた。`,
-        `踏みとどまる限界だった。隊商を逃がし、一行は街道の外へ退いた。`
+        `これ以上は保たないと見て、隊商を先に行かせ、${grp}は退いた。`,
+        `踏みとどまる限界だった。隊商を逃がし、${grp}は街道の外へ退いた。`
       ]));
       // 撤退成立時のみエルシーの囮（撤退フレーバー＝ダメージ・状態行ではない）。
       if (hasElsie) out.push(pick([
-        `エルシーが${enemyN}の足元へ飛び込んで気を引き、一行が退く隙を作った。`,
-        `エルシーが吠えながら囮になり、そのあいだに一行は街道の外へ逃れた。`
+        `エルシーが${enemyN}の足元へ飛び込んで気を引き、${grp}が退く隙を作った。`,
+        `エルシーが吠えながら囮になり、そのあいだに${grp}は街道の外へ逃れた。`
       ]));
     } else if (ev.afterShaken) {
       // ★「引こうとなったが留まった」。動揺と計算を分けた成果がここに出る。
       out.push(pick([
-        `だが${enemyN}の動きが鈍くなっているのを見て、一行はもう一歩踏み込んだ。`,
+        `だが${enemyN}の動きが鈍くなっているのを見て、${grp}はもう一歩踏み込んだ。`,
         `退き際を探る目が、${enemyN}の崩れかけた構えに止まった。まだ押せる。`
       ]));
     }
@@ -7877,14 +7914,16 @@ function generateCaravanBattleDramaLog(battle, party, rng) {
   // ★論点4＝A（2026-07-30）。撤退まわりで「動いた瞬間」だけを書く。
   const voteLine = (ev) => (ev.milestone === "first"
     ? pick([`${ev.name}が、そろそろ引くべきだと口にした。`, `${ev.name}の目が、退路の方を一度だけ探った。`])
-    : pick([`引くべきだという声が、いつのまにか半分を超えていた。`, `残るべきだと言う者は、もういなかった。`]));
+    : pick(loneHuman
+      ? [`引くべきだという考えが、いつのまにか${grp}の中で勝っていた。`, `残るべき理由は、もう見つからなかった。`]
+      : [`引くべきだという声が、いつのまにか半分を超えていた。`, `残るべきだと言う者は、もういなかった。`]));
   const faltererLine = () => pick([
     `${enemyN}の動きが目に見えて鈍くなった。`,
     `${enemyN}の息が上がり、間合いの詰め方が雑になってきた。`
   ]);
   const retreatFailedLine = () => pick([
     `退こうとしたが、${enemyN}は間合いを詰めてきた。引き際を見失い、戦いは続いた。`,
-    `背を向けようとした一行に${enemyN}が食い下がり、退くことはできなかった。`,
+    `背を向けようとした${grp}に${enemyN}が食い下がり、退くことはできなかった。`,
     `退く合図は出たが、${enemyN}の追いが速く、隊列は街道に押し戻された。`
   ]);
   const supplyOutLine = (ev) => pick([
@@ -7971,7 +8010,8 @@ function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context
 
   logs.push(found ? pick([
     `やがて轍は一つの方角にまとまり、争った跡の先に荷馬車の影が見えた。`,
-    `匂いと足跡が一致した先に、置き去りにされた荷馬車があった。`
+    // 荷馬車を見つけるのは結末の行（data-outcomes.js）。ここでは見つけない（2回見つける重複。EX-169）
+    `匂いと足跡は、同じ側道の奥へ続いていた。`
   ]) : pick([
     `手がかりは途中で途切れ、それ以上は追い切れなかった。`,
     `轍も匂いも、途中で他の痕跡に紛れて見失った。`
@@ -8093,7 +8133,7 @@ function generateNightLightDayLogs(quest, party, adventurerItemIds, rng) {
   const logs = [`昼の道には、人の足跡と荷車の跡が残っているだけだった。`];
   logs.push(lightInvestigationResponseText(party, false, itemIds.includes("item_lantern"), rng));
   if (hasMap) logs.push(`古地図と照らしても、道筋そのものに新しい変化は見つからなかった。`);
-  logs.push(`依頼人は、やはり夜にだけ出るのだと言った。${partySubject(party)}は日が落ちてから出直すことにした。`);
+  logs.push(`依頼人は、やはり夜にだけ出るのだと言った。${partyActorSubject(party)}は日が落ちてから出直すことにした。`);
   return logs;
 }
 
@@ -8193,7 +8233,9 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   const obsAdvs = pool.filter((a) => a.obsession);
   const obsAdv = obsAdvs.length > 0 ? obsAdvs[Math.floor(rng() * obsAdvs.length)] : null;
   const obsName = obsAdv ? getDisplayName(obsAdv) : null;
-  const obs = obsAdv?.obsession ?? null;
+  const obs0 = obsAdv?.obsession ?? null;
+  // 人間がひとりの回は soloPositiveLine（「最後尾の足音」の主がいない。EX-169）。抽選は変わらない
+  const obs = obs0 && humanMembers(party).length === 1 && obs0.soloPositiveLine ? { ...obs0, positiveLine: obs0.soloPositiveLine } : obs0;
 
   if (quest.id === "quest_old_bridge_repair") {
     const row = party.find((a) => a.id === "adv_row");
@@ -8274,7 +8316,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     }
     if (tier === "partial") {
       const lines = [
-        `${subject}は灯りに背を向けた。逃げたのではなく、今日はここまでだと決めた。`,
+        `${partyActorSubject(party)}は灯りに背を向けた。逃げたのではなく、今日はここまでだと決めた。`,
         `灯りは道に残ったままだ。見た、という事実だけを持ち帰った。`
       ];
       if (obs) lines.push(`${obsName}【${obs.label}】— ${obs.idleLine}`);
@@ -8300,11 +8342,11 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     //     この1行が出ており、昼の分岐を同じ形に直したときに夜だけ緩いままになっていた。
     const done = (GROWTH_TIER_BY_RESULT[result] ?? "full") === "full";
     const lines = [
-      `夜の${quest.area}から戻った${subject}は、言葉を選ぶように報告書を書いた。`
+      `夜の${quest.area}から戻った${partyActorSubject(party)}は、言葉を選ぶように報告書を書いた。`
     ];
     lines.push(done
       ? `夜に向かい、無事に戻ってきた。それだけで、今夜は十分だ。`
-      : `夜の${quest.area}に、やり残したものがある。${subject}はそれを書いてから筆を置いた。`);
+      : `夜の${quest.area}に、やり残したものがある。${partyActorSubject(party)}はそれを書いてから筆を置いた。`);
     if (frontWeapon) lines.push(`${frontName}は${frontWeapon.name}を手に夜道へ向かった。帰還したとき、それは少し傷ついていた。`);
     if (acc) lines.push(`${accName}の${acc.name}は、夜の遠征でもいつも通りそこにあった。`);
     // 執着：idleLine（夜の静けさに合う）
@@ -8361,7 +8403,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
           `確かめられなかったことを、確かめられなかったと書いた。`
         ]
       : [
-          `${subject}は見たままを書いた。知っている草に似せて書かない、と決めていた。`,
+          `${partyActorSubject(party)}は見たままを書いた。知っている草に似せて書かない、と決めていた。`,
           `報告書には名前が書かれていない。書けなかったのではなく、まだ無い。`
         ];
     if (acc) lines.push(`${accName}の${acc.name}が、調査の間ずっとそこにあった。小さなものが判断を支えることがある。`);
@@ -8398,7 +8440,10 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   // 悪天候
   if (departConditions?.weather === "小雨" || departConditions?.weather === "霧") {
     return pickOne([
-      `足元の悪い中での遠征だった。それでも${subject}は、予定の仕事を終えた。`,
+      // 「予定の仕事を終えた」は仕事を終えた回だけ（引き返し・護衛失敗などの回に出さない。EX-169）
+      (GROWTH_TIER_BY_RESULT[result] ?? "full") === "full"
+        ? `足元の悪い中での遠征だった。それでも${subject}は、予定の仕事を終えた。`
+        : `足元の悪い中での遠征だった。${partyActorSubject(party)}の靴は、帰り道まで泥を落とせなかった。`,
       `${departConditions.weather}の中、${subject}は出かけた。帰還したとき、服はまだ乾いていなかった。`
     ], rng);
   }
@@ -8537,8 +8582,12 @@ function generateShoppingReport(expedition, quest, party, logs, add, tensionValu
   const negotiator = humans.reduce((best, a) => (!best || (a.stats?.negotiation ?? 0) > (best.stats?.negotiation ?? 0) ? a : best), null);
   const result = negotiator ? "買い付け" : "手ぶらで戻った";
   if (negotiator) {
-    add("action", `${getDisplayName(negotiator)}が書き付けを大将に渡すと、大将は品目を一つずつ読み上げてから荷を解いた。`);
-    add("afterglow", `${subject}は品を受け取り、ギルドまで運び込んだ。`);
+    // 書き付けが空のとき（「書き付け：なし」）は渡さない（EX-169）
+    add("action", wishNames.length
+      ? `${getDisplayName(negotiator)}が書き付けを大将に渡すと、大将は品目を一つずつ読み上げてから荷を解いた。`
+      : `${getDisplayName(negotiator)}は大将に声をかけたが、頼む品は書き付けに無かった。`);
+    // 書き付けが空なら何も買わない（settleShopping）ので、品を受け取ったと書かない
+    add("afterglow", wishNames.length ? `${partyActorSubject(party)}は品を受け取り、ギルドまで運び込んだ。` : `${partyActorSubject(party)}は何も受け取らずにギルドへ戻った。`);
   } else {
     add("action", `${subject}は広場まで行ったが、書き付けを渡せる者がいなかった。`);
     add("afterglow", `書き付けは、そのまま持ち帰られた。`);
@@ -8549,7 +8598,7 @@ function generateShoppingReport(expedition, quest, party, logs, add, tensionValu
     party,
     logs,
     result,
-    summary: negotiator ? "隊商の大将に買い付けを頼み、品を受け取って戻った。" : "書き付けを渡せず、手ぶらで戻った。",
+    summary: negotiator ? (wishNames.length ? "隊商の大将に買い付けを頼み、品を受け取って戻った。" : "頼む品が無く、何も受け取らずに戻った。") : "書き付けを渡せず、手ぶらで戻った。",
     historyLine: negotiator ? `${quest.title}：買い付け。` : `${quest.title}：手ぶらで戻った。`,
     adventurerHistoryLines: buildSafeAdventurerHistoryLines(party, quest, { result }),
     tensionValue,
@@ -9522,7 +9571,7 @@ function generateReport(expedition) {
         `町外れの家屋に着いた。戸は開いたまま、中は物が積み重なっていた。`,
         isMultiHumanParty(party)
           ? `古い家屋の前に立った。一行は外から中を見渡し、どこから手をつけるかを相談した。`
-          : `古い家屋の前に立った。${partySubject(party)}は外から中を見渡し、どこから手をつけるかを判断した。`
+          : `古い家屋の前に立った。${partyActorSubject(party)}は外から中を見渡し、どこから手をつけるかを判断した。`
       ]
     };
 
@@ -10572,7 +10621,7 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   //   工程の担い手が主語になる。宣言のない依頼は全工程が同じ担い手なので、従来と同じ人が選ばれる。
   const topLead = stepLeads.reduce((best, s) => (best && best.value >= s.value ? best : s), null);
   const support = setbacks === 0 && topLead
-    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value, species: topLead.species, label: topLead.label }
+    ? { statKey: topLead.statKey, id: topLead.id, name: topLead.name, value: topLead.value, species: topLead.species, label: topLead.label, alone: humanMembers(party).length === 1 }
     : null;
   // ★ lead は support と同じ持ち主を、滞りの有無によらず控えたもの（2026-08-05・EX-053）。
   //   「その工程を誰が担ったか」を書くために要る。新しい値は持たず、上で既に取っている最大値の持ち主を渡すだけ。
@@ -10694,7 +10743,9 @@ function fieldworkSupportTexts(support) {
       `${name}が構えを解かずにいたおかげで、一行は手を止めずに済んだ。`
     ]
   };
-  return table[support.statKey] ?? [`${name}が手際よく進め、どの工程も滞らなかった。`];
+  // 人間がひとりの回は「一行は」を外す（本人のほかに一行がいない。EX-169）。数は同じなので抽選は変わらない
+  const lines = table[support.statKey] ?? [`${name}が手際よく進め、どの工程も滞らなかった。`];
+  return support.alone ? lines.map((text) => text.replace("、一行は", "、")) : lines;
 }
 
 // ★ 樽を担ぐ工程（2026-08-05・EX-053）。担ぎ手は fieldworkCapability が返す持ち主（fw.lead）で決まり、
@@ -10874,12 +10925,14 @@ function drawFieldworkHook(quest, party, fw, expedition) {
   if (hookRng() >= chance) return null;
   const pick = candidates[Math.floor(hookRng() * candidates.length)];
   const name = getDisplayName(pick.adv);
-  const lines = pick.h.lines.map((text) => text.replaceAll("{名前}", name));
+  // 人間が本人ひとりの回は soloLines（「休むよう勧められても」の相手がいない。EX-169）。数は同じなので抽選は変わらない
+  const alone = humanMembers(party).length === 1;
+  const lines = (alone && pick.h.soloLines ? pick.h.soloLines : pick.h.lines).map((text) => text.replaceAll("{名前}", name));
   // 2通りのどちらかは種で選ぶ（EX-138：報告書の履歴は読まない）
   const text = lines[Math.floor(hookRng() * lines.length)];
   // 段階3の一行（取引が成立したときだけ使う）。2通りのどちらかは種で選ぶ
   const tradeText = pick.h.trade
-    ? pick.h.trade.lines.map((t) => t.replaceAll("{名前}", name))[Math.floor(hookRng() * pick.h.trade.lines.length)]
+    ? (alone && pick.h.trade.soloLines ? pick.h.trade.soloLines : pick.h.trade.lines).map((t) => t.replaceAll("{名前}", name))[Math.floor(hookRng() * pick.h.trade.lines.length)]
     : null;
   // アビリティ「間に合う足」の抽選に使う1回（EX-167【3】）。★ 最後に引くので、上の抽選の結果は動かない
   const easeRoll = hookRng();
@@ -10970,7 +11023,7 @@ function fieldworkTurnBackOutcomeText(quest, party, fw) {
   return {
     result: "引き返し",
     summary: `${reason}ため、${quest.area}での作業を途中で切り上げた。`,
-    line: `これ以上は続けられないと見て、${partySubject(party)}は道具をまとめ、来た道を引き返した。`,
+    line: `これ以上は続けられないと見て、${partyActorSubject(party)}は道具をまとめ、来た道を引き返した。`,
     after: `報告書には「引き返し。${reason}」と記されている。`,
     afterTag: fw && fw.mainCause === "weather" ? "weather" : undefined, // ★ 天候が原因の引き返しは天候の行（EX-157【2】）
     history: `${quest.title}：引き返し。${reason}。`
