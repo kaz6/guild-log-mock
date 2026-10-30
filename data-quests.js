@@ -250,6 +250,28 @@ window.masterQuests = [
     summary: "ただ、あの味には沢の岩塩が要る。俺が行く。誰か一緒に来てくれりゃ助かる。",
     outcomes: { full: ["達成"], partial: [], fail: [] }
   },
+  // ★ 固有依頼の2件目（2026-10-30・EX-167）。ミナの「急ぎの印の一通」。形は鉄鍋の quest_bond_gadd と同じ。
+  //   ★ ミナが必ず入る・場所のタグは村（近場）・短い・危険度1・定型の報告書・観察対象なし・費用0・報酬0。
+  //   ★ tags に「配達」を付けない（特殊裁定などエンジンの引き金に触れさせない。定型の報告書なので工程は通らない）。
+  //   ⚠️ 仮：area（台本の「宛先は近くの村」から）・分類・掲示板の概要（相談の1行を借りた）。
+  {
+    id: "quest_bond_mina",
+    place: "村",
+    title: "急ぎの印の一通",
+    category: "生活",
+    danger: "低",
+    area: "近くの村",
+    durationBand: "near_10m",
+    hidden: true,
+    bond: "bond_mina",
+    requiresAdventurer: "adv_mina",
+    money: { fee: 0, reward: 0 },
+    recommended: [],
+    tags: ["頼まれごと"],
+    observationTarget: "なし",
+    summary: "町の郵便所の奥で、埃をかぶってたの。急ぎの印がついてる。宛先は近くの村。",
+    outcomes: { full: ["達成"], partial: [], fail: [] }
+  },
   {
     id: "quest_old_house_cleanup",
     place: "町はずれ",

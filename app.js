@@ -371,13 +371,30 @@ function bondChainStarted() {
   return chain.started;
 }
 // いま進行中の人（感謝まで読み終えていない最初の人）。文面が無ければ null（＝連鎖はそこで止まる）
+// ★ 2人目からは、前の人の感謝を読んだあと「未達でない報告書」が nextConsultAfterReports 通届くまで待つ
+//   （2026-10-30・EX-167。感謝の直後に続けて相談を出さない）。相談が一度出たら、もう待たない。
 function currentBondEntry() {
   if (!bondChainStarted()) return null;
+  let prev = null;
   for (const entry of bondChainEntries()) {
     if (!entry.consult) return null;
-    if (!bondProgress(entry.id).thanksRead) return entry;
+    const progress = bondProgress(entry.id);
+    if (!progress.thanksRead) {
+      if (prev && !progress.consultAt && !bondGapPassed(bondProgress(prev.id))) return null;
+      return entry;
+    }
+    prev = entry;
   }
   return null;
+}
+// 前の人の感謝を読んだあとに届いた「未達でない報告書」が、間の数に達したか。
+//   基準の時刻は感謝を読んだ時刻（thanksReadAt）。それを持たない古いセーブは封の時刻（thanksAt）で代える。
+function bondGapPassed(prevProgress) {
+  const since = prevProgress.thanksReadAt ?? prevProgress.thanksAt ?? 0;
+  const need = window.masterBondChain?.nextConsultAfterReports ?? 1;
+  const arrived = state.reports.filter((r) => (Date.parse(r.createdAt) || 0) > since
+    && (GROWTH_TIER_BY_RESULT[r.result] ?? "full") !== "fail").length;
+  return arrived >= need;
 }
 function bondEntryByQuest(questId) {
   return bondChainEntries().find((entry) => entry.questId && entry.questId === questId) ?? null;
@@ -386,7 +403,7 @@ function bondFill(text, entry) {
   const adv = entry.adventurerId ? getAdventurer(entry.adventurerId) : null;
   return text
     .replaceAll("【主人公】", receptionTalkName())
-    .replaceAll("【鉄鍋】", adv ? getDisplayName(adv) : "");
+    .replaceAll(entry.nameToken ?? "【鉄鍋】", adv ? getDisplayName(adv) : "");
 }
 // 掲示板の「頼まれごと」（6枠の外に1枠）。相談を読んだあと、その依頼の報告書が届くまで出る。出ている間は下ろす。
 function bondBoardQuest() {
@@ -441,6 +458,7 @@ function dismissBondTalk(id, kind) {
   if (kind === "consult") progress.consultRead = true;
   if (kind === "thanks") {
     progress.thanksRead = true;
+    progress.thanksReadAt = Date.now(); // 次の人の相談までの間を数える基準（EX-167）
     // ★ 報酬のアビリティは感謝を読んだときに開く（EX-165 の追加）。報酬の金は 0 のまま
     const entry = bondChainEntries().find((e) => e.id === id);
     const ability = entry?.ability ? window.masterAbilities?.[entry.ability] : null;
@@ -969,7 +987,7 @@ function createInitialState() {
     //   古いセーブ（この鍵が無く、面接を終えている）は読み込みで legacy を立てる＝目録を隠さない・一言も出さない。
     ecologyBook: null,
     abilities: {}, // 持っているアビリティ（固有依頼の報酬。EX-165 の追加）。{ [アビリティの id]: { adventurerId, at } }。感謝を読んだときに立てる
-    bondChain: { started: false }, // 固有依頼の連鎖（2026-10-24・EX-165）。{ started, [連鎖の id]: { consultAt, consultRead, thanksAt, thanksRead } }
+    bondChain: { started: false }, // 固有依頼の連鎖（2026-10-24・EX-165）。{ started, [連鎖の id]: { consultAt, consultRead, thanksAt, thanksRead, thanksReadAt } }
     receptionTalks: {}, // 序盤の受付嬢の会話（2026-10-24・EX-164）。{ sixOpen, firstSix } 各 { at, read }
     stickyDismissed: {}, // ホームの付箋を剝がした印（2026-10-23・EX-163）。区切りの id → true
     firstNameSeal: null, // 最初に名前の封をした直後の一言（2026-10-23）。{ name, at, read }。封の操作の中でだけ立てる
@@ -5923,6 +5941,7 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_shopping: [], // ★ 買い出しは持っていかない。枠は「欲しい物の書き付け」（2026-09-23・EX-144）
     quest_relief_odd_jobs: ["item_bandage"], // ★ 救済（2026-09-23・EX-144）。町なかの雑用。仮
     quest_bond_gadd: [], // ★ 固有依頼（EX-165）。定型の報告書なので支給品の行が出ない＝持たせる判断を作らない（意図して空）
+    quest_bond_mina: [], // ★ 固有依頼（EX-167）。鉄鍋の頼まれごとと同じく定型の報告書なので意図して空
 
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],

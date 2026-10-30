@@ -4,7 +4,7 @@
 //   窓は4行ぶん（約60字）。段落で改ページし、入らない段落は行で、入らない行は「。！？」で割る（app.js の speechWindowPages）。
 // ★ 見るのは「ページの中身が窓からはみ出していないか」（scrollHeight ≤ clientHeight）。文字数ではなく描画で見る
 //   ——禁則で行頭に来られない字（「っ」など）が1行を押し出すことがあるため。
-// ★ 通る道：無記名／記名（12字）・志望動機3通り・名簿の記録を保存／あとで（目的の一言を含む）・命名の直後の一言（名前20字）・白紙の本の一言・序盤の受付嬢の会話2つ・鉄鍋の相談と感謝・終わりの合図（/trial/）。
+// ★ 通る道：無記名／記名（12字）・志望動機3通り・名簿の記録を保存／あとで（目的の一言を含む）・命名の直後の一言（名前20字）・白紙の本の一言・序盤の受付嬢の会話2つ・鉄鍋とミナの相談と感謝・終わりの合図（/trial/）。
 const { test, expect } = require("@playwright/test");
 const { execFileSync } = require("child_process");
 const fs = require("fs");
@@ -135,6 +135,24 @@ test("台本の文が、どのページも会話の窓（390px・4行）から�
   }
   expect(seenTexts.some((t) => t.includes("おう、あいうえおかきくけこさし。ちょっといいか。")), "鉄鍋の相談を見ていない").toBe(true);
   expect(seenTexts.some((t) => t.includes("あんたの分は大盛りだ")), "鉄鍋の感謝を見ていない").toBe(true);
+
+  // ミナの相談と感謝（EX-167）。あだ名5字・名前12字
+  for (const kind of ["consult", "thanks"]) {
+    await page.evaluate((kind) => {
+      getAdventurer("adv_mina").nickname = "かきくけこ";
+      state.bondChain = { started: true, bond_gadd: { consultAt: 1, consultRead: true, thanksAt: 1, thanksRead: true, thanksReadAt: 1 },
+        bond_mina: kind === "consult" ? { consultAt: 2 } : { consultAt: 2, consultRead: true, thanksAt: 3 } };
+      saveState(); setRoute("home");
+    }, kind);
+    for (let i = 0; i < 6; i++) {
+      await checkWindows(page, overflow, seen);
+      const more = page.locator("[data-bond-talk] .window-next");
+      if (!(await more.isVisible())) break;
+      await more.click();
+    }
+  }
+  expect(seenTexts.some((t) => t.includes("ちょっと、あいうえおかきくけこさし。……これ、見て。")), "ミナの相談を見ていない").toBe(true);
+  expect(seenTexts.some((t) => t.includes("付き合ってくれて、ありがと。")), "ミナの感謝を見ていない").toBe(true);
 
   // 終わりの合図（/trial/ のコピーでだけ出る）
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-window-"));
