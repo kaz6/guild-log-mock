@@ -10811,8 +10811,8 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   let tradeLine = null;
   if (hook) {
     fw.hook = hook.id;
-    tradeLine = applyHookTrade(hook, fw);
-    fw.hookTrade = tradeLine != null;
+    tradeLine = applyHookTrade(hook, fw, expedition);
+    fw.hookTrade = tradeLine != null; // ★ 負傷が増えなかった回（間に合う足）は "" が返る＝取引は成立・一行は出さない
   }
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   const logLines = fieldworkLogLines(fw, rng);
@@ -10881,7 +10881,18 @@ function drawFieldworkHook(quest, party, fw, expedition) {
   const tradeText = pick.h.trade
     ? pick.h.trade.lines.map((t) => t.replaceAll("{名前}", name))[Math.floor(hookRng() * pick.h.trade.lines.length)]
     : null;
-  return { id: pick.h.id, text, adv: pick.adv, trade: pick.h.trade ?? null, tradeText };
+  // アビリティ「間に合う足」の抽選に使う1回（EX-167【3】）。★ 最後に引くので、上の抽選の結果は動かない
+  const easeRoll = hookRng();
+  return { id: pick.h.id, text, adv: pick.adv, trade: pick.h.trade ?? null, tradeText, easeRoll };
+}
+
+// 取引の「本人の負傷が増える」側を軽くするアビリティ（間に合う足・EX-167【3】）。
+//   出発のときに持っていて（expedition.abilities）、そのフックの持ち主が本人のときだけ。効くなら外れる割合、効かなければ 0
+function hookCostEaseChance(hook, expedition) {
+  const owned = Array.isArray(expedition?.abilities) ? expedition.abilities : [];
+  const ability = owned.map((id) => window.masterAbilities?.[id])
+    .find((a) => a && a.hook === hook.id && a.adventurerId === hook.adv.id);
+  return ability?.selfInjurySkipChance ?? 0;
 }
 
 // 段階3の取引（試行・2026-10-14・EX-148）。ミナ①＝結末を一段上げる／本人の負傷を一段重く。ロウ①＝結末を一段下げる／全員の負傷を一段軽く。
@@ -10894,7 +10905,7 @@ function drawFieldworkHook(quest, party, fw, expedition) {
 //   成立したら fw を書き換えて、段階3の一行を返す。成立しなければ null。
 const HOOK_RATIO_LIGHT = 0.69; // ≤0.70＝軽症
 const HOOK_RATIO_HEALTHY = 0.71; // >0.70＝無傷
-function applyHookTrade(hook, fw) {
+function applyHookTrade(hook, fw, expedition = null) {
   if (!hook.trade || !FIELDWORK_TUNING.hookTradeEnabled) return null;
   const ratios = fw.hpRatios ?? {};
   const injured = (id) => injuryLevelFromHpRatio(ratios[id] ?? 1, false) != null;
@@ -10916,6 +10927,12 @@ function applyHookTrade(hook, fw) {
     }
   };
   apply[gain]();
+  // ★ 間に合う足（EX-167【3】）：本人の負傷が増える側だけ、抽選で外れる。外れた回は結果の一行を出さない（""）
+  if (cost === "selfInjuryUp" && hook.easeRoll < hookCostEaseChance(hook, expedition)) {
+    fw.hookEased = true;
+    fw.turnedBack = fw.tier === "fail";
+    return "";
+  }
   apply[cost]();
   fw.turnedBack = fw.tier === "fail";
   return hook.tradeText;
@@ -10934,7 +10951,8 @@ function fieldworkHiddenTags(fw) {
       stats: fw.statKeys,
       weatherLoad: fw.weatherLoad,
       fatigue: fw.fatigue,
-      ...(fw.hook ? { hook: fw.hook, hookTrade: fw.hookTrade === true } : {})
+      ...(fw.hook ? { hook: fw.hook, hookTrade: fw.hookTrade === true } : {}),
+      ...(fw.hookEased ? { hookEased: true } : {}) // 間に合う足で本人の負傷が増えなかった（EX-167【3】）
     },
     battleHpRatios: fieldworkHpRatiosOf(fw)
   };
