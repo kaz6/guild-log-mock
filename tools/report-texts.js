@@ -64,15 +64,18 @@ async function collect(opts) {
         { name: "フックを必ず引く", extra: { mockForceHooks: true } }
       ];
       const quests = opts.quests ?? window.masterQuests.map((q) => q.id);
+      // ★ 組（編成×天候×seed）は編成と天候が先に回る順に並べ、通し番号で取る
+      //   （seed を内側に回していた版は、少ない通数では1つの編成・天候しか出なかった。2026-10-30 に72通すべて同じ組だった）
+      const combos = [];
+      for (let s = 1; s <= opts.seeds; s++) for (const weather of ["晴れ", "小雨"]) for (const party of parties) combos.push({ party, weather, s });
       const docs = [];
-      quests.forEach((questId) => {
+      quests.forEach((questId, qi) => {
         const quest = getQuest(questId);
-        // ★ 状態ごとに同じ数ずつ取る（先頭の状態だけで埋まらないように）
+        // ★ 状態ごとに同じ数ずつ取る（先頭の状態だけで埋まらないように）。依頼ごとに取り始めをずらす
         const perState = Math.ceil(opts.perQuest / states.length);
-        for (const st of states) {
-        let n = 0;
-        for (const party of parties) for (const weather of ["晴れ", "小雨"]) for (let s = 1; s <= opts.seeds; s++) {
-          if (n >= perState) continue;
+        states.forEach((st, si) => {
+        for (let j = 0; j < perState; j++) {
+          const { party, weather, s } = combos[(qi * opts.perQuest + si * perState + j) % combos.length];
           const ids = quest.requiresAdventurer && !party.includes(quest.requiresAdventurer) ? [quest.requiresAdventurer, ...party] : party;
           const extra = { ...st.extra };
           if (extra.abilities) extra.abilities = extra.abilities.filter((id) => ids.includes(window.masterAbilities[id]?.adventurerId));
@@ -83,7 +86,7 @@ async function collect(opts) {
           let r;
           try {
             r = generateReport({ questId, adventurerIds: ids, adventurerItemIds: items, seed: s * 7919, departTimeOfDay: "昼", departWeather: weather, startTime: 0, durationMs: 1, ...extra });
-          } catch (e) { docs.push({ title: `${quest.title}｜生成に失敗`, meta: String(e), lines: [] }); n++; continue; }
+          } catch (e) { docs.push({ title: `${quest.title}｜生成に失敗`, meta: String(e), lines: [] }); continue; }
           const names = ids.map((id) => getDisplayName(getAdventurer(id))).join("・");
           docs.push({
             title: `${quest.title}（${questId}）`,
@@ -93,9 +96,8 @@ async function collect(opts) {
             lines: r.logs.map((l) => l.text),
             observation: (r.observationNotes?.notes ?? []).map((o) => `${o.name}：${o.text}`)
           });
-          n++;
         }
-        }
+        });
       });
       return docs;
     }, opts);
