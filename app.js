@@ -5683,7 +5683,10 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     ],
     床板の確認: [
       `${name(careful)}は床板を一枚ずつ踏んで、軋む場所を報告書に記録した。危険な箇所には印をつけた。`,
-      `床板の下が空洞になっている場所があった。${name(brave)}が先に踏んで確かめ、他の者を安全な位置から歩かせた。`
+      // ひとり（と犬）の編成では「他の者」がいない（EX-169）
+      usesSoloHumanStyle(party)
+        ? `床板の下が空洞になっている場所があった。${name(brave)}は先に踏んで確かめ、安全な場所だけを歩いた。`
+        : `床板の下が空洞になっている場所があった。${name(brave)}が先に踏んで確かめ、他の者を安全な位置から歩かせた。`
     ],
     古い手紙の整理: [
       `古い手紙が数通出てきた。宛名の部分は雨染みで読めなかった。${name(post)}はそのまま袋に入れ、依頼人へ渡すことにした。封は開けなかった。`,
@@ -8229,7 +8232,9 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   const obsAdvs = pool.filter((a) => a.obsession);
   const obsAdv = obsAdvs.length > 0 ? obsAdvs[Math.floor(rng() * obsAdvs.length)] : null;
   const obsName = obsAdv ? getDisplayName(obsAdv) : null;
-  const obs = obsAdv?.obsession ?? null;
+  const obs0 = obsAdv?.obsession ?? null;
+  // 人間がひとりの回は soloPositiveLine（「最後尾の足音」の主がいない。EX-169）。抽選は変わらない
+  const obs = obs0 && humanMembers(party).length === 1 && obs0.soloPositiveLine ? { ...obs0, positiveLine: obs0.soloPositiveLine } : obs0;
 
   if (quest.id === "quest_old_bridge_repair") {
     const row = party.find((a) => a.id === "adv_row");
