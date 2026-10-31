@@ -532,6 +532,15 @@ function backfillBondEcologyPages() {
     if (entry.ecologyPage && state.bondChain?.[entry.id]?.thanksRead) addBondEcologyPage(entry);
   });
 }
+// 読み込みの手当て：感謝を読んだのにアビリティが無いセーブ（そのアビリティを足す前に感謝を読んだ回）へ開く（EX-171【3】）
+function backfillBondAbilities() {
+  bondChainEntries().forEach((entry) => {
+    const ability = entry.ability ? window.masterAbilities?.[entry.ability] : null;
+    if (!ability || !state.bondChain?.[entry.id]?.thanksRead) return;
+    if (!state.abilities || typeof state.abilities !== "object") state.abilities = {};
+    if (!state.abilities[entry.ability]) state.abilities[entry.ability] = { adventurerId: ability.adventurerId, at: Date.now() };
+  });
+}
 
 // ── アビリティ（固有依頼の報酬。EX-165 の追加）──────────────────────────────
 // ★ 持っているかは state.abilities。出発のときに、編成に持ち主がいるものだけ遠征へ写す（abilities）。
@@ -869,6 +878,7 @@ let state = loadState();
 backfillEcologyRecordFrames();
 // 固有依頼の感謝で足す目録の頁（EX-171【2】）も、感謝を先に読んでいたセーブへ足す
 backfillBondEcologyPages();
+backfillBondAbilities();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
@@ -8805,7 +8815,36 @@ const RECEPTIONIST_REPORT_TEMPLATE = {
   highlight: "報告書を書く側ではなく、書かれる側になった一日。"
 };
 
+// 報告書の生成の入口。★ 本体（generateReportBody）のあとに、アビリティの一行を足すだけの薄い包み（EX-171【3】。実装側の判断）。
+//   ★ アビリティの一行は依頼ごとの分岐をまたいで同じ規則で足すので、各分岐に書かず出口で1回だけ足す。
+//   ★ 報告書の乱数は引かない（行は出発の種で選ぶ）。アビリティを持たない遠征（expedition.abilities が無い）は何も足さない
+//     ＝既存の報告書は1文字も動かない。
 function generateReport(expedition) {
+  const report = generateReportBody(expedition);
+  appendAbilityReportLines(report, expedition);
+  return report;
+}
+// アビリティの一行（出口で足すもの）。★ 定型の報告書（固有依頼・掃除）には足さない（文を確定稿のまま保つ）。
+function appendAbilityReportLines(report, expedition) {
+  const owned = Array.isArray(expedition?.abilities) ? expedition.abilities : [];
+  if (!report || owned.length === 0 || report.hiddenTags?.fixedReport) return;
+  const quest = getQuest(expedition.questId);
+  const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  const notes = fieldNotesLine(quest, party, expedition, report);
+  if (notes) report.logs.push({ kind: "action", text: notes });
+}
+// 覚え書き（エルネ）：観察対象のある依頼で、対象に出会った回（observationNotes が null でない）だけ。行は対象の種別で選ぶ
+function fieldNotesLine(quest, party, expedition, report) {
+  const ability = window.masterAbilities?.field_notes;
+  if (!ability || !expedition.abilities.includes("field_notes")) return null;
+  if (!quest?.observationTarget || quest.observationTarget === "なし" || !report.observationNotes) return null;
+  const owner = party.find((adv) => adv.id === ability.adventurerId);
+  if (!owner) return null;
+  const table = ability.linesByKind ?? {};
+  const line = table[quest.observationKind ?? ""] ?? table[""];
+  return line ? line.replaceAll("【エルネ】", getDisplayName(owner)) : null;
+}
+function generateReportBody(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
   const departConditions = expedition.departTimeOfDay
