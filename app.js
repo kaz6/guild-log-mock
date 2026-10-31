@@ -414,15 +414,21 @@ function bondBoardQuest() {
   return quest;
 }
 // 会話のカード（相談・感謝）。話し手は今の呼び名。
+// ★ 行は文字列か { by, text }（行ごとに話し手が付く。EX-171 のエルシー）。受付嬢の行は「受付嬢：」の札を付け
+//   （面接の台本と同じ書式）、地の文は札なしで語りの見た目にする（speech-narration）。
+function bondTalkLineHtml(line, entry) {
+  if (typeof line === "string") return escapeHtml(bondFill(line, entry));
+  const text = escapeHtml(bondFill(line.text, entry));
+  return line.by === "地の文" ? `<span class="speech-narration">${text}</span>` : `${escapeHtml(line.by)}：${text}`;
+}
 function bondTalkCardHtml(entry, kind) {
   const talk = entry[kind];
-  const adv = entry.adventurerId ? getAdventurer(entry.adventurerId) : null;
-  const w = speechWindow(`bond_${entry.id}_${kind}`, talk.paragraphs.map((p) => p.map((line) => escapeHtml(bondFill(line, entry)))));
+  const w = speechWindow(`bond_${entry.id}_${kind}`, talk.paragraphs.map((p) => p.map((line) => bondTalkLineHtml(line, entry))));
   return `
     <section class="card reception-event-card" data-bond-talk="${escapeHtml(`${entry.id}:${kind}`)}">
       <div class="card-body">
         <div>
-          <p class="eyebrow">Guild Member</p>
+          <p class="eyebrow">${talk.speaker === "受付嬢" ? "Guild Reception" : "Guild Member"}</p>
           <h3>${escapeHtml(bondFill(talk.speaker, entry))}</h3>
           ${w.html}
           ${w.last ? `
@@ -2074,9 +2080,16 @@ function expeditionBlockedMessage(adventurerIds) {
   }
   // ★ 固有依頼は本人と人間もう1人以上で出す（EX-169・チャット側の仮の裁定）。エルシーは数えない。
   //   台本（確定稿）が「一行は、【本人】を先頭に…」「誰かが休もうと言いかけても」と複数の人を前提にしているため
-  if (required && humanMembers(party).length < 2) {
-    const adv = getAdventurer(required);
-    return `${adv ? getDisplayName(adv) : "依頼した本人"}のほかに、人がもう1人要る依頼です（エルシーは数えません）。`;
+  // ★ 本人がエルシーのときは「エルシーと人間1人以上」（EX-171。エルシーは人ではないので、人の数は1人から）
+  if (required) {
+    const requiredAdv = getAdventurer(required);
+    const needHumans = requiredAdv && !isHumanAdventurer(requiredAdv) ? 1 : 2;
+    if (humanMembers(party).length < needHumans) {
+      const name = requiredAdv ? getDisplayName(requiredAdv) : "依頼した本人";
+      return needHumans === 1
+        ? `${name}と一緒に行く人が1人要る依頼です。`
+        : `${name}のほかに、人がもう1人要る依頼です（エルシーは数えません）。`;
+    }
   }
   const needsCompanion = party.filter((a) => a.canSolo === false);
   if (needsCompanion.length > 0 && party.length === needsCompanion.length) {
@@ -3280,7 +3293,7 @@ function reportCardHtml(report) {
   const quest = getQuest(report.questId);
   return `
     <article class="report-card ${report.opened ? "" : "unopened"} ${report.readStampAt ? "stamped" : ""}">
-      <h3>${escapeHtml(quest?.title ?? "報告書")}</h3>
+      <h3>${escapeHtml(report.title ?? quest?.title ?? "報告書")}</h3>
       <p>${escapeHtml(report.summary)}</p>
       <div class="button-row" style="margin-top: 14px;">
         <button class="small-button" onclick="openReport('${escapeJsArg(report.id)}')">${report.opened ? "読み返す" : "開封する"}</button>
@@ -4508,6 +4521,11 @@ function namedTargetFor(quest) {
 // 題名の表示（掲示板・報告書の見出し・遠征中・帰還カード）。確定前は仮称のまま。
 function questDisplayTitle(quest) {
   if (!quest) return "";
+  // ★ 題名に人の名前を含む固有依頼（EX-171「エルシーと過ごす一日」）：その人のあだ名で出す
+  if (quest.titleNameOf) {
+    const adv = getAdventurer(quest.titleNameOf);
+    return adv ? quest.title.split(adv.name).join(getDisplayName(adv)) : quest.title;
+  }
   const name = namedTargetFor(quest);
   if (!name) return quest.title;
   return questNameAliases(quest).reduce((title, alias) => title.split(alias).join(name), quest.title);
@@ -4726,7 +4744,7 @@ function renderReportDetail(reportId) {
   app.innerHTML = `
     <section class="paper-sheet" data-report-id="${escapeHtml(report.id)}">
       <div class="paper-docno"><span>遠征報告書　開封済み</span><span>${todayLabelText()}</span></div>
-      <h3 class="paper-title">${escapeHtml(quest?.title ?? "報告書")}</h3>
+      <h3 class="paper-title">${escapeHtml(report.title ?? quest?.title ?? "報告書")}</h3>
       <p class="paper-sub">${escapeHtml(paperWriterLabel())}</p>
       <dl class="paper-fields">
         ${fieldRows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}
@@ -4936,7 +4954,7 @@ function renderResult(reportId) {
         <div class="card-title">
           <div>
             <p class="eyebrow">Homecoming</p>
-            <h3>${escapeHtml(quest?.title ?? "帰還報告")}</h3>
+            <h3>${escapeHtml(report.title ?? quest?.title ?? "帰還報告")}</h3>
           </div>
           <span class="status-pill good">帰還</span>
         </div>
@@ -5962,6 +5980,9 @@ function canUseItemInQuest(quest, itemId, weather = null) {
     quest_relief_odd_jobs: ["item_bandage"], // ★ 救済（2026-09-23・EX-144）。町なかの雑用。仮
     quest_bond_gadd: [], // ★ 固有依頼（EX-165）。定型の報告書なので支給品の行が出ない＝持たせる判断を作らない（意図して空）
     quest_bond_mina: [], // ★ 固有依頼（EX-167）。鉄鍋の頼まれごとと同じく定型の報告書なので意図して空
+    quest_bond_elne: [], // ★ 固有依頼（EX-171）。定型の報告書なので意図して空
+    quest_bond_row: [], // ★ 固有依頼（EX-171）。定型の報告書なので意図して空
+    quest_bond_elsie: [], // ★ 固有依頼（EX-171）。定型の報告書なので意図して空
 
     quest_wedding_support: ["item_pot", "item_bandage"],
     quest_old_house_cleanup: ["item_whistle", "item_bandage", "item_oilcase"],
@@ -8773,7 +8794,9 @@ function generateReport(expedition) {
   if (quest.bond) {
     const entry = bondChainEntries().find((e) => e.id === quest.bond);
     (entry?.reportLines ?? []).forEach((line) => add("", bondFill(line, entry)));
-    const historyLine = `${quest.title}：済ませた。`;
+    // ★ 題名に人の名前を含む依頼（titleNameOf）は、作った時点のあだ名で閉じる（本文と同じ。見出しは report.title を読む）
+    const title = questDisplayTitle(quest);
+    const historyLine = `${title}：済ませた。`;
     return {
       id: newReportId(),
       questId: quest.id,
@@ -8783,7 +8806,8 @@ function generateReport(expedition) {
       opened: false,
       applied: false,
       result: questOutcomes(quest).full[0],
-      summary: logs[0]?.text ?? quest.title,
+      summary: logs[0]?.text ?? title,
+      ...(title !== quest.title ? { title } : {}),
       historyLine,
       adventurerHistoryLines: Object.fromEntries(party.map((adv) => [adv.id, historyLine])),
       logs,

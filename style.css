@@ -273,6 +273,11 @@ button {
   overflow: hidden;
 }
 
+/* 会話の窓の地の文（行ごとに話し手が付く会話の語りの行。EX-171 のエルシー）。札を付けず、台詞と見分けられるように少し淡く */
+.speech-narration {
+  color: var(--muted);
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button,

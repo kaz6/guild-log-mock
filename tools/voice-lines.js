@@ -63,6 +63,13 @@ async function collect() {
             let carried = null; // ★ 同じ段落の中では、直前の「名前:」の話し手を引き継ぐ（台本の書式）
             p.forEach((raw) => {
             const line = strip(raw);
+            // ★ 地の文の行（speech-narration。EX-171 のエルシーの相談と感謝）は語り。引き継いだ話し手も切る
+            if (raw.includes("speech-narration")) {
+              carried = null;
+              const key = `語り\u0000${line}`;
+              if (!seen.has(key)) { seen.add(key); out.push({ speaker: "語り", text: line, source: `${id}#${pi + 1}` }); }
+              return;
+            }
             const m = line.match(/^([^:：]{1,4})[:：](.*)$/);
             if (m) carried = LABEL_TO_SPEAKER[m[1]] ?? m[1];
             const speaker = carried ?? card;
