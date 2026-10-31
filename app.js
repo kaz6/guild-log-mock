@@ -8852,8 +8852,7 @@ function appendAbilityReportLines(report, expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
   // ★ 置き場所：本文の「帰りの場面」（帰り道／帰還／報告書…で始まる最初の行）の手前。無ければ末尾。
-  //   覚え書きは現地でしたことなので帰りの場面より前に。帰り道は帰りの場面の頭に置き、既に「帰り道、」で始まる行が
-  //   続いていればその後ろに「帰り道、」を外した形で置く（同じ書き出しを2行続けない）。
+  //   覚え書きは現地でしたことなので帰りの場面より前に。帰り道は帰りの場面の頭に置く。
   const logs = report.logs;
   let k = logs.findIndex((l, i) => i >= 2 && /^(帰り道|帰還|報告書)/.test(l.text ?? ""));
   if (k < 0) k = logs.length;
@@ -8862,11 +8861,12 @@ function appendAbilityReportLines(report, expedition) {
   const notes = fieldNotesLine(quest, party, expedition, report);
   if (notes && !down(getAdventurer(window.masterAbilities.field_notes.adventurerId))) { logs.splice(k, 0, { kind: "action", text: notes }); k += 1; }
   const wayHome = wayHomeFor(quest, party, expedition);
-  if (wayHome && !down(getAdventurer(window.masterAbilities.way_home.adventurerId))) {
-    let j = k;
-    while (j < logs.length && (logs[j].text ?? "").startsWith("帰り道")) j += 1;
-    logs.splice(j, 0, { kind: "action", text: j > k ? wayHome.line.replace(/^帰り道、/, "") : wayHome.line });
-  }
+  // ★ 本文に既に帰り道の場面（「帰り道」で始まる行）や、ロウが帰り道を確かめる行があれば書かない
+  //   （先頭が2人になる・帰ったあとに道を確かめる・同じことを2度言う。通読係の指摘 2026-10-31）。効き目（所要時間）はそのまま
+  const owner = getAdventurer(window.masterAbilities.way_home.adventurerId);
+  const ownerName = owner ? getDisplayName(owner) : "";
+  const hasWayHomeScene = logs.some((l) => /^帰り道/.test(l.text ?? "") || (ownerName && (l.text ?? "").includes(ownerName) && (l.text ?? "").includes("帰り道")));
+  if (wayHome && !down(owner) && !hasWayHomeScene) logs.splice(k, 0, { kind: "action", text: wayHome.line });
 }
 // 帰り道（ロウ）：場所が「遠出」の依頼で、ロウが編成にいて、出発のときに持っていた回だけ。定型の報告書の依頼には効かせない。
 //   効くなら { scale, line }（scale＝所要時間に掛ける倍率）、効かなければ null
