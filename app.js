@@ -8851,11 +8851,22 @@ function appendAbilityReportLines(report, expedition) {
   if (!report || owned.length === 0 || report.hiddenTags?.fixedReport) return;
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  // ★ 置き場所：本文の「帰りの場面」（帰り道／帰還／報告書…で始まる最初の行）の手前。無ければ末尾。
+  //   覚え書きは現地でしたことなので帰りの場面より前に。帰り道は帰りの場面の頭に置き、既に「帰り道、」で始まる行が
+  //   続いていればその後ろに「帰り道、」を外した形で置く（同じ書き出しを2行続けない）。
+  const logs = report.logs;
+  let k = logs.findIndex((l, i) => i >= 2 && /^(帰り道|帰還|報告書)/.test(l.text ?? ""));
+  if (k < 0) k = logs.length;
+  // ★ 戦闘で倒れた本人（battleHpRatios が 0）には、したことの一行を書かない（倒れた人は帳面も先導もできない）
+  const down = (adv) => report.hiddenTags?.battleHpRatios?.[adv.id] === 0;
   const notes = fieldNotesLine(quest, party, expedition, report);
-  if (notes) report.logs.push({ kind: "action", text: notes });
-  // 帰り道は最後に（帰りの話なので本文の終わりに置く）
+  if (notes && !down(getAdventurer(window.masterAbilities.field_notes.adventurerId))) { logs.splice(k, 0, { kind: "action", text: notes }); k += 1; }
   const wayHome = wayHomeFor(quest, party, expedition);
-  if (wayHome) report.logs.push({ kind: "action", text: wayHome.line });
+  if (wayHome && !down(getAdventurer(window.masterAbilities.way_home.adventurerId))) {
+    let j = k;
+    while (j < logs.length && (logs[j].text ?? "").startsWith("帰り道")) j += 1;
+    logs.splice(j, 0, { kind: "action", text: j > k ? wayHome.line.replace(/^帰り道、/, "") : wayHome.line });
+  }
 }
 // 帰り道（ロウ）：場所が「遠出」の依頼で、ロウが編成にいて、出発のときに持っていた回だけ。定型の報告書の依頼には効かせない。
 //   効くなら { scale, line }（scale＝所要時間に掛ける倍率）、効かなければ null

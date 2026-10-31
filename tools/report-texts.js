@@ -8,7 +8,7 @@
 // ★ file:// は localStorage を全部で共有するので、使い捨ての HTTP で開く（走っているテストの保存を踏まない）。
 //
 // 使い方：node tools/report-texts.js <出力先.md> [--quests id,id] [--seeds N] [--per-quest N]
-//   既定は全依頼 × 代表の編成4 × 天候2 × seed2 × 状態3（なし／アビリティ2つ／フックを必ず引く）から、
+//   既定は全依頼 × 代表の編成4 × 天候2 × seed2 × 状態3（なし／アビリティ全部／フックを必ず引く）から、
 //   （観察対象のある依頼は先頭の人に観察記録票を持たせる）
 //   依頼ごとに --per-quest 通（既定6。状態ごとに同じ数ずつ）を順に取る。通読係に渡す量はこれで決める。
 const fs = require("fs");
@@ -60,7 +60,8 @@ async function collect(opts) {
       // 状態：なし／アビリティ（持ち主が編成にいれば効く）／特殊裁定のフックを必ず引く
       const states = [
         { name: "なし", extra: {} },
-        { name: "アビリティ（冬越えの粥・間に合う足）", extra: { abilities: ["winter_porridge", "ontime_feet"] } },
+        // ★ アビリティは全部（持ち主が編成にいるものだけ残す）。EX-171 で3つ増えた
+        { name: "アビリティ（全部）", extra: { abilities: Object.keys(window.masterAbilities) } },
         { name: "フックを必ず引く", extra: { mockForceHooks: true } }
       ];
       const quests = opts.quests ?? window.masterQuests.map((q) => q.id);

@@ -40,7 +40,7 @@ test("覚え書き（エルネ）：観察対象に出会った回だけ、本�
     const gen = (questId, kind) => {
       for (let seed = 1; seed < 100; seed++) {
         const r = generateReport({ questId, adventurerIds: ["adv_elne", "adv_gadd"], adventurerItemIds: {}, seed, departTimeOfDay: "昼", departWeather: "晴れ", startTime: 0, durationMs: 1, abilities: ["field_notes"] });
-        if (r.observationNotes) return r.logs[r.logs.length - 1].text;
+        if (r.observationNotes) return r.logs.find((l) => l.text.includes("帳面に"))?.text ?? null;
       }
       return null;
     };
@@ -56,7 +56,7 @@ test("覚え書き（エルネ）：観察対象に出会った回だけ、本�
   expect(errors).toEqual([]);
 });
 
-test("帰り道（ロウ）：遠出の依頼でだけ所要時間が縮み、本文の最後に一行。勝ち負け・ほかの欄は動かない。ひとりなら「一行を」と書かない", async ({ page }) => {
+test("帰り道（ロウ）：遠出の依頼でだけ所要時間が縮み、本文の帰りの場面に一行（倒れた回は書かない）。勝ち負け・ほかの欄は動かない。ひとりなら「一行を」と書かない", async ({ page }) => {
   const errors = await freshPage(page);
   const r = await diffAll(page, "way_home");
   const far = await page.evaluate(() => state.quests.filter((q) => questReach(q) === "遠出" && !q.bond && !q.fixedReport).map((q) => q.id).sort());
@@ -79,6 +79,19 @@ test("帰り道（ロウ）：遠出の依頼でだけ所要時間が縮み、�
   expect(d.noAbility).toBeNull();
   expect(d.solo).not.toContain("一行");
   expect(d.multi).toContain("一行を先導した");
+  // 帰りの場面の手前に置く（「帰還後」「報告書には」より前）。ロウが倒れた回（戦闘）は書かない
+  const order = await page.evaluate(() => {
+    let bad = 0, downWithLine = 0;
+    for (const questId of ["quest_herb", "quest_caravan_escort", "quest_missing_herbalist"]) for (let seed = 1; seed <= 60; seed++) {
+      const r = generateReport({ questId, adventurerIds: ["adv_row", "adv_elne", "adv_elsie"], adventurerItemIds: {}, seed: seed * 7919, departTimeOfDay: "昼", departWeather: "晴れ", startTime: 0, durationMs: 1, abilities: ["way_home"] });
+      const i = r.logs.findIndex((l) => l.text.includes("迷わず"));
+      if (i >= 0 && r.logs.slice(i + 1).some((l) => /^帰還後/.test(l.text))) continue;
+      if (i >= 0 && r.logs.slice(0, i).some((l) => /^(帰還後|報告書)/.test(l.text))) bad++;
+      if (i >= 0 && r.hiddenTags?.battleHpRatios?.adv_row === 0) downWithLine++;
+    }
+    return { bad, downWithLine };
+  });
+  expect(order).toEqual({ bad: 0, downWithLine: 0 });
   expect(errors).toEqual([]);
 });
 
