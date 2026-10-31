@@ -532,6 +532,15 @@ function backfillBondEcologyPages() {
     if (entry.ecologyPage && state.bondChain?.[entry.id]?.thanksRead) addBondEcologyPage(entry);
   });
 }
+// 読み込みの手当て：感謝を読んだのにアビリティが無いセーブ（そのアビリティを足す前に感謝を読んだ回）へ開く（EX-171【3】）
+function backfillBondAbilities() {
+  bondChainEntries().forEach((entry) => {
+    const ability = entry.ability ? window.masterAbilities?.[entry.ability] : null;
+    if (!ability || !state.bondChain?.[entry.id]?.thanksRead) return;
+    if (!state.abilities || typeof state.abilities !== "object") state.abilities = {};
+    if (!state.abilities[entry.ability]) state.abilities[entry.ability] = { adventurerId: ability.adventurerId, at: Date.now() };
+  });
+}
 
 // ── アビリティ（固有依頼の報酬。EX-165 の追加）──────────────────────────────
 // ★ 持っているかは state.abilities。出発のときに、編成に持ち主がいるものだけ遠征へ写す（abilities）。
@@ -565,6 +574,24 @@ function winterPorridgeFor(quest, party, expedition) {
     retreatShift: ability.retreatThresholdShift ?? 0,
     line: pick ? pick.replaceAll("【鉄鍋】", getDisplayName(owner)) : null
   };
+}
+// そばにいる（エルシー。EX-171【3】）：エルシーが編成にいて、出発のときに持っていて、少人数（4人未満）で出た回だけ効く。
+//   ★ 効くのは工程の依頼（近場・遠出とも）。疲れの上乗せ（少人数の分）にだけ掛ける。
+//   ★ 行（line）は休みの場面がある報告書だけ＝冬越えの粥と同じく「遠出」の工程の依頼。近場では効くが行は出さない。
+//   人がひとりなら「一人ずつ」と書かず、その人の呼び名で書く。効くなら { extraScale, line }、効かなければ null
+function besideYouFor(quest, party, expedition) {
+  const ability = window.masterAbilities?.beside_you;
+  if (!ability || party.length >= MAX_PARTY_SIZE) return null;
+  if (!Array.isArray(expedition?.abilities) || !expedition.abilities.includes("beside_you")) return null;
+  const owner = party.find((adv) => adv.id === ability.adventurerId);
+  if (!owner) return null;
+  let line = null;
+  if (questReach(quest) === "遠出") {
+    const humans = humanMembers(party);
+    line = (humans.length === 1 ? ability.pairLine.replaceAll("【相手】", getDisplayName(humans[0])) : ability.line)
+      .replaceAll("【エルシー】", getDisplayName(owner));
+  }
+  return { extraScale: ability.smallPartyExtraScale ?? 1, line };
 }
 function adventurerAbilitiesHtml(adventurer) {
   const names = ownedAbilityIds(adventurer.id).map((id) => window.masterAbilities[id].name);
@@ -869,6 +896,7 @@ let state = loadState();
 backfillEcologyRecordFrames();
 // 固有依頼の感謝で足す目録の頁（EX-171【2】）も、感謝を先に読んでいたセーブへ足す
 backfillBondEcologyPages();
+backfillBondAbilities();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
@@ -5211,6 +5239,9 @@ function startExpedition() {
   // ★ アビリティは出発のときに確定して書く（EX-165 の追加）。持っていなければ鍵ごと書かない
   const abilityIds = partyAbilityIds(expedition.adventurerIds);
   if (abilityIds.length > 0) expedition.abilities = abilityIds;
+  // ★ 帰り道（ロウ。EX-171【3】）：遠出の依頼なら所要時間を縮める（出発のときに確定。勝ち負けには触らない）
+  const wayHome = wayHomeFor(quest, expedition.adventurerIds.map(getAdventurer).filter(Boolean), expedition);
+  if (wayHome) expedition.durationMs = Math.round(expedition.durationMs * wayHome.scale);
   // ★ 遠征費は出発した瞬間に引く（2026-09-23・EX-144）。**同時遠征は1本ずつ引いて判定する**（細則4）
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
   expedition.fee = questFee(quest);
@@ -8805,7 +8836,61 @@ const RECEPTIONIST_REPORT_TEMPLATE = {
   highlight: "報告書を書く側ではなく、書かれる側になった一日。"
 };
 
+// 報告書の生成の入口。★ 本体（generateReportBody）のあとに、アビリティの一行を足すだけの薄い包み（EX-171【3】。実装側の判断）。
+//   ★ アビリティの一行は依頼ごとの分岐をまたいで同じ規則で足すので、各分岐に書かず出口で1回だけ足す。
+//   ★ 報告書の乱数は引かない（行は出発の種で選ぶ）。アビリティを持たない遠征（expedition.abilities が無い）は何も足さない
+//     ＝既存の報告書は1文字も動かない。
 function generateReport(expedition) {
+  const report = generateReportBody(expedition);
+  appendAbilityReportLines(report, expedition);
+  return report;
+}
+// アビリティの一行（出口で足すもの）。★ 定型の報告書（固有依頼・掃除）には足さない（文を確定稿のまま保つ）。
+function appendAbilityReportLines(report, expedition) {
+  const owned = Array.isArray(expedition?.abilities) ? expedition.abilities : [];
+  if (!report || owned.length === 0 || report.hiddenTags?.fixedReport) return;
+  const quest = getQuest(expedition.questId);
+  const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
+  // ★ 置き場所：本文の「帰りの場面」（帰り道／帰還／報告書…で始まる最初の行）の手前。無ければ末尾。
+  //   覚え書きは現地でしたことなので帰りの場面より前に。帰り道は帰りの場面の頭に置く。
+  const logs = report.logs;
+  let k = logs.findIndex((l, i) => i >= 2 && /^(帰り道|帰還|報告書)/.test(l.text ?? ""));
+  if (k < 0) k = logs.length;
+  // ★ 戦闘で倒れた本人（battleHpRatios が 0）には、したことの一行を書かない（倒れた人は帳面も先導もできない）
+  const down = (adv) => report.hiddenTags?.battleHpRatios?.[adv.id] === 0;
+  const notes = fieldNotesLine(quest, party, expedition, report);
+  if (notes && !down(getAdventurer(window.masterAbilities.field_notes.adventurerId))) { logs.splice(k, 0, { kind: "action", text: notes }); k += 1; }
+  const wayHome = wayHomeFor(quest, party, expedition);
+  // ★ 本文に既に帰り道の場面（「帰り道」で始まる行）や、ロウが帰り道を確かめる行があれば書かない
+  //   （先頭が2人になる・帰ったあとに道を確かめる・同じことを2度言う。通読係の指摘 2026-10-31）。効き目（所要時間）はそのまま
+  const owner = getAdventurer(window.masterAbilities.way_home.adventurerId);
+  const ownerName = owner ? getDisplayName(owner) : "";
+  const hasWayHomeScene = logs.some((l) => /^帰り道/.test(l.text ?? "") || (ownerName && (l.text ?? "").includes(ownerName) && (l.text ?? "").includes("帰り道")));
+  if (wayHome && !down(owner) && !hasWayHomeScene) logs.splice(k, 0, { kind: "action", text: wayHome.line });
+}
+// 帰り道（ロウ）：場所が「遠出」の依頼で、ロウが編成にいて、出発のときに持っていた回だけ。定型の報告書の依頼には効かせない。
+//   効くなら { scale, line }（scale＝所要時間に掛ける倍率）、効かなければ null
+function wayHomeFor(quest, party, expedition) {
+  const ability = window.masterAbilities?.way_home;
+  if (!ability || questReach(quest) !== "遠出" || quest.bond || quest.fixedReport) return null;
+  if (!Array.isArray(expedition?.abilities) || !expedition.abilities.includes("way_home")) return null;
+  const owner = party.find((adv) => adv.id === ability.adventurerId);
+  if (!owner) return null;
+  const text = party.length === 1 ? ability.soloLine : ability.line;
+  return { scale: ability.durationScale ?? 1, line: text.replaceAll("【ロウ】", getDisplayName(owner)) };
+}
+// 覚え書き（エルネ）：観察対象のある依頼で、対象に出会った回（observationNotes が null でない）だけ。行は対象の種別で選ぶ
+function fieldNotesLine(quest, party, expedition, report) {
+  const ability = window.masterAbilities?.field_notes;
+  if (!ability || !expedition.abilities.includes("field_notes")) return null;
+  if (!quest?.observationTarget || quest.observationTarget === "なし" || !report.observationNotes) return null;
+  const owner = party.find((adv) => adv.id === ability.adventurerId);
+  if (!owner) return null;
+  const table = ability.linesByKind ?? {};
+  const line = table[quest.observationKind ?? ""] ?? table[""];
+  return line ? line.replaceAll("【エルネ】", getDisplayName(owner)) : null;
+}
+function generateReportBody(expedition) {
   const quest = getQuest(expedition.questId);
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
   const departConditions = expedition.departTimeOfDay
@@ -9440,8 +9525,11 @@ function generateReport(expedition) {
     const searchOutcome = overriddenOutcome(quest, { party, itemIds });
     const found = searchOutcome !== quest.outcomeOverride.default;
     const porridge = winterPorridgeFor(quest, party, expedition);
-    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ", ...(porridge ? { fatigueScale: porridge.scale } : {}) });
+    const beside = besideYouFor(quest, party, expedition);
+    const fw = simulateFieldwork(quest, party, itemIds, rng, { weather: expedition.departWeather ?? "晴れ", ...(porridge ? { fatigueScale: porridge.scale } : {}),
+      ...(beside ? { smallPartyExtraScale: beside.extraScale } : {}) });
     if (porridge?.line) fw.porridgeLine = porridge.line;
+    if (beside?.line) fw.besideLine = beside.line;
 
     const soloAdv = isSoloHumanParty(party);
     add("", soloAdv
@@ -9456,6 +9544,7 @@ function generateReport(expedition) {
     const searchLogs = generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue, stage, found });
     searchLogs.forEach((text) => add("action", text));
     if (fw.porridgeLine) add("action", fw.porridgeLine);
+    if (fw.besideLine) add("action", fw.besideLine);
     fieldworkLogLines(fw, rng).forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = questOutcomeText(quest.id, searchOutcome, party, itemIds);
@@ -10571,8 +10660,12 @@ function simulateFieldwork(quest, party, itemIds, rng, options = {}) {
   }
 
   // ★ fatigueScale：冬越えの粥（EX-165 の追加）が効く回だけ 1 未満。それ以外は掛けない（既存の値を1桁も動かさない）
+  // ★ smallPartyExtraScale：そばにいる（エルシー。EX-171【3】）が効く回だけ 1 未満。それ以外は掛けない
+  const smallPartyExtra = typeof options.smallPartyExtraScale === "number"
+    ? FIELDWORK_TUNING.fatigueSmallPartyExtra * options.smallPartyExtraScale
+    : FIELDWORK_TUNING.fatigueSmallPartyExtra;
   const baseFatigueStep = FIELDWORK_TUNING.fatigueBase +
-    FIELDWORK_TUNING.fatigueSmallPartyExtra * Math.max(0, MAX_PARTY_SIZE - party.length);
+    smallPartyExtra * Math.max(0, MAX_PARTY_SIZE - party.length);
   const fatigueStep = typeof options.fatigueScale === "number" ? baseFatigueStep * options.fatigueScale : baseFatigueStep;
   let fatigue = 0;
   let potLeft = held.filter((id) => id === "item_pot").length;
@@ -10937,7 +11030,9 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   //   ★ 「初回か」は出発時に確定した旗を優先する（2026-09-20・EX-138）。
   const noFail = quest?.firstRunNeverFails === true && isFirstRunOfQuest(quest, expedition);
   const porridge = winterPorridgeFor(quest, party, expedition);
-  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail, ...(porridge ? { fatigueScale: porridge.scale } : {}) });
+  const beside = besideYouFor(quest, party, expedition);
+  const fw = simulateFieldwork(quest, party, itemIds, rng, { weather, noFail, ...(porridge ? { fatigueScale: porridge.scale } : {}),
+    ...(beside ? { smallPartyExtraScale: beside.extraScale } : {}) });
   // ★ 特殊裁定のフック（段階2＝文面／段階3の試行＝ミナ①・ロウ①だけ取引）。
   //   取引は結末の段と帰還時の負傷を動かすので、結末を選ぶ前に当てる。乱数は引かない（結末を選ぶ乱数の消費は変わらない）。
   const hook = drawFieldworkHook(quest, party, fw, expedition);
@@ -10949,6 +11044,7 @@ function resolveFieldwork(quest, party, itemIds, weather, rng, expedition = null
   }
   const picked = fieldworkOutcome(quest, fw, questOutcomes(quest), rng);
   const logLines = fieldworkLogLines(fw, rng);
+  if (beside?.line) logLines.unshift({ kind: "action", text: beside.line });
   if (porridge?.line) logLines.unshift({ kind: "action", text: porridge.line });
   if (hook) {
     logLines.push({ kind: "action", text: hook.text });
