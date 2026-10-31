@@ -472,9 +472,65 @@ function dismissBondTalk(id, kind) {
       if (!state.abilities || typeof state.abilities !== "object") state.abilities = {};
       if (!state.abilities[entry.ability]) state.abilities[entry.ability] = { adventurerId: ability.adventurerId, at: Date.now() };
     }
+    // ★ 生態目録に頁を足す報酬（EX-171【2】。エルネの「名前の無い草」）
+    if (entry) addBondEcologyPage(entry);
   }
   saveState();
   render();
+}
+
+// 固有依頼の感謝で生態目録に頁を足す（2026-10-31・EX-171【2】。中身は data-bonds.js の masterBondEcologyPages）。
+// ★ 1度だけ（bondChain[id].ecologyPageId に控える）。頁は出会って立つ枠と同じ形で、分類も軸も空（埋めるのはプレイヤー）。
+//   本人の写しは「冒険者の証言」（S）に1件だけ入れる（報告メモと同じ形。名前は足した時点の呼び名で閉じる）。
+// ★ 生態目録がまだ開いていなければ、ここで開く（目録が開くのは、最初の生き物に出会ったときか、この感謝のときの、早いほう）。
+//   このときは白紙の本を渡す一言（「まだ白紙ですけど」）を出さない。頁がもう1つある＝白紙ではないため（実装側の判断）。
+//   ★ 頁があると、のちに最初の生き物に出会っても一言は出ない（stampReport は「最初の枠が立った瞬間」にだけ出す）。
+function addBondEcologyPage(entry) {
+  const page = entry.ecologyPage ? window.masterBondEcologyPages?.[entry.ecologyPage] : null;
+  if (!page) return null;
+  const progress = bondProgress(entry.id);
+  if (progress.ecologyPageId && getEcologyRecordEntry(progress.ecologyPageId)) return getEcologyRecordEntry(progress.ecologyPageId);
+  if (!state.ecologyRecord || typeof state.ecologyRecord !== "object") state.ecologyRecord = {};
+  const opened = isEcologyBookShown();
+  const id = nextEcologyRecordId();
+  state.ecologyRecord[id] = {
+    id,
+    target: page.target,
+    name: null,
+    nameDraft: "",
+    nameConfirmedAt: null,
+    area: page.area || "",
+    category: "",
+    confirmed: [],
+    guess: "",
+    nextCheck: "",
+    legacy: ""
+  };
+  progress.ecologyPageId = id;
+  if (page.testimony) {
+    const adv = entry.adventurerId ? getAdventurer(entry.adventurerId) : null;
+    const quest = entry.questId ? getQuest(entry.questId) : null;
+    if (!Array.isArray(state.reportMemos)) state.reportMemos = [];
+    state.reportMemos.push({
+      id: `memo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      reportId: null,
+      createdAt: new Date().toISOString(),
+      questId: entry.questId ?? null,
+      questTitle: quest?.title ?? "",
+      targetName: page.target,
+      adventurerId: entry.adventurerId ?? null,
+      adventurerName: adv ? getDisplayName(adv) : "",
+      text: page.testimony
+    });
+  }
+  if (!opened && !state.ecologyBook) state.ecologyBook = { at: Date.now(), read: true, viaBond: entry.id };
+  return state.ecologyRecord[id];
+}
+// 読み込みの手当て：感謝を読んだのに頁が無いセーブ（この報酬を足す前に読んだ回）へ足す。何度走らせても増えない
+function backfillBondEcologyPages() {
+  bondChainEntries().forEach((entry) => {
+    if (entry.ecologyPage && state.bondChain?.[entry.id]?.thanksRead) addBondEcologyPage(entry);
+  });
 }
 
 // ── アビリティ（固有依頼の報酬。EX-165 の追加）──────────────────────────────
@@ -811,6 +867,8 @@ let state = loadState();
 // 読み込み時に立てる。★ 枠が立つ規則を後から入れたので、これが無いと**古いセーブだけ
 // 「読んだのにページが無い」**まま残る。何度走らせても増えない（仮称で引いて既存を返す）。
 backfillEcologyRecordFrames();
+// 固有依頼の感謝で足す目録の頁（EX-171【2】）も、感謝を先に読んでいたセーブへ足す
+backfillBondEcologyPages();
 let route = "home";
 let selectedQuestId = state.selectedQuestId ?? null;
 let selectedAdventurerIds = state.selectedAdventurerIds ?? [];
