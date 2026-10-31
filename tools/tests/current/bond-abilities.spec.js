@@ -56,10 +56,57 @@ test("覚え書き（エルネ）：観察対象に出会った回だけ、本�
   expect(errors).toEqual([]);
 });
 
+test("帰り道（ロウ）：遠出の依頼でだけ所要時間が縮み、本文の最後に一行。勝ち負け・ほかの欄は動かない。ひとりなら「一行を」と書かない", async ({ page }) => {
+  const errors = await freshPage(page);
+  const r = await diffAll(page, "way_home");
+  const far = await page.evaluate(() => state.quests.filter((q) => questReach(q) === "遠出" && !q.bond && !q.fixedReport).map((q) => q.id).sort());
+  expect(r.moved).toEqual(far);
+  expect(r.other, "結末など本文以外の欄が動いた").toBe(0);
+  expect(r.prefixBroken).toBe(0);
+  const d = await page.evaluate(() => {
+    const party = ["adv_row", "adv_gadd"].map(getAdventurer);
+    const far = getQuest("quest_herb"), near = getQuest("quest_barn_bite"), bond = getQuest("quest_bond_row");
+    const w = (q, p = party) => wayHomeFor(q, p, { abilities: ["way_home"] });
+    return {
+      far: w(far)?.scale, near: w(near), bond: w(bond), noRow: w(far, ["adv_gadd", "adv_mina"].map(getAdventurer)),
+      noAbility: wayHomeFor(far, party, {}), solo: w(far, [getAdventurer("adv_row")])?.line, multi: w(far)?.line
+    };
+  });
+  expect(d.far).toBeLessThan(1);
+  expect(d.near).toBeNull();
+  expect(d.bond).toBeNull();
+  expect(d.noRow).toBeNull();
+  expect(d.noAbility).toBeNull();
+  expect(d.solo).not.toContain("一行");
+  expect(d.multi).toContain("一行を先導した");
+  expect(errors).toEqual([]);
+});
+
+test("帰り道（ロウ）：出発のときに所要時間を縮めて遠征へ書く（持たないときは元のまま）", async ({ page }) => {
+  const errors = await freshPage(page);
+  await interview(page, "カズ");
+  const dur = (withAbility) => page.evaluate((withAbility) => {
+    state.expeditions = []; state.abilities = withAbility ? { way_home: { adventurerId: "adv_row", at: 1 } } : {};
+    state.adventurers.forEach((a) => { a.status = "待機中"; a.injury = null; });
+    state.money = 9999; saveState();
+    selectQuest("quest_herb"); selectedAdventurerIds = ["adv_row", "adv_gadd"]; selectedSharedItems = []; selectedObsHolders = [];
+    startExpedition();
+    const e = state.expeditions[state.expeditions.length - 1];
+    return { ms: e?.durationMs, base: getQuestDurationMs(getQuest("quest_herb")), abilities: e?.abilities ?? null };
+  }, withAbility);
+  const off = await dur(false);
+  expect(off.ms).toBe(off.base);
+  expect(off.abilities).toBeNull();
+  const on = await dur(true);
+  expect(on.abilities).toEqual(["way_home"]);
+  expect(on.ms).toBe(Math.round(on.base * await page.evaluate(() => window.masterAbilities.way_home.durationScale)));
+  expect(errors).toEqual([]);
+});
+
 test("感謝を読むとアビリティが開き、名簿のその人の頁に名前が出る（感謝の前は出ない）", async ({ page }) => {
   const errors = await freshPage(page);
   await interview(page, "カズ");
-  const cases = [["bond_elne", "adv_elne", "field_notes"]];
+  const cases = [["bond_elne", "adv_elne", "field_notes"], ["bond_row", "adv_row", "way_home"]];
   for (const [bond, adv, ability] of cases) {
     const shown = () => page.evaluate((adv) => { setRoute("adventurers"); editAdventurer(adv); return document.querySelector("[data-abilities]")?.innerText ?? ""; }, adv);
     expect(await shown()).toBe("");

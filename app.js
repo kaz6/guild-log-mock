@@ -5221,6 +5221,9 @@ function startExpedition() {
   // ★ アビリティは出発のときに確定して書く（EX-165 の追加）。持っていなければ鍵ごと書かない
   const abilityIds = partyAbilityIds(expedition.adventurerIds);
   if (abilityIds.length > 0) expedition.abilities = abilityIds;
+  // ★ 帰り道（ロウ。EX-171【3】）：遠出の依頼なら所要時間を縮める（出発のときに確定。勝ち負けには触らない）
+  const wayHome = wayHomeFor(quest, expedition.adventurerIds.map(getAdventurer).filter(Boolean), expedition);
+  if (wayHome) expedition.durationMs = Math.round(expedition.durationMs * wayHome.scale);
   // ★ 遠征費は出発した瞬間に引く（2026-09-23・EX-144）。**同時遠征は1本ずつ引いて判定する**（細則4）
   //   ——出発の操作が1本ずつなので、ここで引けば自然にそうなる。
   expedition.fee = questFee(quest);
@@ -8832,6 +8835,20 @@ function appendAbilityReportLines(report, expedition) {
   const party = expedition.adventurerIds.map(getAdventurer).filter(Boolean);
   const notes = fieldNotesLine(quest, party, expedition, report);
   if (notes) report.logs.push({ kind: "action", text: notes });
+  // 帰り道は最後に（帰りの話なので本文の終わりに置く）
+  const wayHome = wayHomeFor(quest, party, expedition);
+  if (wayHome) report.logs.push({ kind: "action", text: wayHome.line });
+}
+// 帰り道（ロウ）：場所が「遠出」の依頼で、ロウが編成にいて、出発のときに持っていた回だけ。定型の報告書の依頼には効かせない。
+//   効くなら { scale, line }（scale＝所要時間に掛ける倍率）、効かなければ null
+function wayHomeFor(quest, party, expedition) {
+  const ability = window.masterAbilities?.way_home;
+  if (!ability || questReach(quest) !== "遠出" || quest.bond || quest.fixedReport) return null;
+  if (!Array.isArray(expedition?.abilities) || !expedition.abilities.includes("way_home")) return null;
+  const owner = party.find((adv) => adv.id === ability.adventurerId);
+  if (!owner) return null;
+  const text = party.length === 1 ? ability.soloLine : ability.line;
+  return { scale: ability.durationScale ?? 1, line: text.replaceAll("【ロウ】", getDisplayName(owner)) };
 }
 // 覚え書き（エルネ）：観察対象のある依頼で、対象に出会った回（observationNotes が null でない）だけ。行は対象の種別で選ぶ
 function fieldNotesLine(quest, party, expedition, report) {
