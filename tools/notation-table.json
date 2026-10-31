@@ -1,0 +1,11 @@
+{
+ "説明": "表記の表（このリポジトリの写しではない独自の表。口調の表 tools/voice-check/voice-table.json は ops の写しなので、表記の決まりはこちらに置く）。avoid の語が画面や報告書に出る文（app.js・data-*.js・index.html）に無いことを tools/tests/current/notation.spec.js が確かめる。",
+ "rules": [
+  {
+   "avoid": "何時でも",
+   "use": "いつでも",
+   "since": "2026-10-31",
+   "reason": "「何時」は「なんじ」とも読めて、読む人が一瞬止まる（作者。DECISION_LOG 2026-10-31「表記の決まり『いつでも』はひらがな」）"
+  }
+ ]
+}
