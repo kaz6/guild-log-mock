@@ -272,6 +272,67 @@ window.masterQuests = [
     summary: "町の郵便所の奥で、埃をかぶってたの。急ぎの印がついてる。宛先は近くの村。",
     outcomes: { full: ["達成"], partial: [], fail: [] }
   },
+  // ★ 固有依頼の3〜5件目（2026-10-31・EX-171）。エルネ「日陰の草の言い伝え」／ロウ「閉じた門」／エルシー「エルシーと過ごす一日」。
+  //   形は鉄鍋の quest_bond_gadd と同じ（6枠の外の頼まれごと1枠・定型の報告書・費用0・報酬0・観察対象なし・短い・危険度1）。
+  //   ★ 本人と人間もう1人以上（エルシーは「エルシーと人間1人以上」）。判定は app.js の expeditionBlockedMessage。
+  //   ★ tags に依頼の種類（採集・護衛など）を付けない（特殊裁定などエンジンの引き金に触れさせない）。
+  //   ⚠️ 仮：area（台本の本文から）・分類・掲示板の概要（相談の1行を借りた）。
+  {
+    id: "quest_bond_elne",
+    place: "森",
+    title: "日陰の草の言い伝え",
+    category: "生活",
+    danger: "低",
+    area: "森の日陰の斜面",
+    durationBand: "near_10m",
+    hidden: true,
+    bond: "bond_elne",
+    requiresAdventurer: "adv_elne",
+    money: { fee: 0, reward: 0 },
+    recommended: [],
+    tags: ["頼まれごと"],
+    observationTarget: "なし",
+    summary: "この先の森なら、あるかもしれません。確かめに行きたいんです。手順は、全部書いてきました。",
+    outcomes: { full: ["達成"], partial: [], fail: [] }
+  },
+  {
+    id: "quest_bond_row",
+    place: "生活圏の外縁",
+    title: "閉じた門",
+    category: "生活",
+    danger: "低",
+    area: "南東の外れの町",
+    durationBand: "near_10m",
+    hidden: true,
+    bond: "bond_row",
+    requiresAdventurer: "adv_row",
+    money: { fee: 0, reward: 0 },
+    recommended: [],
+    tags: ["頼まれごと"],
+    observationTarget: "なし",
+    summary: "……一度だけ、見に行きたいんです。ひとりだと、帰り道が、怖くて。",
+    outcomes: { full: ["達成"], partial: [], fail: [] }
+  },
+  // ★ 題名の「エルシー」は、あだ名があればあだ名で出す（titleNameOf。app.js の questDisplayTitle）。
+  {
+    id: "quest_bond_elsie",
+    place: "村",
+    title: "エルシーと過ごす一日",
+    titleNameOf: "adv_elsie",
+    category: "生活",
+    danger: "低",
+    area: "村はずれの野原",
+    durationBand: "near_10m",
+    hidden: true,
+    bond: "bond_elsie",
+    requiresAdventurer: "adv_elsie",
+    money: { fee: 0, reward: 0 },
+    recommended: [],
+    tags: ["頼まれごと"],
+    observationTarget: "なし",
+    summary: "今日は一日、この子と過ごしてあげてくれませんか？",
+    outcomes: { full: ["達成"], partial: [], fail: [] }
+  },
   {
     id: "quest_old_house_cleanup",
     place: "町はずれ",

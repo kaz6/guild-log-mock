@@ -1,7 +1,7 @@
 // 固有依頼の連鎖の2人目：ミナの3拍（2026-10-30・EX-167）。文面は data-bonds.js（台本「2. ミナ」の確定稿）。
 // ★ 相談：鉄鍋の感謝を読んだあと、未達でない報告書がもう1通届いたときに1度だけ（感謝の直後に続けて出さない）。
 // ★ 頼まれごと「急ぎの印の一通」：6枠の外に1枠。ミナが必ず入る。定型の報告書。費用0・報酬0。
-// ★ 感謝：報告書に読了の封をしたとき1度だけ。そのあと願いが開く。次の人（エルネ）は文面が無いのでそこで止まる。
+// ★ 感謝：報告書に読了の封をしたとき1度だけ。そのあと願いが開く。次の人（エルネ）は報告書がもう1通届いてから（EX-171）。
 // ★ 【ミナ】はあだ名に追従（会話は描画のたび、報告書は作った時点で閉じる）。
 const { test, expect } = require("@playwright/test");
 const { freshPage, interview, seedClearedQuests } = require("../helpers/app");
@@ -96,7 +96,7 @@ test("頼まれごと「急ぎの印の一通」は6枠の外に1枠。ミナが
   expect(errors).toEqual([]);
 });
 
-test("感謝は封のあと1度だけ。読むとミナの願いが開き、次の人（エルネ）は文面が無いのでそこで止まる", async ({ page }) => {
+test("感謝は封のあと1度だけ。読むとミナの願いが開き、次の人（エルネ）の相談は報告書がもう1通届いてから（EX-171 で連鎖が続くようになった）", async ({ page }) => {
   const errors = await setup(page);
   await arrive(page, "full");
   await home(page);
@@ -114,12 +114,15 @@ test("感謝は封のあと1度だけ。読むとミナの願いが開き、次�
   expect(text).toContain("……間に合ってよかった。付き合ってくれて、ありがと。");
   const wish = await page.evaluate(() => { setRoute("adventurers"); editAdventurer("adv_mina"); return document.querySelector("[data-wish]").innerText.trim(); });
   expect(wish).toBe(`願い：${await page.evaluate(() => window.masterWishes.adv_mina)}`);
-  // さらに報告書が届いても、エルネには文面が無いので何も出ない
-  await arrive(page, "full");
+  // 感謝の直後は何も出ず、報告書がもう1通届くとエルネの相談が出る（EX-171。それまでは文面が無く止まっていた）
   await page.reload(); await page.waitForTimeout(300); await home(page);
   await expect(talk(page)).toHaveCount(0);
   await page.evaluate(() => setRoute("quests"));
   await expect(page.locator("[data-bond-board]")).toHaveCount(0);
+  await arrive(page, "full");
+  await home(page);
+  await expect(talk(page)).toHaveCount(1);
+  await expect(talk(page).locator("h3")).toHaveText("エルネ");
   expect(errors).toEqual([]);
 });
 
