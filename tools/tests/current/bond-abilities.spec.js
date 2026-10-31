@@ -103,10 +103,46 @@ test("帰り道（ロウ）：出発のときに所要時間を縮めて遠征�
   expect(errors).toEqual([]);
 });
 
+test("そばにいる（エルシー）：少人数の工程の依頼でだけ効く（4人では効かない）。行は遠出の工程の依頼だけ・人がひとりなら名前で", async ({ page }) => {
+  const errors = await freshPage(page);
+  const r = await page.evaluate(() => {
+    const parties = [["adv_elsie", "adv_gadd"], ["adv_elsie", "adv_gadd", "adv_mina"], ["adv_elsie", "adv_gadd", "adv_mina", "adv_elne"]];
+    const moved = {}; const lineAt = {}; let full = 0;
+    for (const q of state.quests) for (const ids of parties) for (let seed = 1; seed <= 8; seed++) {
+      const exp = { questId: q.id, adventurerIds: ids, adventurerItemIds: {}, seed: seed * 7919, departTimeOfDay: "昼", departWeather: "晴れ", startTime: 0, durationMs: 1, firstRunOfQuest: false };
+      const a = generateReport({ ...exp }), c = generateReport({ ...exp, abilities: ["beside_you"] });
+      const same = JSON.stringify({ ...a, id: 0, createdAt: 0 }) === JSON.stringify({ ...c, id: 0, createdAt: 0 });
+      if (!same) { moved[q.id] = true; if (ids.length === 4) full++; }
+      const line = c.logs.find((l) => l.text.includes("のそばに寄って座った"));
+      if (line) lineAt[q.id] = line.text;
+    }
+    return { moved: Object.keys(moved), lineAt, full,
+      reach: Object.fromEntries(state.quests.map((q) => [q.id, questReach(q)])),
+      fieldwork: state.quests.filter((q) => !q.bond && !q.fixedReport).map((q) => q.id) };
+  });
+  expect(r.full, "4人で出た回は何も変わらない").toBe(0);
+  // 戦闘だけで決まる依頼（工程を回さない）は動かない
+  for (const id of ["quest_barn_bite", "quest_field_mystery", "quest_caravan_escort", "quest_lingering_light", "quest_bond_gadd", "quest_guild_cleanup"]) {
+    expect(r.moved, id).not.toContain(id);
+  }
+  expect(r.moved.length).toBeGreaterThan(10);
+  // 行は遠出の依頼だけ
+  for (const id of Object.keys(r.lineAt)) expect(r.reach[id], id).toBe("遠出");
+  expect(Object.keys(r.lineAt)).toContain("quest_herb");
+  const pair = await page.evaluate(() => besideYouFor(getQuest("quest_herb"), ["adv_elsie", "adv_gadd"].map(getAdventurer), { abilities: ["beside_you"] }).line);
+  expect(pair).toBe("休みのたびに、エルシーは鉄鍋のそばに寄って座った。");
+  const many = await page.evaluate(() => besideYouFor(getQuest("quest_herb"), ["adv_elsie", "adv_gadd", "adv_mina"].map(getAdventurer), { abilities: ["beside_you"] }).line);
+  expect(many).toBe("休みのたびに、エルシーは一人ずつのそばに寄って座った。");
+  const near = await page.evaluate(() => besideYouFor(getQuest("quest_wedding_support"), ["adv_elsie", "adv_gadd"].map(getAdventurer), { abilities: ["beside_you"] }));
+  expect(near.line, "近場は効くが行は出さない").toBeNull();
+  expect(near.extraScale).toBeLessThan(1);
+  expect(errors).toEqual([]);
+});
+
 test("感謝を読むとアビリティが開き、名簿のその人の頁に名前が出る（感謝の前は出ない）", async ({ page }) => {
   const errors = await freshPage(page);
   await interview(page, "カズ");
-  const cases = [["bond_elne", "adv_elne", "field_notes"], ["bond_row", "adv_row", "way_home"]];
+  const cases = [["bond_elne", "adv_elne", "field_notes"], ["bond_row", "adv_row", "way_home"], ["bond_elsie", "adv_elsie", "beside_you"]];
   for (const [bond, adv, ability] of cases) {
     const shown = () => page.evaluate((adv) => { setRoute("adventurers"); editAdventurer(adv); return document.querySelector("[data-abilities]")?.innerText ?? ""; }, adv);
     expect(await shown()).toBe("");
