@@ -4823,12 +4823,15 @@ function renderReportDetail(reportId) {
   }
   if (report.readStampAt && !reportTyping.done) finishReportTypingState(); // 押印済みなら（どの経路で押されても）全文を出す
   const typingDone = reportTyping.done;
+  // ★ 固有依頼（5人の連鎖）の報告書には「出発時」を出さない（2026-11-01 の作者の決定・EX-172【3】）。
+  //   固有依頼は1日の話として書いた確定稿で、出発の時刻と天気に縛らない。文は1字も変えない。
+  const showDepartConditions = report.departConditions && !quest?.bond;
   const fieldRows = [
     ["地域", quest?.area],
     ["分類", quest?.category ?? "遠征"],
     ["編成", party],
     ["支給品", items],
-    ...(report.departConditions ? [["出発時", `${report.departConditions.timeOfDay} / ${report.departConditions.weather}`]] : []),
+    ...(showDepartConditions ? [["出発時", `${report.departConditions.timeOfDay} / ${report.departConditions.weather}`]] : []),
     ...(report.tensionLevel != null ? [["緊張度", `${report.tensionLevel}/5`]] : []),
     [quest?.category === "生活" ? "作業結果" : "結果", report.result]
   ];
