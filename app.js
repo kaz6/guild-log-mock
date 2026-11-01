@@ -5919,10 +5919,14 @@ function lifeQuestPersonalEventText(quest, party, rng, tensionValue = 50) {
     : pickOne(candidates, rng);
 }
 
-function statsPersonalityLog(party, rng) {
+function statsPersonalityLog(party, rng, quest = null) {
   const humans = humanMembers(party);
   if (!humans.length) return null;
   const soloStyle = usesSoloHumanStyle(party);
+  // ★ 近場の依頼（ギルドの隣の酒場など）では、遠出を前提にした行を出さない（2026-11-02）。
+  //   「撤退路を頭に入れて」「道標の傾き」は、隣の店への買い出しでは起きないことなので嘘になる。
+  //   行を候補から外すだけで、新しい文は足さない。
+  const isNearby = questReach(quest) === "近場";
   const statKeys = ["memory", "caution", "courage", "kindness", "curiosity"];
   const chosen = pickOne(statKeys, rng);
   const best = humans.reduce((a, b) => ((b.tendencies?.[chosen] ?? 0) > (a.tendencies?.[chosen] ?? 0) ? b : a));
@@ -5933,12 +5937,12 @@ function statsPersonalityLog(party, rng) {
     memory: [
       `${name}は、道中で気になった細部を手帳の端に書き留めていた。`,
       `${name}の報告書には、順番と向きまで細かく記録されていた。`,
-      `${name}は、道標の傾きと泥の跳ね方まで報告書に残していた。`
+      ...(isNearby ? [] : [`${name}は、道標の傾きと泥の跳ね方まで報告書に残していた。`])
     ],
     caution: [
       `${name}は、作業前に足場と帰り道を一つずつ確認した。`,
       `${name}は急がず、周囲の状況を確かめてから次の手順へ進んだ。`,
-      `${name}は撤退路を頭に入れてから動いた。報告書にもその手順が残っている。`
+      ...(isNearby ? [] : [`${name}は撤退路を頭に入れてから動いた。報告書にもその手順が残っている。`])
     ],
     courage: [
       `${name}は、物音のした方へ迷わず一歩進んだ。`,
@@ -8549,13 +8553,19 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
 
   // 悪天候
   if (departConditions?.weather === "小雨" || departConditions?.weather === "霧") {
-    return pickOne([
+    // ★ 「足元の悪い中での遠征」「靴の泥」は、小雨で遠出した回だけ（2026-11-02）。
+    //   霧では道はぬかるまないし、近場（ギルドの隣の酒場など）は「遠征」と書くほどの道のりがない。
+    //   それ以外の回は「〜の中、出かけた」の1行だけにする（抽選は1回引くので、乱数の消費は変わらない）。
+    const muddyTrip = departConditions.weather === "小雨" && questReach(quest) !== "近場";
+    const weatherLines = [];
+    if (muddyTrip) {
       // 「予定の仕事を終えた」は仕事を終えた回だけ（引き返し・護衛失敗などの回に出さない。EX-169）
-      (GROWTH_TIER_BY_RESULT[result] ?? "full") === "full"
+      weatherLines.push((GROWTH_TIER_BY_RESULT[result] ?? "full") === "full"
         ? `足元の悪い中での遠征だった。それでも${subject}は、予定の仕事を終えた。`
-        : `足元の悪い中での遠征だった。${partyActorSubject(party)}の靴は、帰り道まで泥を落とせなかった。`,
-      `${departConditions.weather}の中、${subject}は出かけた。帰還したとき、服はまだ乾いていなかった。`
-    ], rng);
+        : `足元の悪い中での遠征だった。${partyActorSubject(party)}の靴は、帰り道まで泥を落とせなかった。`);
+    }
+    weatherLines.push(`${departConditions.weather}の中、${subject}は出かけた。帰還したとき、服はまだ乾いていなかった。`);
+    return pickOne(weatherLines, rng);
   }
 
   // 結果別
@@ -9726,7 +9736,7 @@ function generateReportBody(expedition) {
     // ★ 天候を渡す（2026-09-12・EX-082）。遠征依頼フローは渡していて、ここだけ抜けていた＝渡し忘れ。
     //   渡さないと油紙の分岐が常に「使わずに済んだ」側に落ちる（廃屋は小雨でも食い違っていた）。
     const supply = supplyEventText(quest, party, adventurerItemIds, rng, expedition.departWeather ?? "晴れ");
-    const statsLog = statsPersonalityLog(party, rng);
+    const statsLog = statsPersonalityLog(party, rng, quest);
     const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
     const arrivalLines = {
@@ -9735,7 +9745,12 @@ function generateReportBody(expedition) {
         `町の小さな祝宴会場に着いた。外には招待客らしい人が少しずつ集まり始めていた。`
       ],
       quest_tavern_errand: [
-        `酒場はギルドの隣で、扉を開けるとまだ昼の支度の途中だった。`,
+        // ★ 「昼の支度」は朝・昼に出た回だけ（2026-11-02）。夕方・夜に出た回に出すと、
+        //   報告書の頭にある「出発時：夜」と食い違う＝報告書が嘘をつく。
+        //   差し替えは1行だけにして、候補の数（＝乱数の引き方）は変えない。
+        departConditions?.timeOfDay === "夕方" || departConditions?.timeOfDay === "夜"
+          ? `酒場はギルドの隣で、扉を開けると、もう最初の客が席についていた。`
+          : `酒場はギルドの隣で、扉を開けるとまだ昼の支度の途中だった。`,
         `隣の酒場に入ると、床を拭いていた主人が顔を上げた。`
       ],
       quest_old_house_cleanup: [
@@ -9821,7 +9836,7 @@ function generateReportBody(expedition) {
     : outcomeText(quest, party, itemIds, outcome, rng);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
-  const statsLog = statsPersonalityLog(party, rng);
+  const statsLog = statsPersonalityLog(party, rng, quest);
   const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
 
   const soloAdv = isSoloHumanParty(party);
