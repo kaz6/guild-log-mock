@@ -2331,7 +2331,13 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
     );
   }
 
-  return pickOne(pool, rng);
+  // ★ 隣の酒場への買い出しは、届け先がギルドそのもの。樽を届けたあとに「帰り道」と書くと順番が崩れる（EX-172【4】）。
+  //   選んだ文を差し替えるだけにして、候補の数（＝乱数の引き方）は変えない。
+  const line = pickOne(pool, rng);
+  if (quest.id === "quest_tavern_errand" && line?.startsWith("帰り道、")) {
+    return line.replace("帰り道、", "樽を運ぶあいだ、").replace("最後は先頭で門をくぐった", "最後は先頭でギルドの裏口をくぐった");
+  }
+  return line;
 }
 
 function withElsieLog(report, quest, party, rng) {
@@ -5651,7 +5657,13 @@ const lifeQuestEventPools = {
   },
   // ★ 最初のクエスト（2026-08-05・EX-053）。工程は2つだけで、樽を担ぐ工程は別に1行出す。
   quest_tavern_errand: {
-    workEvents: ["注文の伝達", "樽の受け取り", "台車の借り受け", "裏口までの搬入"]
+    workEvents: ["注文の伝達", "樽の受け取り", "台車の借り受け", "裏口までの搬入"],
+    // ★ 手順に順番がある（用件を伝える→樽を受け取る→台車を借りる→裏口へ運び込む）。
+    //   ordered：工程の行を、上の並びの順に書く（選ぶ乱数は変えず、書く順だけを並べ替える）。
+    //   arrivalStep：運び終えたときの工程。樽を担ぐ行・工程エンジンの行のあとに書く。
+    //   ★ なぜ：選んだ順のまま書くと「用件を伝える前に樽が出る」「樽を受け取る前に裏口を通る」になっていた（EX-172【4】）
+    ordered: true,
+    arrivalStep: "裏口までの搬入"
   }
 };
 
@@ -9852,7 +9864,18 @@ function generateReportBody(expedition) {
     }).filter(Boolean);
     add("", `支給品：${lifeSupplyDesc.length > 0 ? lifeSupplyDesc.join(" / ") : "なし"}。`);
     add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
-    workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng, departFilterOf(quest, departConditions))));
+    // 工程の行を作る。★ 乱数はこれまでどおり、選んだ順に引く（引く順を変えると、行の文まで入れ替わるため）
+    const workLines = workEvents.map((eventName) => ({
+      eventName,
+      text: workEventText(quest, eventName, party, itemIds, rng, departFilterOf(quest, departConditions))
+    }));
+    // ★ 手順に順番がある依頼は、書く順だけを手順の並びにそろえる（EX-172【4】）
+    if (pool.ordered) {
+      workLines.sort((a, b) => pool.workEvents.indexOf(a.eventName) - pool.workEvents.indexOf(b.eventName));
+    }
+    // 運び終えたときの工程（arrivalStep）は、担ぐ行・工程エンジンの行のあとへ回す
+    const arrivalStepLines = workLines.filter((work) => work.eventName === pool.arrivalStep);
+    workLines.filter((work) => work.eventName !== pool.arrivalStep).forEach((work) => add("action", work.text));
     // ★ 樽を担ぐ工程は担ぎ手が変わると文が変わる（2026-08-05・EX-053）。
     let suppressSupportLine = false;
     if (quest.id === "quest_tavern_errand") {
@@ -9868,6 +9891,7 @@ function generateReportBody(expedition) {
       if (suppressSupportLine && line.support) return;
       add(line.kind, line.text, line.tag);
     });
+    arrivalStepLines.forEach((work) => add("action", work.text));
     if (personal) add("drama", personal);
     if (supply) add("drama", supply);
     if (statsLog) add("drama", statsLog);
