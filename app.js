@@ -7678,9 +7678,11 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   ]));
 
   if (timeOfDay === "夕方" || timeOfDay === "夜") {
+    // ★ 2文とも夕方の情景。夜に出た回は代わりの文にする（矛盾検査係の指摘・EX-172）
     logs.push(pick([
-      `木の影が長く、森の中は思ったより早く暗くなっていた。`,
-      `夕方の森は静かで、遠くの水音だけがはっきり聞こえた。`
+      { text: `木の影が長く、森の中は思ったより早く暗くなっていた。`, times: ["夕方"] },
+      { text: `夕方の森は静かで、遠くの水音だけがはっきり聞こえた。`, times: ["夕方"] },
+      { text: `夜の森は暗く、遠くの水音だけがはっきり聞こえた。`, times: ["夜"], fallback: true }
     ]));
   }
 
