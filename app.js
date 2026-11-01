@@ -5431,10 +5431,69 @@ function tensionCandidateInRange(entry, tensionValue) {
   return tensionValue >= min && tensionValue <= max;
 }
 
-function pickTensionOne(candidates, tensionValue, rng) {
+// ── 出発時の条件で文の候補を絞る（2026-11-02・EX-172）──────────────────────────
+// 候補に次の条件を書くと、合わない回にはその文を出さない（minTension／maxTension と同じ考え方）。
+//   times    … 出発の時刻（["朝", "昼", "夕方", "夜"] のうち、出してよいもの）
+//   weathers … 出発の天気（["晴れ", "曇り", "小雨", "風が強い", "霧"] のうち、出してよいもの）
+//   reach    … 依頼の距離（"近場" か "遠出"。場所のタグ masterPlaces を引く）
+//   例：{ text: "朝の光が差す中、…", times: ["朝"] }
+// 条件を書いていない文（ただの文字列も）は、今までどおりいつでも出る。
+// ★ なぜ：報告書の頭に「出発時：夜 / 霧」と出ているのに、本文が「朝の光」「小雨で」と書くと、報告書が嘘をつく。
+function departFilterOf(quest, departConditions) {
+  return {
+    timeOfDay: departConditions?.timeOfDay ?? null,
+    weather: departConditions?.weather ?? null,
+    reach: questReach(quest)
+  };
+}
+
+// その文が、今回の出発時の条件に合うか。条件が分からない回（古いセーブなど）は絞らない
+function candidateFitsDepart(entry, depart) {
+  if (!depart || typeof entry === "string" || entry == null) return true;
+  if (entry.times && depart.timeOfDay && !entry.times.includes(depart.timeOfDay)) return false;
+  if (entry.weathers && depart.weather && !entry.weathers.includes(depart.weather)) return false;
+  if (entry.reach && depart.reach && entry.reach !== depart.reach) return false;
+  return true;
+}
+
+// 候補から1つ選ぶ（出発時の条件つき）。
+// ★ 乱数は必ず1回だけ引く（引く回数が変わると、そのあとの結末や行数まで動いてしまうため）。
+//   1. 引いた文が条件に合えば、そのまま使う（＝食い違いの無い回は、今までと1字も変わらない）
+//   2. 合わなければ、条件に合う文の中から、同じ乱数で選び直す
+//   3. 合う文が1つも無いときだけ、fallback: true の文（代わりの文）から選ぶ。
+//      代わりの文はふだんの抽選に入れない（入れると候補の数が変わり、食い違いの無い回の文まで動くため）
+function pickFittingCandidate(list, depart, rng) {
+  if (!list || list.length === 0) return null;
+  const usual = list.filter((entry) => !entry?.fallback);
+  const roll = rng();
+  const first = usual[Math.floor(roll * usual.length)];
+  if (candidateFitsDepart(first, depart)) return first;
+  const fitting = usual.filter((entry) => candidateFitsDepart(entry, depart));
+  const pool = fitting.length > 0
+    ? fitting
+    : list.filter((entry) => entry?.fallback && candidateFitsDepart(entry, depart));
+  // 合う文が無いときは行を消さず、引いた文を出す（総当たりの検査で、ここに来る組が0件であることを確かめる）
+  if (pool.length === 0) return first;
+  return pool[Math.floor(roll * pool.length)];
+}
+
+// pickOne の代わりに使う（出発時の条件つき）。文を返す
+function pickDepartOne(list, depart, rng) {
+  const entry = pickFittingCandidate(list, depart, rng);
+  return entry == null ? null : candidateText(entry);
+}
+
+// 乱数を引かずに、上から見て条件に合う最初の文を返す（結末文など、もともと1つに決まっている文で使う）
+function firstFittingText(list, depart) {
+  const entry = list.find((candidate) => candidateFitsDepart(candidate, depart)) ?? list[list.length - 1];
+  return entry == null ? null : candidateText(entry);
+}
+
+// depart（出発時の条件）は任意。渡すと、条件に合わない文を候補から外す（EX-172）
+function pickTensionOne(candidates, tensionValue, rng, depart = null) {
   if (!candidates || candidates.length === 0) return null;
   const pool = candidates.filter((entry) => tensionCandidateInRange(entry, tensionValue));
-  const entry = pickOne(pool.length > 0 ? pool : candidates, rng);
+  const entry = pickFittingCandidate(pool.length > 0 ? pool : candidates, depart, rng);
   return entry ? candidateText(entry) : null;
 }
 
@@ -5471,7 +5530,8 @@ function formatNames(party) {
   return party.map(getDisplayName).join("、");
 }
 
-function generateWeatherLog(quest, party, weather, rng) {
+// depart＝出発時の条件（EX-172）。「朝の光」の文は朝に出た回だけ
+function generateWeatherLog(quest, party, weather, rng, depart = null) {
   const humans = humanMembers(party);
   const soloOnly = isSoloHumanParty(party);
   const companion = isCompanionParty(party);
@@ -5484,8 +5544,10 @@ function generateWeatherLog(quest, party, weather, rng) {
   if (soloOnly) {
     const table = {
       晴れ: [
-        `朝の光が差す中、${leader}は${quest.area}へひとりで向かった。出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`,
-        `空はよく晴れていた。視界が広く、${leader}は遠くの道標まで確認しながら一人で進んだ。`
+        { text: `朝の光が差す中、${leader}は${quest.area}へひとりで向かった。出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`, times: ["朝"] },
+        // ★ 「視界が広く、遠くの道標まで」は夜には成り立たないので、夜は下の代わりの文にする（EX-172）
+        { text: `空はよく晴れていた。視界が広く、${leader}は遠くの道標まで確認しながら一人で進んだ。`, times: ["朝", "昼", "夕方"] },
+        { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら、${quest.area}へひとりで向かった。`, times: ["夜"], fallback: true }
       ],
       曇り: [
         `曇り空の下、${leader}は荷物を確かめてから${quest.area}へひとりで向かった。天候が崩れる前に戻れるよう、足を止めずに進んだ。`,
@@ -5504,14 +5566,15 @@ function generateWeatherLog(quest, party, weather, rng) {
         `霧で視界が悪い。${leader}は立ち止まって耳を澄ませ、足元を確かめてから歩き続けた。`
       ]
     };
-    return pickOne(table[weather] ?? table["晴れ"], rng);
+    return pickDepartOne(table[weather] ?? table["晴れ"], depart, rng);
   }
 
   if (companion) {
     const table = {
       晴れ: [
-        `朝の光が差す中、${group}は${quest.area}へ向かった。${leader}の足元をエルシーが小走りに追い、装備を確かめてから歩き始めた。`,
-        `空はよく晴れていた。${leader}は遠くの道標まで確認し、エルシーは足元から先を睨みながら進んだ。`
+        { text: `朝の光が差す中、${group}は${quest.area}へ向かった。${leader}の足元をエルシーが小走りに追い、装備を確かめてから歩き始めた。`, times: ["朝"] },
+        { text: `空はよく晴れていた。${leader}は遠くの道標まで確認し、エルシーは足元から先を睨みながら進んだ。`, times: ["朝", "昼", "夕方"] },
+        { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら歩き、エルシーはすぐ横を進んだ。`, times: ["夜"], fallback: true }
       ],
       曇り: [
         `曇り空の下、${group}は${quest.area}へ向かった。${leader}は荷造りを確かめ、エルシーも落ち着かずに匂いを嗅いでいた。`,
@@ -5530,13 +5593,14 @@ function generateWeatherLog(quest, party, weather, rng) {
         `霧で視界が悪い。${leader}は足元を確かめてから歩き続け、エルシーは背中に寄り添うように進んだ。`
       ]
     };
-    return pickOne(table[weather] ?? table["晴れ"], rng);
+    return pickDepartOne(table[weather] ?? table["晴れ"], depart, rng);
   }
 
   const table = {
     晴れ: [
-      `朝の光が差す中、一行は${quest.area}へ向かった。足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`,
-      `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くの道標まで確認しながら進んだ。`
+      { text: `朝の光が差す中、一行は${quest.area}へ向かった。足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`, times: ["朝"] },
+      { text: `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くの道標まで確認しながら進んだ。`, times: ["朝", "昼", "夕方"] },
+      { text: `空はよく晴れ、星が出ていた。一行は${quest.area}へ向かい、${getDisplayName(careful)}が足元を確かめながら先を歩いた。`, times: ["夜"], fallback: true }
     ],
     曇り: [
       `曇り空の下、一行は${quest.area}へ向かった。${getDisplayName(careful)}は「雨になるかもしれない」と呟き、荷造りを確かめ直した。`,
@@ -5555,7 +5619,7 @@ function generateWeatherLog(quest, party, weather, rng) {
       `霧で視界が悪い。${getDisplayName(brave)}は先に進もうとしたが、仲間の声を聞いて歩幅を落とした。`
     ]
   };
-  return pickOne(table[weather] ?? table["晴れ"], rng);
+  return pickDepartOne(table[weather] ?? table["晴れ"], depart, rng);
 }
 
 const questEventPools = {
@@ -5619,7 +5683,8 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       `${name(scout)}は道標の根元を調べ、最近誰かが土を踏み固めた跡を見つけた。`
     ],
     商人とのすれ違い: [
-      `途中で荷車を引く商人とすれ違った。商人は「その先の家なら、夕方には戻るはずだ」と教えてくれた。`,
+      // ★ 「夕方には戻る」は、まだ夕方になっていない回（朝・昼に出た回）だけ（EX-172）
+      { text: `途中で荷車を引く商人とすれ違った。商人は「その先の家なら、夕方には戻るはずだ」と教えてくれた。`, times: ["朝", "昼"] },
       `商人は手紙の宛名を見ても首をかしげたが、古い屋号だけは聞き覚えがあると言った。`
     ],
     封蝋の確認: [
@@ -5713,10 +5778,12 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       `${name(scout)}は根元の土を触り、次の雨でまた傾く可能性が高いと判断した。`
     ]
   };
-  return pickOne(generic[eventName] ?? [`${eventName}について、短い確認を行った。`], rng);
+  // ★ 出発時の条件に合わない文は外す（EX-172。options.depart が無ければ今までどおり）
+  return pickDepartOne(generic[eventName] ?? [`${eventName}について、短い確認を行った。`], options.depart ?? null, rng);
 }
 
-function workEventText(quest, eventName, party, itemIds, rng) {
+// depart＝出発時の条件（EX-172）。合わない文は候補から外す
+function workEventText(quest, eventName, party, itemIds, rng, depart = null) {
   const solo = isSoloHumanParty(party);
   const hasPost = humanMembers(party).some((a) => a.background === "郵便配達人");
   const caregiver = findByTrait(party, "personality", "世話焼き");
@@ -5775,7 +5842,8 @@ function workEventText(quest, eventName, party, itemIds, rng) {
     ],
     夜間の見回り: [
       `${name(guard)}は会場の裏口と入口を順番に確認した。宿場仕事そのままの動きで、静かに一回りを済ませた。`,
-      `夜の見回り中、${name(brave)}は外の縁台で眠りかけていた年配の客を見つけた。声をかけ、中の席へ案内した。`
+      // ★ 「夜の見回り中」は夕方・夜に出た回だけ（朝・昼に出た回に出すと、出発時の時刻と食い違う。EX-172）
+      { text: `夜の見回り中、${name(brave)}は外の縁台で眠りかけていた年配の客を見つけた。声をかけ、中の席へ案内した。`, times: ["夕方", "夜"] }
     ],
     飾り紐の受け渡し: [
       `飾り紐を花嫁の控え室まで届けた。${name(caregiver)}は袋を開けず、そっと両手で渡した。受け取った人が小さく頭を下げた。`,
@@ -5818,7 +5886,7 @@ function workEventText(quest, eventName, party, itemIds, rng) {
   };
 
   const allEvents = { ...weddingEvents, ...cleanupEvents, ...tavernEvents };
-  return pickOne(allEvents[eventName] ?? [`${eventName}について、作業を行った。`], rng);
+  return pickDepartOne(allEvents[eventName] ?? [`${eventName}について、作業を行った。`], depart, rng);
 }
 
 function personalEventText(quest, party, rng) {
@@ -6242,14 +6310,18 @@ function outcomeSlotValues(quest, party) {
   };
 }
 
-function outcomeTextPart(value, party, itemIds) {
+// value の形は3つ：文字列／{ when, yes, no }（編成・支給品で分ける）／配列（出発時の条件で分ける。EX-172）。
+//   配列のときは、上から見て出発時の条件（times・weathers・reach）に合う最初の文を使う。乱数は引かない。
+function outcomeTextPart(value, party, itemIds, depart = null) {
+  if (Array.isArray(value)) return firstFittingText(value, depart);
   if (typeof value !== "object" || value === null) return value;
   const test = OUTCOME_CONDITIONS[value.when];
   return test && test({ party, itemIds }) ? value.yes : value.no;
 }
 
 // 依頼の結末文を引く。鍵が無ければ fallbackKey（既定は最初の鍵）に落ちる。
-function questOutcomeText(questId, key, party, itemIds, fallbackKey) {
+// depart＝出発時の条件（任意。EX-172）。結末文が配列のときに、条件に合う文を選ぶのに使う
+function questOutcomeText(questId, key, party, itemIds, fallbackKey, depart = null) {
   const table = window.masterOutcomeTexts?.[questId];
   if (!table) return null;
   const entry = table[key] ?? table[fallbackKey ?? Object.keys(table)[0]];
@@ -6261,15 +6333,15 @@ function questOutcomeText(questId, key, party, itemIds, fallbackKey) {
   const fill = (text) => (typeof text === "string" ? dropRepeatedSubject(text).replace(/\{[^}]+\}/g, (m) => slots[m] ?? m) : text);
   return {
     result: entry.result,
-    summary: fill(outcomeTextPart(entry.summary, party, itemIds)),
-    line: fill(outcomeTextPart(entry.line, party, itemIds)),
-    after: fill(outcomeTextPart(entry.after, party, itemIds)),
-    history: fill(outcomeTextPart(entry.history, party, itemIds))
+    summary: fill(outcomeTextPart(entry.summary, party, itemIds, depart)),
+    line: fill(outcomeTextPart(entry.line, party, itemIds, depart)),
+    after: fill(outcomeTextPart(entry.after, party, itemIds, depart)),
+    history: fill(outcomeTextPart(entry.history, party, itemIds, depart))
   };
 }
 
-function outcomeText(quest, party, itemIds, outcome, rng) {
-  return questOutcomeText(quest.id, outcome, party, itemIds);
+function outcomeText(quest, party, itemIds, outcome, rng, depart = null) {
+  return questOutcomeText(quest.id, outcome, party, itemIds, undefined, depart);
 }
 
 function lifeQuestOutcomeText(quest, party, itemIds, outcome, rng) {
@@ -7248,8 +7320,8 @@ function bridgeRepairOutcomeText(outcome, party, rng) {
   return questOutcomeText("quest_old_bridge_repair", outcome, party, []);
 }
 
-function churchPatrolOutcomeText(outcome, party, rng) {
-  return questOutcomeText("quest_church_patrol", outcome, party, []);
+function churchPatrolOutcomeText(outcome, party, rng, depart = null) {
+  return questOutcomeText("quest_church_patrol", outcome, party, [], undefined, depart);
 }
 
 function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -7443,8 +7515,8 @@ function generateBridgeRepairLogs(quest, party, adventurerItemIds, rng, context 
   return logs;
 }
 
-function herbDeliveryOutcomeText(outcome, party, rng) {
-  return questOutcomeText("quest_herb_delivery", outcome, party, []);
+function herbDeliveryOutcomeText(outcome, party, rng, depart = null) {
+  return questOutcomeText("quest_herb_delivery", outcome, party, [], undefined, depart);
 }
 
 function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context = {}) {
@@ -7564,7 +7636,9 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   const timeOfDay = context.departConditions?.timeOfDay ?? "昼";
   const tensionValue = context.tensionValue ?? 50;
   const outcome = context.outcome ?? "保護";
-  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  // 出発時の条件に合わない文（朝に出たのに「夕方になっても」など）は候補から外す（EX-172）
+  const depart = departFilterOf(quest, context.departConditions);
+  const pick = (list) => pickTensionOne(list, tensionValue, rng, depart);
   const nm = (adv) => adv ? getDisplayName(adv) : null;
   const row = party.find((a) => a.id === "adv_row");
   const gadd = party.find((a) => a.id === "adv_gadd");
@@ -7580,12 +7654,12 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
 
   logs.push(pick([
     `依頼人は、薬草採りが朝から戻っていないとだけ言った。持っていた袋の色と、向かった森の入口が報告書に記された。`,
-    `夕方になっても戻らない薬草採りのことを、依頼人は短く説明した。袋の色と採りに行った森の入口だけが手がかりだった。`
+    { text: `夕方になっても戻らない薬草採りのことを、依頼人は短く説明した。袋の色と採りに行った森の入口だけが手がかりだった。`, times: ["夕方", "夜"] }
   ]));
 
   logs.push(pick([
     `${partySubject(party)}は${quest.area}へ向かった。森の浅い場所だけを確認する予定だった。`,
-    `森の入口に着くと、昼の足跡と夕方のぬかるみが混ざっていた。`
+    { text: `森の入口に着くと、昼の足跡と夕方のぬかるみが混ざっていた。`, times: ["夕方", "夜"] }
   ]));
 
   if (timeOfDay === "夕方" || timeOfDay === "夜") {
@@ -7603,8 +7677,9 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
 
   if (weather === "小雨" || weather === "霧") {
     logs.push({ tag: "weather", text: pick([
-      `霧で視界が悪く、足跡の先が読みにくかった。`,
-      `小雨で足跡が滲み、古いものと新しいものの区別に時間がかかった。`
+      // ★ 霧の文は霧の回、小雨の文は小雨の回だけ（入れ替わって出ていた。EX-172）
+      { text: `霧で視界が悪く、足跡の先が読みにくかった。`, weathers: ["霧"] },
+      { text: `小雨で足跡が滲み、古いものと新しいものの区別に時間がかかった。`, weathers: ["小雨"] }
     ]) });
   }
 
@@ -7663,7 +7738,9 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   const weather = context.departConditions?.weather ?? "晴れ";
   const timeOfDay = context.departConditions?.timeOfDay ?? "夕方";
   const tensionValue = context.tensionValue ?? 50;
-  const pick = (list) => pickTensionOne(list, tensionValue, rng);
+  // 出発時の条件に合わない文（朝に出たのに「夕暮れ」など）は候補から外す（EX-172）
+  const depart = departFilterOf(quest, context.departConditions);
+  const pick = (list) => pickTensionOne(list, tensionValue, rng, depart);
   const nm = (adv) => adv ? getDisplayName(adv) : null;
   const row = party.find((a) => a.id === "adv_row");
   const gadd = party.find((a) => a.id === "adv_gadd");
@@ -7684,20 +7761,23 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   ]));
 
   logs.push(pick([
-    `帰り道と荷物の持ち方を確認し、暗くなる前に着く見込みを伝えた。`,
+    { text: `帰り道と荷物の持ち方を確認し、暗くなる前に着く見込みを伝えた。`, times: ["朝", "昼", "夕方"] },
     `親は荷物の中身を簡単に説明し、町外れの家までの道を指さした。`
   ]));
 
   logs.push(pick([
-    `夕暮れの街道は人の姿が少なくなり、店の灯りだけが遠くに残っていた。`,
-    `空はまだ明るいが、路地の影は早く深くなっていた。`,
-    { text: `風のない夕方、街道は思ったより静かだった。`, maxTension: 55 }
+    // ★ 時刻を書いた文は、その時刻に出た回だけ。どれも合わない回（朝・夜）は代わりの文にする（EX-172）
+    { text: `夕暮れの街道は人の姿が少なくなり、店の灯りだけが遠くに残っていた。`, times: ["夕方"] },
+    { text: `空はまだ明るいが、路地の影は早く深くなっていた。`, times: ["昼", "夕方"] },
+    { text: `風のない夕方、街道は思ったより静かだった。`, maxTension: 55, times: ["夕方"], weathers: ["晴れ", "曇り", "小雨", "霧"] },
+    { text: `街道は人の行き来が少なく、足音がよく響いた。`, fallback: true }
   ]));
 
   if (weather === "小雨" || weather === "霧") {
     logs.push({ tag: "weather", text: pick([
-      `小雨で石畳が滑りやすく、親は子どもの手を強く握った。`,
-      `霧で先の曲がり角が見えにくかったが、人の声はまだ聞こえていた。`
+      // ★ 小雨の文は小雨の回、霧の文は霧の回だけ（入れ替わって出ていた。EX-172）
+      { text: `小雨で石畳が滑りやすく、親は子どもの手を強く握った。`, weathers: ["小雨"] },
+      { text: `霧で先の曲がり角が見えにくかったが、人の声はまだ聞こえていた。`, weathers: ["霧"] }
     ]) });
   }
 
@@ -7715,7 +7795,11 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   else if (caregiver && isHumanAdventurer(caregiver)) work.push(`${nm(caregiver)}は子どもの歩幅に合わせ、休みどころをこまめに確かめた。`);
 
   if (careful && isHumanAdventurer(careful) && !work.some((line) => line.includes(nm(careful)))) {
-    work.push(`${nm(careful)}は暗くなる前に危ない坂を避け、明るい道を優先した。`);
+    // ★ 夜に出た回は、もう暗い（「暗くなる前に」と書かない。乱数は引かない。EX-172）
+    work.push(firstFittingText([
+      { text: `${nm(careful)}は暗くなる前に危ない坂を避け、明るい道を優先した。`, times: ["朝", "昼", "夕方"] },
+      `${nm(careful)}は暗い坂を避け、灯りのある道を優先した。`
+    ], depart));
   }
 
   while (work.length > 3) work.splice(Math.floor(rng() * work.length), 1);
@@ -7725,7 +7809,7 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
     logs.push(pick([
       `エルシーは親子の少し後ろを歩き、子どもが立ち止まるたびに振り返った。`,
       `エルシーは子どものそばを小走りに進み、門の前まで離れなかった。`,
-      `エルシーは夕暮れの足音に耳を立てながら、親子の後ろをついていった。`
+      { text: `エルシーは夕暮れの足音に耳を立てながら、親子の後ろをついていった。`, times: ["夕方"] }
     ]));
   }
 
@@ -7754,7 +7838,7 @@ function generateEveningEscortLogs(quest, party, adventurerItemIds, rng, context
   }
 
   logs.push(pick([
-    `町外れの家が見えてきた。戸口の灯りが一つだけ点いていた。`,
+    { text: `町外れの家が見えてきた。戸口の灯りが一つだけ点いていた。`, times: ["夕方", "夜"] },
     `家の前の石段が見えた。親は荷物の数を数え直し、一つも欠けていないことを確かめた。`
   ]));
 
@@ -9237,7 +9321,7 @@ function generateReportBody(expedition) {
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
-      : churchPatrolOutcomeText(outcome, party, rng);
+      : churchPatrolOutcomeText(outcome, party, rng, departFilterOf(quest, departConditions));
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
@@ -9344,7 +9428,7 @@ function generateReportBody(expedition) {
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
-      : herbDeliveryOutcomeText(outcome, party, rng);
+      : herbDeliveryOutcomeText(outcome, party, rng, departFilterOf(quest, departConditions));
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
@@ -9768,7 +9852,7 @@ function generateReportBody(expedition) {
     }).filter(Boolean);
     add("", `支給品：${lifeSupplyDesc.length > 0 ? lifeSupplyDesc.join(" / ") : "なし"}。`);
     add("", pickOne(arrivalLines[quest.id] ?? [`${quest.area}に到着した。`], rng));
-    workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng)));
+    workEvents.forEach((eventName) => add("action", workEventText(quest, eventName, party, itemIds, rng, departFilterOf(quest, departConditions))));
     // ★ 樽を担ぐ工程は担ぎ手が変わると文が変わる（2026-08-05・EX-053）。
     let suppressSupportLine = false;
     if (quest.id === "quest_tavern_errand") {
@@ -9825,6 +9909,8 @@ function generateReportBody(expedition) {
   const pool = questEventPools[quest.id];
 
   const weather = expedition.departWeather ?? "晴れ";
+  // 出発時の条件（時刻・天気・距離）。合わない文を候補から外すのに使う（EX-172）
+  const depart = departFilterOf(quest, departConditions);
   const roadEvents = pickMany(pool.roadEvents, 2 + Math.floor(rng() * 2), rng);
   // 支給品と編成の効きは共通経路へ移した（2026-07-31）。油紙＝天候、古地図＝道の負荷、
   // 薬草師や配達人の腕＝その依頼で使う育成値、として工程の判定に入る。
@@ -9833,7 +9919,7 @@ function generateReportBody(expedition) {
 
   const outcomeInfo = field.turnBack
     ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
-    : outcomeText(quest, party, itemIds, outcome, rng);
+    : outcomeText(quest, party, itemIds, outcome, rng, depart);
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng, quest);
@@ -9849,8 +9935,8 @@ function generateReportBody(expedition) {
     return advItems.length > 0 ? `${getDisplayName(adv)}：${advItems.join("・")}` : null;
   }).filter(Boolean);
   add("", `編成：${formatNames(party)}。支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
-  add("", generateWeatherLog(quest, party, weather, rng), "weather"); // ★ 天候の行の印（EX-157【2】）
-  roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng, { porridge: field.porridge })));
+  add("", generateWeatherLog(quest, party, weather, rng, depart), "weather"); // ★ 天候の行の印（EX-157【2】）
+  roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng, { porridge: field.porridge, depart })));
   field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
@@ -10993,7 +11079,28 @@ function tavernBarrelLine(fw, party, rng) {
 
 function fieldworkSetbackTexts(ev) {
   if (ev.cause === "weather") {
-    return [
+    // ★ 天気の名前をそのまま文に差し込まない（「曇りに足元と手元を取られ」「風が強いに〜」と崩れていた。EX-172）。
+    //   天気ごとに言い回しを持つ。どの天気も2文ずつ＝候補の数（乱数の引き方）は変えない。
+    //   小雨・霧は前のままの文（崩れていなかった）。
+    const byWeather = {
+      曇り: [
+        `曇り空で手元が暗く、${ev.name}の手が止まった。`,
+        `曇りが続き、${ev.name}は同じ工程をやり直すことになった。`
+      ],
+      風が強い: [
+        `強い風に足元と手元を取られ、${ev.name}の手が止まった。`,
+        `風がやまず、${ev.name}は同じ工程をやり直すことになった。`
+      ],
+      小雨: [
+        `小雨に足元と手元を取られ、${ev.name}の手が止まった。`,
+        `小雨が続き、${ev.name}は同じ工程をやり直すことになった。`
+      ],
+      霧: [
+        `霧に足元と手元を取られ、${ev.name}の手が止まった。`,
+        `霧が続き、${ev.name}は同じ工程をやり直すことになった。`
+      ]
+    };
+    return byWeather[ev.weather] ?? [
       `${ev.weather}に足元と手元を取られ、${ev.name}の手が止まった。`,
       `${ev.weather}が続き、${ev.name}は同じ工程をやり直すことになった。`
     ];
