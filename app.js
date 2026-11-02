@@ -5654,7 +5654,9 @@ const questEventPools = {
 
 const lifeQuestEventPools = {
   quest_wedding_support: {
-    workEvents: ["長椅子の設営", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り", "飾り紐の受け渡し"]
+    workEvents: ["長椅子の設営", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り", "飾り紐の受け渡し"],
+    // 書く順（式の前の支度 → 客が来てから → 夜）。★ workEvents の並びは変えない（変えると選ばれる工程が変わる）
+    order: ["長椅子の設営", "飾り紐の受け渡し", "厨房の手伝い", "酒樽の運搬", "招待客の案内", "迷子対応", "夜間の見回り"]
   },
   quest_old_house_cleanup: {
     workEvents: ["壊れた家具の撤去", "床板の確認", "古い手紙の整理", "生活用品の確認", "近所の聞き取り", "茶器の梱包", "部屋割りの確認"]
@@ -5663,10 +5665,10 @@ const lifeQuestEventPools = {
   quest_tavern_errand: {
     workEvents: ["注文の伝達", "樽の受け取り", "台車の借り受け", "裏口までの搬入"],
     // ★ 手順に順番がある（用件を伝える→樽を受け取る→台車を借りる→裏口へ運び込む）。
-    //   ordered：工程の行を、上の並びの順に書く（選ぶ乱数は変えず、書く順だけを並べ替える）。
+    //   order：工程の行を書く順（選ぶ乱数は変えず、書く順だけを並べ替える）。
     //   arrivalStep：運び終えたときの工程。樽を担ぐ行・工程エンジンの行のあとに書く。
     //   ★ なぜ：選んだ順のまま書くと「用件を伝える前に樽が出る」「樽を受け取る前に裏口を通る」になっていた（EX-172【4】）
-    ordered: true,
+    order: ["注文の伝達", "樽の受け取り", "台車の借り受け", "裏口までの搬入"],
     arrivalStep: "裏口までの搬入"
   }
 };
@@ -9336,7 +9338,9 @@ function generateReportBody(expedition) {
     add("", `支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
 
     const patrolLogs = generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    // ★ 最後の1行は巡回の締め（「門へ戻った」など）。工程エンジンの行と結末の行（柵を結ぶ など）のあとに書く（EX-172【4】）
+    // ★ 最後の1行は巡回の締め（「門へ戻った」など）。工程エンジンの行・結末の行（柵を結ぶ など）・結末の余白のあと、
+    //   報告書のいちばん最後に書く（EX-172【4】）。余白と同じ種類（afterglow）にするのは、エルシーの行（withElsieLog）が
+    //   最後の余白の前に入る作りなので、締めの行より前にエルシーの行が来るようにするため
     const closingLine = patrolLogs[patrolLogs.length - 1];
     patrolLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
@@ -9345,8 +9349,8 @@ function generateReportBody(expedition) {
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : churchPatrolOutcomeText(outcome, party, rng, departFilterOf(quest, departConditions));
     add("action", outcomeInfo.line);
-    add("action", closingLine);
     add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
+    add("afterglow", closingLine);
 
     return finalizeQuestReport({
       expedition,
@@ -9724,8 +9728,11 @@ function generateReportBody(expedition) {
     const escortLogs = generateEveningEscortLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue,
       // ★ 「使わずに済んだ」と書いてよいかの事実（2026-09-12・EX-082）
       whistleUsed: (field.fw?.events ?? []).some((e) => e.itemId === "item_whistle") });
-    escortLogs.forEach((text) => add("action", text));
+    // ★ 最後の1行は家に着いたところ。工程エンジンの行（道中）より先に書くと、着いたあとに道中が続く（EX-172【4】）
+    const arrivalLine = escortLogs[escortLogs.length - 1];
+    escortLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
+    add("action", arrivalLine);
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
@@ -9886,8 +9893,8 @@ function generateReportBody(expedition) {
       text: workEventText(quest, eventName, party, itemIds, rng, departFilterOf(quest, departConditions))
     }));
     // ★ 手順に順番がある依頼は、書く順だけを手順の並びにそろえる（EX-172【4】）
-    if (pool.ordered) {
-      workLines.sort((a, b) => pool.workEvents.indexOf(a.eventName) - pool.workEvents.indexOf(b.eventName));
+    if (pool.order) {
+      workLines.sort((a, b) => pool.order.indexOf(a.eventName) - pool.order.indexOf(b.eventName));
     }
     // 運び終えたときの工程（arrivalStep）は、担ぐ行・工程エンジンの行のあとへ回す
     const arrivalStepLines = workLines.filter((work) => work.eventName === pool.arrivalStep);
