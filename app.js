@@ -2267,7 +2267,7 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
   if (quest.id === "quest_herb_delivery") {
     pool.push(
       "エルシーは薬草の匂いが気になるのか、包みの近くで一度だけ鼻を鳴らした。",
-      "エルシーは荷物のそばで伏せ、出発の合図まで待っていた。",
+      "エルシーは休むたびに荷物のそばで伏せ、出発の合図まで待っていた。",
       "エルシーは道中、何度も振り返りながら歩いた。"
     );
   }
@@ -2335,7 +2335,7 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
   //   選んだ文を差し替えるだけにして、候補の数（＝乱数の引き方）は変えない。
   const line = pickOne(pool, rng);
   if (quest.id === "quest_tavern_errand" && line?.startsWith("帰り道、")) {
-    return line.replace("帰り道、", "樽を運ぶあいだ、").replace("最後は先頭で門をくぐった", "最後は先頭でギルドの裏口をくぐった");
+    return line.replace("帰り道、", "樽を下ろしたあと、").replace("最後は先頭で門をくぐった", "最後は先頭で受付の脇へ向かった");
   }
   return line;
 }
@@ -5560,7 +5560,8 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
       ],
       曇り: [
         `曇り空の下、${leader}は荷物を確かめてから${quest.area}へひとりで向かった。天候が崩れる前に戻れるよう、足を止めずに進んだ。`,
-        `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、荷造りを確かめてから歩き始めた。`
+        // ★ 「灰色の空」は夜には見えないので、朝・昼・夕方だけ（通読係の指摘・EX-172）
+        { text: `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、荷造りを確かめてから歩き始めた。`, times: ["朝", "昼", "夕方"] }
       ],
       小雨: [
         `小雨の中、${leader}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、何度も手元を確認した。`,
@@ -5587,7 +5588,7 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
       ],
       曇り: [
         `曇り空の下、${group}は${quest.area}へ向かった。${leader}は荷造りを確かめ、エルシーも落ち着かずに匂いを嗅いでいた。`,
-        `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、足取りを整えて歩き始めた。`
+        { text: `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、足取りを整えて歩き始めた。`, times: ["朝", "昼", "夕方"] }
       ],
       小雨: [
         `小雨の中、${group}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、${leader}は何度も手元を確認した。`,
@@ -5613,7 +5614,7 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
     ],
     曇り: [
       `曇り空の下、一行は${quest.area}へ向かった。${getDisplayName(careful)}は「雨になるかもしれない」と呟き、荷造りを確かめ直した。`,
-      `灰色の空が広がっていたが、風はなかった。${leader}は出発前に荷物の重さを確かめ、足取りを整えた。`
+      { text: `灰色の空が広がっていたが、風はなかった。${leader}は出発前に荷物の重さを確かめ、足取りを整えた。`, times: ["朝", "昼", "夕方"] }
     ],
     小雨: [
       `小雨の中、一行は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、${getDisplayName(careful)}が何度も手元を確認した。`,
@@ -7601,7 +7602,7 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
   if (elsie) {
     logs.push(pick([
       `エルシーは薬草の匂いが気になるのか、包みの近くで一度だけ鼻を鳴らした。`,
-      `エルシーは荷物のそばで伏せ、出発の合図まで待っていた。`,
+      `エルシーは休むたびに荷物のそばで伏せ、出発の合図まで待っていた。`,
       `エルシーは道中、何度も振り返りながら歩いた。`
     ]));
   }
@@ -7668,8 +7669,10 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   const holderName = (itemId) => supplyItemHolderName(party, adventurerItemIds, itemId);
 
   logs.push(pick([
-    `依頼人は、薬草採りが朝から戻っていないとだけ言った。持っていた袋の色と、向かった森の入口が報告書に記された。`,
-    { text: `夕方になっても戻らない薬草採りのことを、依頼人は短く説明した。袋の色と採りに行った森の入口だけが手がかりだった。`, times: ["夕方", "夜"] }
+    // ★ 朝に出た回は「朝から」と書かない（まだ朝のうち。通読係の指摘・EX-172）。朝は下の代わりの文
+    { text: `依頼人は、薬草採りが朝から戻っていないとだけ言った。持っていた袋の色と、向かった森の入口が報告書に記された。`, times: ["昼", "夕方", "夜"] },
+    { text: `夕方になっても戻らない薬草採りのことを、依頼人は短く説明した。袋の色と採りに行った森の入口だけが手がかりだった。`, times: ["夕方", "夜"] },
+    { text: `依頼人は、薬草採りが暗いうちに森へ出たまま戻っていないとだけ言った。持っていた袋の色と、向かった森の入口が報告書に記された。`, times: ["朝"], fallback: true }
   ]));
 
   logs.push(pick([
@@ -9333,13 +9336,16 @@ function generateReportBody(expedition) {
     add("", `支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
 
     const patrolLogs = generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    patrolLogs.forEach((text) => add("action", text));
+    // ★ 最後の1行は巡回の締め（「門へ戻った」など）。工程エンジンの行と結末の行（柵を結ぶ など）のあとに書く（EX-172【4】）
+    const closingLine = patrolLogs[patrolLogs.length - 1];
+    patrolLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
       : churchPatrolOutcomeText(outcome, party, rng, departFilterOf(quest, departConditions));
     add("action", outcomeInfo.line);
+    add("action", closingLine);
     add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
 
     return finalizeQuestReport({
@@ -9440,8 +9446,11 @@ function generateReportBody(expedition) {
     add("", `支給品：${deliverySupplyDesc.length > 0 ? deliverySupplyDesc.join(" / ") : "なし"}。`);
 
     const deliveryLogs = generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, { itemIds, departConditions, tensionValue });
-    deliveryLogs.forEach((text) => add("action", text));
+    // ★ 最後の1行は診療所への到着。工程エンジンの行（道中）より先に書くと、着いたあとに道中が続く（EX-172【4】）
+    const arrivalLine = deliveryLogs[deliveryLogs.length - 1];
+    deliveryLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
+    add("action", arrivalLine);
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
@@ -9849,9 +9858,11 @@ function generateReportBody(expedition) {
         // ★ 「昼の支度」は朝・昼に出た回だけ（2026-11-02）。夕方・夜に出た回に出すと、
         //   報告書の頭にある「出発時：夜」と食い違う＝報告書が嘘をつく。
         //   差し替えは1行だけにして、候補の数（＝乱数の引き方）は変えない。
-        departConditions?.timeOfDay === "夕方" || departConditions?.timeOfDay === "夜"
-          ? `酒場はギルドの隣で、扉を開けると、もう最初の客が席についていた。`
-          : `酒場はギルドの隣で、扉を開けるとまだ昼の支度の途中だった。`,
+        //   夕方は店を開けたところ（最初の客）、夜はもう客でにぎわっている（通読係の指摘・EX-172）。
+        ({
+          夕方: `酒場はギルドの隣で、扉を開けると、もう最初の客が席についていた。`,
+          夜: `酒場はギルドの隣で、扉を開けると、店はもう客でにぎわっていた。`
+        })[departConditions?.timeOfDay] ?? `酒場はギルドの隣で、扉を開けるとまだ昼の支度の途中だった。`,
         `隣の酒場に入ると、床を拭いていた主人が顔を上げた。`
       ],
       quest_old_house_cleanup: [
