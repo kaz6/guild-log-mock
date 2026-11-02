@@ -5481,8 +5481,12 @@ function pickFittingCandidate(list, depart, rng) {
   const pool = fitting.length > 0
     ? fitting
     : list.filter((entry) => entry?.fallback && candidateFitsDepart(entry, depart));
-  // 合う文が無いときは行を消さず、引いた文を出す（総当たりの検査で、ここに来る組が0件であることを確かめる）
-  if (pool.length === 0) return first;
+  // 合う文が無いときは行を消さず、引いた文を出す。★ ただし食い違う文が出ているので、警告を残す
+  //   （試験 depart-filter.spec.js が全依頼×時刻4×天気5で、ここに来る組が0件であることを確かめる）
+  if (pool.length === 0) {
+    console.warn(`出発時の条件に合う文がありません（${depart.timeOfDay} / ${depart.weather} / ${depart.reach}）：${candidateText(first)}`);
+    return first;
+  }
   return pool[Math.floor(roll * pool.length)];
 }
 
