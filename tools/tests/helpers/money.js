@@ -19,7 +19,7 @@ async function settleExpedition(page, { questId, tier }) {
     const now = Date.now();
     state.expeditions = [...getExpeditions(), {
       id: `exp_test_${seed}_${tier}`, questId, adventurerIds: party, adventurerItemIds: {}, itemIds: [],
-      startTime: now - 60_000, durationMs: 1, seed, departTimeOfDay: "昼", departWeather: "晴れ",
+      startTime: now - 60_000, durationMs: 1, seed, departTimeOfDay: questTimeOfDay(quest, seed), departWeather: "晴れ", // ★ 基準と同じ時間帯（2026-11-09）
       firstRunOfQuest: false, elsieAtGuild: true, fee
     }];
     party.forEach((id) => { const a = getAdventurer(id); if (a) a.status = "遠征中"; });
