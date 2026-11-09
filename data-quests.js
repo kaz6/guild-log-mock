@@ -36,6 +36,11 @@ window.masterPlaces = {
   "都市": "遠出" // 今は入る依頼なし
 };
 
+// ★ 時間帯（2026-11-09・EX-172 の続き。DECISION_LOG「時間帯は依頼ごとに持つ（現実の時刻と切り離す）」）：
+//   各依頼の `timesOfDay` が、報告書の時間帯（朝・昼・夕方・夜）の候補。1つなら固定、2つ以上なら「時間帯を問わない」で、
+//   出発のときに依頼の id と遠征の回数から決まる形で1つ選ぶ（app.js の questTimeOfDay。乱数は引かない）。
+//   ★ 出発を押した端末の時刻は使わない。★ 固有依頼（bond）は書かない＝時刻に縛らない（報告書も時刻を読まない。2026-11-01）。
+//   ⚠️ 割り当ては今の依頼の文から作った案（作者が違和感のある所だけ見る）。
 window.masterQuests = [
   {
     // ★ 最初のクエスト（2026-08-05・EX-053）。記録係の就任祝いの酒樽を買いに行く。
@@ -43,6 +48,7 @@ window.masterQuests = [
     //   ★ 酒場はギルド内画面として持たず、画面外の場所としてログと会話の中にだけ出す。
     id: "quest_tavern_errand",
     place: "ギルド",
+    timesOfDay: ["朝", "昼", "夕方", "夜"],
     title: "隣の酒場に買い出し",
     // ★ 2026-09-21・EX-140【3】：**一度きり**（一度行ったら二度と掲示板に出ない）。
     //   ⚠️ これで下の `firstRunNeverFails` の「2回目以降は通常の判定に戻る」は**到達しなくなる**が、
@@ -94,6 +100,7 @@ window.masterQuests = [
   {
     id: "quest_herb",
     place: "森",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "森の薬草採集",
@@ -118,6 +125,7 @@ window.masterQuests = [
     //   ★ 観察記録が主眼。仮称は命名の対象になりうる形で置く（正式名が付くのは体験版の後）。
     id: "quest_unknown_grass",
     place: "森",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 担い手は人間だけ（2026-09-11・EX-074／2026-09-15・EX-106）。この依頼は category が「調査」で、
     //   効いた瞬間の文面は statKey（investigation）で選ばれる。investigation には犬固有の文が無いので、
     //   どの工程を犬が担っても人間用の記録の文が出る（古い石碑の拓本と同じ理由）。
@@ -143,6 +151,7 @@ window.masterQuests = [
   {
     id: "quest_signpost",
     place: "街道",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い道標の確認",
@@ -162,6 +171,7 @@ window.masterQuests = [
   {
     id: "quest_letter",
     place: "街道",
+    timesOfDay: ["朝", "昼", "夕方"],
     title: "届けられなかった手紙",
     category: "生活",
     danger: "低",
@@ -179,6 +189,7 @@ window.masterQuests = [
   {
     id: "quest_wedding_support",
     place: "町",
+    timesOfDay: ["昼"],
     title: "結婚式の手伝い",
     category: "生活",
     danger: "低",
@@ -197,6 +208,7 @@ window.masterQuests = [
   {
     id: "quest_guild_cleanup",
     place: "ギルド",
+    timesOfDay: ["昼"],
     title: "ギルドの掃除",
     category: "生活",
     danger: "低",
@@ -336,6 +348,7 @@ window.masterQuests = [
   {
     id: "quest_old_house_cleanup",
     place: "町はずれ",
+    timesOfDay: ["朝", "昼", "夕方"],
     title: "廃屋の片付け",
     category: "生活",
     danger: "低",
@@ -358,6 +371,7 @@ window.masterQuests = [
   {
     id: "quest_field_mystery",
     place: "村",
+    timesOfDay: ["朝", "昼", "夕方", "夜"],
     title: "畑を荒らす「なにか」の追い払い",
     category: "戦闘",
     danger: "低",
@@ -377,6 +391,7 @@ window.masterQuests = [
   {
     id: "quest_barn_bite",
     place: "村",
+    timesOfDay: ["朝", "昼", "夕方", "夜"],
     title: "納屋に巣食う噛みつく「なにか」の討伐",
     category: "戦闘",
     danger: "中",
@@ -400,6 +415,7 @@ window.masterQuests = [
   {
     id: "quest_old_bridge_repair",
     place: "村",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "古い小橋の応急修理",
@@ -420,6 +436,7 @@ window.masterQuests = [
   {
     id: "quest_church_patrol",
     place: "教会周辺",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "辺境教会周辺の定期巡回",
@@ -439,6 +456,7 @@ window.masterQuests = [
   {
     id: "quest_herb_delivery",
     place: "街道",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 担い手に犬を許す（2026-08-18・EX-057 裁定）。においで薬草を見分けるのは犬の領分で、
     //   むしろエルシーの見せ場。犬が担い手のときは犬固有の文（fieldworkSupportTexts）が出る。
     //   （2026-08-06 の EX-056 で一度 fieldworkHumanOnly: true を付けたが、犬用の文面が入ったので外した）
@@ -459,6 +477,7 @@ window.masterQuests = [
   {
     id: "quest_missing_herbalist",
     place: "森",
+    timesOfDay: ["夕方"],
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "帰ってこない薬草採りの確認",
@@ -482,6 +501,7 @@ window.masterQuests = [
   {
     id: "quest_evening_market_escort",
     place: "町",
+    timesOfDay: ["夕方"],
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "夕市帰りの親子の付き添い",
@@ -502,6 +522,7 @@ window.masterQuests = [
   {
     id: "quest_caravan_escort",
     place: "生活圏の外縁",
+    timesOfDay: ["朝", "昼", "夕方"],
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -526,6 +547,7 @@ window.masterQuests = [
   {
     id: "quest_caravan_search",
     place: "生活圏の外縁",
+    timesOfDay: ["朝", "昼", "夕方", "夜"],
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -553,6 +575,7 @@ window.masterQuests = [
   {
     id: "quest_caravan_lastchance",
     place: "生活圏の外縁",
+    timesOfDay: ["朝", "昼", "夕方", "夜"],
     // ★ 捜索チェーンに関わる依頼（2026-09-20・EX-138 の裁定b）。**同時に1本まで**。
     //   チェーンは物語の一本道で、2本並ぶと「どの隊商の話か」が報告書から読めなくなる。
     chainSlot: true,
@@ -580,6 +603,7 @@ window.masterQuests = [
   {
     id: "quest_old_stele_rubbing",
     place: "街道",
+    timesOfDay: ["朝", "昼", "夕方"],
     title: "古い石碑の拓本",
     category: "記録",
     // ★ 担い手は人間だけ（2026-09-11・EX-074 で追加。EX-056 と同じ宣言）。
@@ -608,6 +632,7 @@ window.masterQuests = [
   {
     id: "quest_lingering_light",
     place: "村",
+    timesOfDay: ["夜"],
     title: "夜道に残る灯りの調査",
     // ★ category は「調査」ではなく「戦闘」（2026-09-13・裁定）。
     //   ⚠️ **2026-09-13・EX-093 以降、この依頼の成長は category ではなく
@@ -658,6 +683,7 @@ window.masterQuests = [
     //   ⚠️ 文面（本文・結末）は仮。チャット側が書き直す待ち。
     id: "quest_shopping",
     place: "町",
+    timesOfDay: ["朝", "昼", "夕方"],
     title: "隊商の大将に買い出しを頼む",
     shopping: true,
     category: "生活",
@@ -684,6 +710,7 @@ window.masterQuests = [
     //   ⚠️ 文面（題名・本文・結末）はすべて仮。チャット側が書き直す待ち。
     id: "quest_relief_odd_jobs",
     place: "町",
+    timesOfDay: ["朝", "昼", "夕方"],
     title: "町の小口の頼まれごと",
     relief: true,
     category: "生活",
