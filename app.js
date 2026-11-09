@@ -8484,6 +8484,8 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   if (quest.id === "quest_herb_delivery") {
     const elne = party.find((a) => a.id === "adv_elne");
     const elneName = elne ? getDisplayName(elne) : null;
+    // ★ 引き返した回は診療所に着いていないので、受領印・納品の行を出さない（2026-11-09・通読係の指摘）
+    if ((GROWTH_TIER_BY_RESULT[result] ?? "full") === "fail") return `薬草包みは届けられず、そのまま持ち帰った。`;
     const lines = [
       `薬草包みは、最後までほどけなかった。`,
       `診療所の受領印は、少し滲んでいたが確かに押されていた。`
@@ -8497,14 +8499,18 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     const minaName = mina ? getDisplayName(mina) : null;
     // ★ 編成にいないエルシーを出さない／見つかっていない回に「無事」と書かない（2026-11-09・通読係の指摘）
     const found = result === "発見" || result === "保護";
+    // 薬草袋が見つかるのは、本人が見つかった回と痕跡確認の回だけ（引き返しの回は袋も見つけていない）
+    const bagFound = found || result === "痕跡確認";
     const lines = [
-      ...(partyHasElsie(party) ? [`エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`] : []),
+      ...(partyHasElsie(party) && bagFound ? [`エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`] : []),
       ...(found ? [`報告書には、無事という二文字がいつもより大きく見えた。`] : [])
     ];
     if (minaName) lines.push(`${minaName}は最後まで足跡を見失わなかった。`);
     if (result === "発見" || result === "保護") lines.push(`帰還した時、薬草採りは自分の袋だけは離さず持っていた。`);
     // 見つからず、エルシーもミナもいない回の受け皿（空のまま選ぶとハイライトが消える）
-    if (lines.length === 0) lines.push(`落とした薬草袋と足跡の向きが、次の捜索の手がかりとして残った。`);
+    if (lines.length === 0) lines.push(bagFound
+      ? `落とした薬草袋と足跡の向きが、次の捜索の手がかりとして残った。`
+      : `捜索は途中で切り上げ、次の機会に持ち越された。`);
     return pickOne(lines, rng);
   }
 
@@ -8517,7 +8523,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
       `何も起きなかった。それが今回の一番良い報告だった。`,
       `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`
     ] : [];
-    if (rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
+    if (arrived && rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
     if (arrived && partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
     // 引き返し、ロウもいない回の受け皿（空のまま選ぶとハイライトが消える）
     if (lines.length === 0) lines.push(`親子を無理に先へ進ませず、引き返した。それも報告の一つだった。`);
@@ -9475,7 +9481,8 @@ function generateReportBody(expedition) {
     const arrivalLine = deliveryLogs[deliveryLogs.length - 1];
     deliveryLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
-    add("action", arrivalLine);
+    // 引き返した回は診療所に着いていないので、到着の行を書かない（抽選は済んでいる＝乱数の消費は同じ）
+    if (!field.turnBack) add("action", arrivalLine);
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
@@ -9753,7 +9760,8 @@ function generateReportBody(expedition) {
     const arrivalLine = escortLogs[escortLogs.length - 1];
     escortLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
-    add("action", arrivalLine);
+    // 引き返した回は家に着いていないので、到着の行を書かない（抽選は済んでいる＝乱数の消費は同じ）
+    if (!field.turnBack) add("action", arrivalLine);
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
