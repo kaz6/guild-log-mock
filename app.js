@@ -8484,6 +8484,8 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   if (quest.id === "quest_herb_delivery") {
     const elne = party.find((a) => a.id === "adv_elne");
     const elneName = elne ? getDisplayName(elne) : null;
+    // ★ 引き返した回は診療所に着いていないので、受領印・納品の行を出さない（2026-11-09・通読係の指摘）
+    if ((GROWTH_TIER_BY_RESULT[result] ?? "full") === "fail") return `薬草包みは届けられず、そのまま持ち帰った。`;
     const lines = [
       `薬草包みは、最後までほどけなかった。`,
       `診療所の受領印は、少し滲んでいたが確かに押されていた。`
