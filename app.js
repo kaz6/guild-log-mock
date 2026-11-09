@@ -8497,14 +8497,18 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     const minaName = mina ? getDisplayName(mina) : null;
     // ★ 編成にいないエルシーを出さない／見つかっていない回に「無事」と書かない（2026-11-09・通読係の指摘）
     const found = result === "発見" || result === "保護";
+    // 薬草袋が見つかるのは、本人が見つかった回と痕跡確認の回だけ（引き返しの回は袋も見つけていない）
+    const bagFound = found || result === "痕跡確認";
     const lines = [
-      ...(partyHasElsie(party) ? [`エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`] : []),
+      ...(partyHasElsie(party) && bagFound ? [`エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`] : []),
       ...(found ? [`報告書には、無事という二文字がいつもより大きく見えた。`] : [])
     ];
     if (minaName) lines.push(`${minaName}は最後まで足跡を見失わなかった。`);
     if (result === "発見" || result === "保護") lines.push(`帰還した時、薬草採りは自分の袋だけは離さず持っていた。`);
     // 見つからず、エルシーもミナもいない回の受け皿（空のまま選ぶとハイライトが消える）
-    if (lines.length === 0) lines.push(`落とした薬草袋と足跡の向きが、次の捜索の手がかりとして残った。`);
+    if (lines.length === 0) lines.push(bagFound
+      ? `落とした薬草袋と足跡の向きが、次の捜索の手がかりとして残った。`
+      : `捜索は途中で切り上げ、次の機会に持ち越された。`);
     return pickOne(lines, rng);
   }
 
