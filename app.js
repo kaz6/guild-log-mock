@@ -2191,7 +2191,7 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
   if (!partyHasElsie(party) || rng() > 0.70) return null;
 
   const pool = [
-    "エルシーは誰かの足元を小走りに駆け、先を睨みながら進んだ。",
+    "エルシーは小走りに駆け出し、前の方を睨みながら進んだ。",
     "エルシーは風の匂いを拾うと耳を立て、しばらくその方角を見ていた。",
     "帰り道、エルシーは何度も振り返りながら、最後は先頭で門をくぐった。",
     "エルシーの白い毛には草の種がいくつもついていたが、本人はどこか満足そうだった。"
@@ -5630,7 +5630,7 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
       { text: `灰色の空が広がっていたが、風はなかった。${leader}は出発前に荷物の重さを確かめ、足取りを整えた。`, times: ["朝", "昼", "夕方"] }
     ],
     小雨: [
-      `小雨の中、一行は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、${getDisplayName(careful)}が何度も手元を確認した。`,
+      `小雨の中、一行は濡れた道を足早に進んだ。紙の依頼書は湿りやすく、${getDisplayName(careful)}が何度も手元を確認した。`,
       `細い雨が降り続いていた。${getDisplayName(caregiver)}は仲間の荷物に布をかけ、濡れやすいものを内側へ移した。`
     ],
     風が強い: [
@@ -5767,7 +5767,7 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       `傾いた道標は、近づいてみるとまだ読めた。文字の向きだけが少し怪しい。`
     ],
     苔に隠れた文字: [
-      `苔に隠れた文字を、${name(scout)}が小刀の背で慎重に落とした。地名はかろうじて読めた。`,
+      `苔に隠れた文字を、${name(scout)}が指先で慎重に落とした。地名はかろうじて読めた。`,
       soloStyle
         ? `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうなため思いとどまった。`
         : `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうだったため止められた。`
