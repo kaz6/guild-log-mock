@@ -8503,6 +8503,8 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     ];
     if (minaName) lines.push(`${minaName}は最後まで足跡を見失わなかった。`);
     if (result === "発見" || result === "保護") lines.push(`帰還した時、薬草採りは自分の袋だけは離さず持っていた。`);
+    // 見つからず、エルシーもミナもいない回の受け皿（空のまま選ぶとハイライトが消える）
+    if (lines.length === 0) lines.push(`落とした薬草袋と足跡の向きが、次の捜索の手がかりとして残った。`);
     return pickOne(lines, rng);
   }
 
@@ -8516,7 +8518,9 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
       `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`
     ] : [];
     if (rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
-    if (partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
+    if (arrived && partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
+    // 引き返し、ロウもいない回の受け皿（空のまま選ぶとハイライトが消える）
+    if (lines.length === 0) lines.push(`親子を無理に先へ進ませず、引き返した。それも報告の一つだった。`);
     return pickOne(lines, rng);
   }
 
