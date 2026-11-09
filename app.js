@@ -907,7 +907,7 @@ let selectedObsHolders = Array.isArray(state.selectedObsHolders) ? state.selecte
 let editingAdventurerId = null;
 // 重症の冒険者に断られたときの一言。保存しない（画面だけの一時状態）。
 let departRefusal = null;
-let mockTimeOfDay = null; // Mock検証用: null の場合はシステム時刻を使用
+let mockTimeOfDay = null; // Mock検証用: null の場合は依頼の時間帯を使用（2026-11-09。端末の時刻は使わない）
 
 // オープニング面接（2026-10-23・EX-162）。★ 文面は Notion「オープニング面接の台本（確定稿・2026-10-23）」
 //   （401a8a5dfd458167858af138886f724c）が正本。一字一句そのまま写す。直したいときは台本の側を直してから。
@@ -3423,15 +3423,23 @@ function expeditionProgressHtml(expedition) {
   `;
 }
 
-function getCurrentConditions() {
+// 依頼の時間帯（2026-11-09・EX-172 の続き。DECISION_LOG「時間帯は依頼ごとに持つ（現実の時刻と切り離す）」）。
+// ★ 端末の時刻は使わない。依頼データの `timesOfDay`（候補）から、依頼の id と遠征の回数で1つ決める（乱数は引かない）。
+//   候補が1つなら固定。書いていない依頼（固有依頼）は4つの中から同じ形で選ぶ（報告書は時刻を読まない）。
+const ALL_TIMES_OF_DAY = ["朝", "昼", "夕方", "夜"];
+function questTimeOfDay(quest, count) {
+  const list = Array.isArray(quest?.timesOfDay) && quest.timesOfDay.length > 0 ? quest.timesOfDay : ALL_TIMES_OF_DAY;
+  if (list.length === 1) return list[0];
+  let h = 0;
+  for (const ch of String(quest?.id ?? "")) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  return list[(h + Math.max(0, Math.floor(count ?? 0))) % list.length];
+}
+
+// 出発のときの条件。時間帯は依頼から（quest が無いときは null）、天気は遠征の回数から。
+// ★ Mock の時間帯（?dev=1 の道具）が選ばれていれば、それが依頼の時間帯より優先する（検証用）。
+function getCurrentConditions(quest = null) {
   const timeIcons = { 朝: "🌅", 昼: "☀", 夕方: "🌇", 夜: "🌙" };
-  let timeOfDay;
-  if (mockTimeOfDay) {
-    timeOfDay = mockTimeOfDay;
-  } else {
-    const hour = new Date().getHours();
-    timeOfDay = hour < 6 ? "夜" : hour < 11 ? "朝" : hour < 16 ? "昼" : hour < 19 ? "夕方" : "夜";
-  }
+  const timeOfDay = mockTimeOfDay ?? (quest ? questTimeOfDay(quest, state.worldState.totalExpeditions) : null);
   const timeIcon = timeIcons[timeOfDay] ?? "☀";
   const weathers = ["晴れ", "曇り", "小雨", "風が強い", "霧"];
   const weatherIdx = (state.worldState.totalExpeditions * 3 + state.worldState.archiveSeed) % weathers.length;
@@ -3611,7 +3619,8 @@ function renderQuests() {
   const canStart = selectedQuestId && selectedAdventurerIds.length > 0
     && !questOnExpedition && !chainBlocked && !expeditionBlock && !state.gameOver;
 
-  const cond = getCurrentConditions();
+  // ★ 時間帯は依頼ごと（2026-11-09）。帯には選んだ依頼の時間帯（出発で使うのと同じ関数・同じ回数）と天気を出す
+  const cond = getCurrentConditions(selectedQuest);
   const timeOptions = ["朝", "昼", "夕方", "夜"];
   const weatherOptions = ["晴れ", "曇り", "小雨", "霧", "風が強い"];
 
@@ -3634,7 +3643,7 @@ function renderQuests() {
   app.innerHTML = `
     <div class="weather-bar">
       <span class="weather-bar-icon">${cond.timeIcon}</span>
-      <span class="weather-bar-text">現在：${cond.timeOfDay} / ${cond.weather}</span>
+      <span class="weather-bar-text">${cond.timeOfDay ? `時間帯：${cond.timeOfDay} / ` : ""}天気：${cond.weather}</span>
     </div>
     ${searchChain ? `
     <div class="weather-bar">
@@ -3650,7 +3659,7 @@ function renderQuests() {
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 時間帯：</span>
       ${timeOptions.map((t) => `<button class="mock-time-btn${mockTimeOfDay === t ? " active" : ""}" onclick="setMockTimeOfDay('${t}')">${t}</button>`).join("")}
-      ${mockTimeOfDay ? `<button class="mock-time-btn" onclick="setMockTimeOfDay(null)">自動</button>` : `<button class="mock-time-btn active" onclick="setMockTimeOfDay(null)">自動</button>`}
+      ${mockTimeOfDay ? `<button class="mock-time-btn" onclick="setMockTimeOfDay(null)">依頼どおり</button>` : `<button class="mock-time-btn active" onclick="setMockTimeOfDay(null)">依頼どおり</button>`}
     </div>
     <div class="mock-time-bar">
       <span class="mock-time-label">🔧 天候：</span>
@@ -5221,7 +5230,7 @@ function startExpedition() {
     const adv = getAdventurer(id);
     if (adv) adv.status = "遠征中";
   });
-  const departCond = getCurrentConditions();
+  const departCond = getCurrentConditions(quest);
   state.worldState.totalExpeditions += 1;
   const expedition = {
     id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, // ★ 同じ瞬間の2本で衝突しない

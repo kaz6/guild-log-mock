@@ -90,7 +90,11 @@ function pageRunner(cfg) {
     const party = c.party ?? cfg.party;
     // ★ 時間帯も軸にできる（2026-09-13・EX-093）。夜にしか起きない依頼を昼固定で回すと
     //   結末に一度も到達しないまま「不一致0」が出る。既定は cfg.timeOfDay のまま。
-    const timeOfDay = c.timeOfDay ?? cfg.timeOfDay;
+    // ★ cfg.timeOfDay が「依頼」なら、依頼の時間帯（questTimeOfDay）を seed を回数にして引く（2026-11-09。
+    //   時間帯は依頼ごとに持つ＝ゲームと同じ出どころ。候補が2つ以上の依頼は seed ごとに違う時間帯を通る）
+    const timeOfDay = c.timeOfDay ?? (cfg.timeOfDay === "依頼" && typeof questTimeOfDay === "function"
+      ? questTimeOfDay(getQuest(c.quest), c.seed)
+      : cfg.timeOfDay);
     const holder = cfg.holder ?? party[0];
     let itemIds = {};
     // ★ 支給品の軸（2026-09-23・EX-145）：`{ name, shared: [品 id], obs: true|false }`。

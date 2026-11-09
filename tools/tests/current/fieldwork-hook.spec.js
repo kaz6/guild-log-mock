@@ -17,6 +17,7 @@ test("フックを必ず引く設定にしても、動くのは本文の1行だ�
   const baseRows = baseline.rows.filter((r) => !r.supplies);
   const both = await sweep({
     axes: { party: allParties(), seed: SEEDS },
+    timeOfDay: "依頼", // ★ 基準と同じ時間帯の出どころ（2026-11-09）
     // ★ probe はページの中で走る（閉包なし）。比較する項目は基準の probe と同じ書き方にしてある。
     probe: (r, ctx) => {
       const quest = getQuest(ctx.quest);

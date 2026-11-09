@@ -89,6 +89,8 @@ function sweepOptions() {
   return {
     axes: { party: allParties(), seed: SEEDS },
     probe: probe10,
+    // ★ 時間帯は依頼ごと（2026-11-09）。ゲームと同じ関数で、seed を回数にして引く
+    timeOfDay: "依頼",
     quiet: true,
   };
 }
@@ -99,6 +101,7 @@ function supplySweepOptions() {
   return {
     axes: { party: SUPPLY_PARTIES, seed: SUPPLY_SEEDS, supplies: SUPPLY_AXIS },
     probe: probe10,
+    timeOfDay: "依頼",
     quiet: true,
   };
 }
