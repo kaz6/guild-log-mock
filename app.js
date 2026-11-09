@@ -8521,7 +8521,7 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
       `何も起きなかった。それが今回の一番良い報告だった。`,
       `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`
     ] : [];
-    if (rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
+    if (arrived && rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
     if (arrived && partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
     // 引き返し、ロウもいない回の受け皿（空のまま選ぶとハイライトが消える）
     if (lines.length === 0) lines.push(`親子を無理に先へ進ませず、引き返した。それも報告の一つだった。`);
@@ -9479,7 +9479,8 @@ function generateReportBody(expedition) {
     const arrivalLine = deliveryLogs[deliveryLogs.length - 1];
     deliveryLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
-    add("action", arrivalLine);
+    // 引き返した回は診療所に着いていないので、到着の行を書かない（抽選は済んでいる＝乱数の消費は同じ）
+    if (!field.turnBack) add("action", arrivalLine);
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
@@ -9757,7 +9758,8 @@ function generateReportBody(expedition) {
     const arrivalLine = escortLogs[escortLogs.length - 1];
     escortLogs.slice(0, -1).forEach((text) => add("action", text));
     field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
-    add("action", arrivalLine);
+    // 引き返した回は家に着いていないので、到着の行を書かない（抽選は済んでいる＝乱数の消費は同じ）
+    if (!field.turnBack) add("action", arrivalLine);
 
     const outcomeInfo = field.turnBack
       ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
