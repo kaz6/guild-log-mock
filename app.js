@@ -2191,7 +2191,7 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
   if (!partyHasElsie(party) || rng() > 0.70) return null;
 
   const pool = [
-    "エルシーは誰かの足元を小走りに駆け、先を睨みながら進んだ。",
+    "エルシーは小走りに駆け出し、前の方を睨みながら進んだ。",
     "エルシーは風の匂いを拾うと耳を立て、しばらくその方角を見ていた。",
     "帰り道、エルシーは何度も振り返りながら、最後は先頭で門をくぐった。",
     "エルシーの白い毛には草の種がいくつもついていたが、本人はどこか満足そうだった。"
@@ -5567,8 +5567,8 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
     const table = {
       晴れ: [
         { text: `朝の光が差す中、${leader}は${quest.area}へひとりで向かった。出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`, times: ["朝"] },
-        // ★ 「視界が広く、遠くの道標まで」は夜には成り立たないので、夜は下の代わりの文にする（EX-172）
-        { text: `空はよく晴れていた。視界が広く、${leader}は遠くの道標まで確認しながら一人で進んだ。`, times: ["朝", "昼", "夕方"] },
+        // ★ 「視界が広く、遠くまで見渡し」は夜には成り立たないので、夜は下の代わりの文にする（EX-172）
+        { text: `空はよく晴れていた。視界が広く、${leader}は遠くまで見渡しながら一人で進んだ。`, times: ["朝", "昼", "夕方"] },
         { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら、${quest.area}へひとりで向かった。`, times: ["夜"], fallback: true }
       ],
       曇り: [
@@ -5578,14 +5578,14 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
       ],
       小雨: [
         `小雨の中、${leader}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、何度も手元を確認した。`,
-        `出発からしばらくして細い雨が降り始めた。${leader}は濡れやすいものを荷物の内側へ移し直した。`
+        `細い雨が降り続いていた。${leader}は濡れやすいものを荷物の内側へ移し直した。`
       ],
       風が強い: [
         `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、風を避けるように低い道を選んだ。`,
-        `古い街道には乾いた葉が舞っていた。${leader}は顔を伏せながら、黙って歩き続けた。`
+        `道には乾いた葉が舞っていた。${leader}は顔を伏せながら、黙って歩き続けた。`
       ],
       霧: [
-        `街道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
+        `道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
         `霧で視界が悪い。${leader}は立ち止まって耳を澄ませ、足元を確かめてから歩き続けた。`
       ]
     };
@@ -5596,7 +5596,7 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
     const table = {
       晴れ: [
         { text: `朝の光が差す中、${group}は${quest.area}へ向かった。${leader}の足元をエルシーが小走りに追い、装備を確かめてから歩き始めた。`, times: ["朝"] },
-        { text: `空はよく晴れていた。${leader}は遠くの道標まで確認し、エルシーは足元から先を睨みながら進んだ。`, times: ["朝", "昼", "夕方"] },
+        { text: `空はよく晴れていた。${leader}は遠くまで見渡し、エルシーは足元から先を睨みながら進んだ。`, times: ["朝", "昼", "夕方"] },
         { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら歩き、エルシーはすぐ横を進んだ。`, times: ["夜"], fallback: true }
       ],
       曇り: [
@@ -5604,15 +5604,15 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
         { text: `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、足取りを整えて歩き始めた。`, times: ["朝", "昼", "夕方"] }
       ],
       小雨: [
-        `小雨の中、${group}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、${leader}は何度も手元を確認した。`,
-        `細い雨が降り始めた。${leader}は濡れやすいものを荷物の内側へ移し、エルシーは袖の下に入った。`
+        `小雨の中、${leader}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、エルシーは濡れた毛を何度も振るった。`,
+        `細い雨が降り続いていた。${leader}は濡れやすいものを荷物の内側へ移し、エルシーは袖の下に入った。`
       ],
       風が強い: [
         `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、エルシーに寄る低い道を選んだ。`,
-        `古い街道には乾いた葉が舞っていた。${leader}は顔を伏せ、エルシーは足元を小走りに進んだ。`
+        `道には乾いた葉が舞っていた。${leader}は顔を伏せ、エルシーは足元を小走りに進んだ。`
       ],
       霧: [
-        `街道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、エルシーは立ち止まって耳を立てた。`,
+        `道には薄い霧がかかっていた。${leader}は足跡と轍を見比べ、エルシーは立ち止まって耳を立てた。`,
         `霧で視界が悪い。${leader}は足元を確かめてから歩き続け、エルシーは背中に寄り添うように進んだ。`
       ]
     };
@@ -5622,7 +5622,7 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
   const table = {
     晴れ: [
       { text: `朝の光が差す中、一行は${quest.area}へ向かった。足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`, times: ["朝"] },
-      { text: `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くの道標まで確認しながら進んだ。`, times: ["朝", "昼", "夕方"] },
+      { text: `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くまで見渡しながら進んだ。`, times: ["朝", "昼", "夕方"] },
       { text: `空はよく晴れ、星が出ていた。一行は${quest.area}へ向かい、${getDisplayName(careful)}が足元を確かめながら先を歩いた。`, times: ["夜"], fallback: true }
     ],
     曇り: [
@@ -5630,15 +5630,15 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
       { text: `灰色の空が広がっていたが、風はなかった。${leader}は出発前に荷物の重さを確かめ、足取りを整えた。`, times: ["朝", "昼", "夕方"] }
     ],
     小雨: [
-      `小雨の中、一行は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、${getDisplayName(careful)}が何度も手元を確認した。`,
-      `出発からしばらくして細い雨が降り始めた。${getDisplayName(caregiver)}は仲間の荷物に布をかけ、濡れやすいものを内側へ移した。`
+      `小雨の中、一行は濡れた道を足早に進んだ。紙の依頼書は湿りやすく、${getDisplayName(careful)}が何度も手元を確認した。`,
+      `細い雨が降り続いていた。${getDisplayName(caregiver)}は仲間の荷物に布をかけ、濡れやすいものを内側へ移した。`
     ],
     風が強い: [
       `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、一行は風を避けるように低い道を選んだ。`,
-      `古い街道には乾いた葉が舞っていた。${getDisplayName(brave)}は笑っていたが、声は風に流されてほとんど聞こえなかった。`
+      `道には乾いた葉が舞っていた。${getDisplayName(brave)}は笑っていたが、声は風に流されてほとんど聞こえなかった。`
     ],
     霧: [
-      `街道には薄い霧がかかっていた。${getDisplayName(careful)}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
+      `道には薄い霧がかかっていた。${getDisplayName(careful)}は足跡と轍を見比べ、急がずに進むことを選んだ。`,
       `霧で視界が悪い。${getDisplayName(brave)}は先に進もうとしたが、仲間の声を聞いて歩幅を落とした。`
     ]
   };
@@ -5730,7 +5730,7 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
     ],
     犬の遠吠え: [
       `遠くで犬が吠えた。危険はなかったが、${solo ? name(soloAdv) : partySubject(party)}は少し歩く速度を上げた。`,
-      `${name(warrior)}は剣の柄に手を置いたが、吠え声はすぐに遠ざかった。`
+      `${name(warrior)}は得物に手を置いたが、吠え声はすぐに遠ざかった。`
     ],
     湿った足跡: [
       soloStyle
@@ -5767,7 +5767,7 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       `傾いた道標は、近づいてみるとまだ読めた。文字の向きだけが少し怪しい。`
     ],
     苔に隠れた文字: [
-      `苔に隠れた文字を、${name(scout)}が小刀の背で慎重に落とした。地名はかろうじて読めた。`,
+      `苔に隠れた文字を、${name(scout)}が指先で慎重に落とした。地名はかろうじて読めた。`,
       soloStyle
         ? `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうなため思いとどまった。`
         : `文字の一部は苔で見えない。${name(warrior)}は強くこすろうとしたが、木が崩れそうだったため止められた。`
@@ -5940,10 +5940,10 @@ function personalEventText(quest, party, rng) {
       candidates.push(`${name}は汚れた道具をその場で拭き、帰還後の整理が楽になるようにしていた。`);
     }
     if (adv.background === "郵便配達人") {
-      candidates.push(`${name}は家の並びと道の曲がり方を見て、昔の配達路を思い出した。地図より早く、人の住み方を読んだ。`);
+      candidates.push(`${name}は道の曲がり方を見て、昔の配達路を思い出した。地図より早く、道筋を読んだ。`);
     }
     if (adv.background === "宿場の用心棒") {
-      candidates.push(`${name}は人の出入りが多い場所で、自然と背中を壁に向けて立った。昔の仕事の癖らしい。`);
+      candidates.push(`${name}は休むとき、自然と背中を木や壁に預けて座った。昔の仕事の癖らしい。`);
     }
     if (adv.background === "村の調合係") {
       candidates.push(`${name}は匂いと湿り気だけで、使える草と避ける草をより分けた。手つきに迷いがない。`);
@@ -6036,7 +6036,7 @@ function statsPersonalityLog(party, rng, quest = null) {
     memory: [
       `${name}は、道中で気になった細部を手帳の端に書き留めていた。`,
       `${name}の報告書には、順番と向きまで細かく記録されていた。`,
-      ...(isNearby ? [] : [`${name}は、道標の傾きと泥の跳ね方まで報告書に残していた。`])
+      ...(isNearby ? [] : [`${name}は、道の向きと泥の跳ね方まで報告書に残していた。`])
     ],
     caution: [
       `${name}は、作業前に足場と帰り道を一つずつ確認した。`,
@@ -7419,7 +7419,7 @@ function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context 
       `エルシーは花壇の前で足を止め、礼拝堂の方角だけを見ていた。`,
       `エルシーは鐘楼の下で立ち止まり、風に揺れる鐘の音だけを耳にしていた。`,
       `エルシーは境界の外側で鼻を低くし、足跡の匂いを短く確かめた。`,
-      `エルシーは小さな灯りの方を見上げたが、吠えずに振り返った。`
+      `エルシーは鐘楼の上の方を見上げたが、吠えずに振り返った。`
     ]));
   }
 
@@ -7442,8 +7442,8 @@ function generateChurchPatrolLogs(quest, party, adventurerItemIds, rng, context 
 
   logs.push(pick([
     `最後にもう一度、礼拝堂外縁と帰り道だけを確かめた。`,
-    `何も起きなかった静かな巡回だった。それでも、記録としては十分だった。`,
-    `鐘は鳴らず、花の匂いだけが残ったまま、一行は門へ戻った。`
+    `大きな騒ぎのない静かな巡回だった。それでも、記録としては十分だった。`,
+    `鐘は鳴らず、花の匂いだけが残ったまま、${subject}は門へ戻った。`
   ]));
 
   return logs;
@@ -8495,24 +8495,32 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
   if (quest.id === "quest_missing_herbalist") {
     const mina = party.find((a) => a.id === "adv_mina");
     const minaName = mina ? getDisplayName(mina) : null;
+    // ★ 編成にいないエルシーを出さない／見つかっていない回に「無事」と書かない（2026-11-09・通読係の指摘）
+    const found = result === "発見" || result === "保護";
     const lines = [
-      `エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`,
-      `報告書には、無事という二文字がいつもより大きく見えた。`
+      ...(partyHasElsie(party) ? [`エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`] : []),
+      ...(found ? [`報告書には、無事という二文字がいつもより大きく見えた。`] : [])
     ];
     if (minaName) lines.push(`${minaName}は最後まで足跡を見失わなかった。`);
     if (result === "発見" || result === "保護") lines.push(`帰還した時、薬草採りは自分の袋だけは離さず持っていた。`);
+    // 見つからず、エルシーもミナもいない回の受け皿（空のまま選ぶとハイライトが消える）
+    if (lines.length === 0) lines.push(`落とした薬草袋と足跡の向きが、次の捜索の手がかりとして残った。`);
     return pickOne(lines, rng);
   }
 
   if (quest.id === "quest_evening_market_escort") {
     const row = party.find((a) => a.id === "adv_row");
     const rowName = row ? getDisplayName(row) : null;
-    const lines = [
+    // ★ 家に着かなかった回（引き返し）に「帰宅した子ども」「何も起きなかった」と書かない（2026-11-09・通読係の指摘）
+    const arrived = (GROWTH_TIER_BY_RESULT[result] ?? "full") !== "fail";
+    const lines = arrived ? [
       `何も起きなかった。それが今回の一番良い報告だった。`,
       `帰宅した子どもは、眠そうにしながらも買い物袋だけは離さなかった。`
-    ];
+    ] : [];
     if (rowName) lines.push(`${rowName}は最後まで、親子より半歩前を歩いていた。`);
-    if (partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
+    if (arrived && partyHasElsie(party)) lines.push(`エルシーは家の門につくまで、子どもの歩幅に合わせて何度も振り返った。`);
+    // 引き返し、ロウもいない回の受け皿（空のまま選ぶとハイライトが消える）
+    if (lines.length === 0) lines.push(`親子を無理に先へ進ませず、引き返した。それも報告の一つだった。`);
     return pickOne(lines, rng);
   }
 
@@ -11007,9 +11015,14 @@ function fieldworkLogLines(fw, rng) {
       lines.push({ kind: "drama", text: `一度は間が空きかけたが、短い笛の音ですぐ立て直した。` });
     } else if (ev.type === "setback") {
       // ★ 天候が原因の滞りは天候の行（EX-157【2】）。疲れ・不慣れが原因の行は印なし（墨）
+      // ★ 同じ文が続けて2回出ないように（2026-11-09・通読係の指摘）。乱数は今までどおり1回引き、
+      //   直前の行と同じ文になったときだけ、同じ組のもう一方の文にする（行数・乱数の消費は変わらない）
+      const texts = fieldworkSetbackTexts(ev);
+      let text = pickOne(texts, rng);
+      if (lines.length > 0 && lines[lines.length - 1].text === text) text = texts.find((t) => t !== text) ?? text;
       lines.push(ev.cause === "weather"
-        ? { kind: "action", tag: "weather", text: pickOne(fieldworkSetbackTexts(ev), rng) }
-        : { kind: "action", text: pickOne(fieldworkSetbackTexts(ev), rng) });
+        ? { kind: "action", tag: "weather", text }
+        : { kind: "action", text });
     } else if (ev.type === "care") {
       lines.push({ kind: "drama", text: `${ev.name}の擦り傷に包帯が巻かれ、そのまま作業に戻った。` });
     }
@@ -11373,7 +11386,7 @@ function fieldworkHiddenTags(fw) {
 
 function fieldworkCauseWord(fw) {
   if (!fw || !fw.mainCause) return "続けられる状態ではなくなった";
-  if (fw.mainCause === "weather") return `${fw.weather}が収まらなかった`;
+  if (fw.mainCause === "weather") return `${fw.weather === "風が強い" ? "強い風" : fw.weather}が収まらなかった`;
   if (fw.mainCause === "fatigue") return "工程が長引き、消耗が重なった";
   return "手が足りず、工程が進まなかった";
 }

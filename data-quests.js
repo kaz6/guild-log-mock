@@ -436,7 +436,7 @@ window.masterQuests = [
   {
     id: "quest_church_patrol",
     place: "教会周辺",
-    timesOfDay: ["朝", "昼", "夕方"],
+    timesOfDay: ["朝", "昼"], // ★ 夕方は祈りの時間で、辺境教会の付近には近づかない（CURRENT_SPEC「時間帯は4値」の世界観の接続）
     // ★ 工程の担い手は人間だけ（2026-08-06・EX-056）。力量の計算はこれまでどおりエルシーも数える。
     fieldworkHumanOnly: true,
     title: "辺境教会周辺の定期巡回",
