@@ -5566,13 +5566,13 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
   if (soloOnly) {
     const table = {
       晴れ: [
-        { text: `朝の光が差す中、${leader}は${quest.area}へひとりで向かった。出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`, times: ["朝"] },
+        { text: `朝の光が差す中、${leader}は出発前に装備をもう一度確かめ、足取り軽く歩き始めた。`, times: ["朝"] },
         // ★ 「視界が広く、遠くまで見渡し」は夜には成り立たないので、夜は下の代わりの文にする（EX-172）
         { text: `空はよく晴れていた。視界が広く、${leader}は遠くまで見渡しながら一人で進んだ。`, times: ["朝", "昼", "夕方"] },
-        { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら、${quest.area}へひとりで向かった。`, times: ["夜"], fallback: true }
+        { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら歩いた。`, times: ["夜"], fallback: true }
       ],
       曇り: [
-        `曇り空の下、${leader}は荷物を確かめてから${quest.area}へひとりで向かった。天候が崩れる前に戻れるよう、足を止めずに進んだ。`,
+        `曇り空の下、${leader}は荷物を確かめてから歩き出した。天候が崩れる前に戻れるよう、足を止めずに進んだ。`,
         // ★ 「灰色の空」は夜には見えないので、朝・昼・夕方だけ（通読係の指摘・EX-172）
         { text: `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、荷造りを確かめてから歩き始めた。`, times: ["朝", "昼", "夕方"] }
       ],
@@ -5595,17 +5595,17 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
   if (companion) {
     const table = {
       晴れ: [
-        { text: `朝の光が差す中、${group}は${quest.area}へ向かった。${leader}の足元をエルシーが小走りに追い、装備を確かめてから歩き始めた。`, times: ["朝"] },
+        { text: `朝の光が差す中、${leader}は装備を確かめてから歩き始め、その足元をエルシーが小走りに追った。`, times: ["朝"] },
         { text: `空はよく晴れていた。${leader}は遠くまで見渡し、エルシーは足元から先を睨みながら進んだ。`, times: ["朝", "昼", "夕方"] },
         { text: `空はよく晴れ、星が出ていた。${leader}は足元を確かめながら歩き、エルシーはすぐ横を進んだ。`, times: ["夜"], fallback: true }
       ],
       曇り: [
-        `曇り空の下、${group}は${quest.area}へ向かった。${leader}は荷造りを確かめ、エルシーも落ち着かずに匂いを嗅いでいた。`,
+        `曇り空の下、${leader}は荷造りを確かめ、エルシーも落ち着かずに匂いを嗅いでいた。`,
         { text: `灰色の空が広がっていた。${leader}は「雨にはならないはず」と呟きながら、足取りを整えて歩き始めた。`, times: ["朝", "昼", "夕方"] }
       ],
       小雨: [
         `小雨の中、${leader}は外套の襟を立てて進んだ。紙の依頼書は湿りやすく、エルシーは濡れた毛を何度も振るった。`,
-        `細い雨が降り続いていた。${leader}は濡れやすいものを荷物の内側へ移し、エルシーは袖の下に入った。`
+        `細い雨が降り続いていた。${leader}は濡れやすいものを荷物の内側へ移し、エルシーは外套の裾の陰に入った。`
       ],
       風が強い: [
         `風が強く、依頼書の端が何度も跳ねた。${leader}は荷紐を結び直し、エルシーに寄る低い道を選んだ。`,
@@ -5621,12 +5621,12 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
 
   const table = {
     晴れ: [
-      { text: `朝の光が差す中、一行は${quest.area}へ向かった。足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`, times: ["朝"] },
+      { text: `朝の光が差す中、一行の足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`, times: ["朝"] },
       { text: `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くまで見渡しながら進んだ。`, times: ["朝", "昼", "夕方"] },
       { text: `空はよく晴れ、星が出ていた。一行は${quest.area}へ向かい、${getDisplayName(careful)}が足元を確かめながら先を歩いた。`, times: ["夜"], fallback: true }
     ],
     曇り: [
-      `曇り空の下、一行は${quest.area}へ向かった。${getDisplayName(careful)}は「雨になるかもしれない」と呟き、荷造りを確かめ直した。`,
+      `曇り空の下、${getDisplayName(careful)}は「雨になるかもしれない」と呟き、荷造りを確かめ直した。`,
       { text: `灰色の空が広がっていたが、風はなかった。${leader}は出発前に荷物の重さを確かめ、足取りを整えた。`, times: ["朝", "昼", "夕方"] }
     ],
     小雨: [
@@ -6512,21 +6512,32 @@ function generateLingeringLightNote(adv, rng) {
 //     種別既定が「{名前}は…」の形なので、ここだけ地の文にすると報告メモに文体の違う記録が並ぶ。
 //     ⚠️ **森喰い兎の14文だけは地の文**（体験版①より前からある古い分岐。今回は触っていない）。
 //   ★ どの段でも `pickOne` を必ず1回だけ引く（種別既定と同じ不変条件）。
-function generateAshGrassNote(adv, rng) {
+function generateAshGrassNote(adv, rng, result = null) {
   const memory = adv.tendencies?.memory ?? 3;
   const curiosity = adv.tendencies?.curiosity ?? 3;
   const name = getDisplayName(adv);
+  // ★ 本文で触れないことにした回（採取見送り）は、掘る・折る・指で触れる観察を書かない。
+  //   素手で触れずに掘った回（標本確保）は、指で触れる観察だけ書かない（2026-11-09・作者の返事）。
+  //   候補の数は同じ＝乱数の引き方は変わらない
+  const noTouch = result === "採取見送り";
+  const noBareHand = noTouch || result === "標本確保";
 
   if (curiosity >= 4) {
     return pickOne([
       `${name}は、日の当たる側と当たらない側で葉の色が違うことを気にしていた。同じ株なのに。`,
-      `${name}は根を少し掘り、土の中で横に長く繋がっているのを確かめた。株ではなくひとつづきかもしれない。`
+      noTouch
+        ? `${name}は根元の土を見て、株どうしが土の中で繋がっているように見えると書いた。掘って確かめてはいない。`
+        : `${name}は根を少し掘り、土の中で横に長く繋がっているのを確かめた。株ではなくひとつづきかもしれない。`
     ], rng);
   }
   if (memory >= 4) {
     return pickOne([
-      `${name}は、葉の裏の細かい粉を書き留めた。触れると指に残り、払っても薄く白い。`,
-      `${name}の記録では、茎は中が空で、折っても音がしない。切り口はすぐに灰色になった。`
+      noBareHand
+        ? `${name}は、葉の裏の細かい粉を書き留めた。風が当たると、薄く白く舞った。`
+        : `${name}は、葉の裏の細かい粉を書き留めた。触れると指に残り、払っても薄く白い。`,
+      noTouch
+        ? `${name}の記録では、茎は細く、中が空のように見える。触れていないので確かではない。`
+        : `${name}の記録では、茎は中が空で、折っても音がしない。切り口はすぐに灰色になった。`
     ], rng);
   }
   return pickOne([
@@ -6595,15 +6606,15 @@ function generateKindObservationNote(target, adv, rng, kind) {
   return pickOne(pool, rng).replaceAll("{名前}", name);
 }
 
-function generateAdventurerObservationNote(target, adv, rng, kind) {
+function generateAdventurerObservationNote(target, adv, rng, kind, result = null) {
   if (target === "森喰い兎") return generateRabbitNote(adv, rng);
   if (target === "「なにか」") return generateMysteryFieldNote(adv, rng);
   if (target === "残る灯り") return generateLingeringLightNote(adv, rng);
-  if (target === "灰かぶりのような『なにか』") return generateAshGrassNote(adv, rng);
+  if (target === "灰かぶりのような『なにか』") return generateAshGrassNote(adv, rng, result);
   return generateKindObservationNote(target, adv, rng, kind);
 }
 
-function generateObservationNotes(quest, party, adventurerItemIds, rng) {
+function generateObservationNotes(quest, party, adventurerItemIds, rng, result = null) {
   if (!quest.observationTarget || quest.observationTarget === "なし") return null;
   // 観察記録票を所持している冒険者だけが記録を書ける
   const holders = party.filter((adv) =>
@@ -6617,7 +6628,7 @@ function generateObservationNotes(quest, party, adventurerItemIds, rng) {
   const notes = holders.map((adv) => ({
     adventurerId: adv.id,
     name: getDisplayName(adv),
-    text: generateAdventurerObservationNote(quest.observationTarget, adv, rng, quest.observationKind)
+    text: generateAdventurerObservationNote(quest.observationTarget, adv, rng, quest.observationKind, result)
   }));
   return { target: quest.observationTarget, notes };
 }
@@ -7576,7 +7587,7 @@ function generateHerbDeliveryLogs(quest, party, adventurerItemIds, rng, context 
   ]));
 
   logs.push(pick([
-    `${partyActorSubject(party)}は納品書と宛先を確かめ、${quest.area}へ向かった。`,
+    `${partyActorSubject(party)}は道すがら、納品書と宛先をもう一度確かめた。`,
     `出発前に、診療所の表札と街道の分岐をもう一度読み直した。`
   ]));
 
@@ -7691,7 +7702,7 @@ function generateMissingHerbalistLogs(quest, party, adventurerItemIds, rng, cont
   ]));
 
   logs.push(pick([
-    `${partySubject(party)}は${quest.area}へ向かった。森の浅い場所だけを確認する予定だった。`,
+    `予定では、森の浅い場所だけを確認することになっていた。`,
     { text: `森の入口に着くと、昼の足跡と夕方のぬかるみが混ざっていた。`, times: ["夕方", "夜"] }
   ]));
 
@@ -8221,7 +8232,7 @@ function generateCaravanSearchLogs(quest, party, adventurerItemIds, rng, context
     `隊商が消えた街道の外れへ、急ぎ引き返した。荷馬車の轍と争った跡が残っていた。`,
     `商人と荷が消えた場所には、踏み荒らされた土と壊れた木箱の欠片が散らばっていた。`
   ] : [
-    `最後の手がかりを頼りに、もう一度街道の外れへ向かった。残された時間は多くない。`,
+    `最後の手がかりを頼りに、もう一度街道の外れを歩いた。残された時間は多くない。`,
     `前回追い切れなかった轍の先を、もう一度たどり直した。`
   ]));
 
@@ -8501,8 +8512,10 @@ function generateHighlight(quest, party, itemIds, departConditions, result, rng,
     const found = result === "発見" || result === "保護";
     // 薬草袋が見つかるのは、本人が見つかった回と痕跡確認の回だけ（引き返しの回は袋も見つけていない）
     const bagFound = found || result === "痕跡確認";
+    // ★ 本文に無い「エルシーが立ち止まった草むら」を書かない（2026-11-09・作者の返事）。
+    //   落とした袋が残るのは痕跡確認の回だけ（見つかった回は本人が袋を持っている）。結末の文の「痕跡は浅瀬方向」に合わせる
     const lines = [
-      ...(partyHasElsie(party) && bagFound ? [`エルシーが立ち止まった草むらの先に、落とした薬草袋があった。`] : []),
+      ...(result === "痕跡確認" ? [`落とした薬草袋と足跡が、浅瀬の方向を示していた。`] : []),
       ...(found ? [`報告書には、無事という二文字がいつもより大きく見えた。`] : [])
     ];
     if (minaName) lines.push(`${minaName}は最後まで足跡を見失わなかった。`);
@@ -9999,7 +10012,8 @@ function generateReportBody(expedition) {
   const personal = personalEventText(quest, party, rng);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng, quest);
-  const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng);
+  // 結末（触れたかどうか）を観察記録に渡す（見慣れない草。2026-11-09）
+  const observationNotes = generateObservationNotes(quest, party, adventurerItemIds, rng, outcomeInfo.result);
 
   const soloAdv = isSoloHumanParty(party);
   const companion = isCompanionParty(party);
