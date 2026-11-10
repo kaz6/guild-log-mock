@@ -5623,7 +5623,7 @@ function generateWeatherLog(quest, party, weather, rng, depart = null) {
     晴れ: [
       { text: `朝の光が差す中、一行の足取りは軽く、${leader}は出発前に装備をもう一度確かめた。`, times: ["朝"] },
       { text: `空はよく晴れていた。視界が広く、${getDisplayName(careful)}は遠くまで見渡しながら進んだ。`, times: ["朝", "昼", "夕方"] },
-      { text: `空はよく晴れ、星が出ていた。一行は${quest.area}へ向かい、${getDisplayName(careful)}が足元を確かめながら先を歩いた。`, times: ["夜"], fallback: true }
+      { text: `空はよく晴れ、星が出ていた。${getDisplayName(careful)}が足元を確かめながら先を歩いた。`, times: ["夜"], fallback: true }
     ],
     曇り: [
       `曇り空の下、${getDisplayName(careful)}は「雨になるかもしれない」と呟き、荷造りを確かめ直した。`,
