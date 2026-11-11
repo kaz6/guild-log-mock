@@ -5932,7 +5932,7 @@ function workEventText(quest, eventName, party, itemIds, rng, depart = null) {
   return pickDepartOne(allEvents[eventName] ?? [`${eventName}について、作業を行った。`], depart, rng);
 }
 
-function personalEventText(quest, party, rng) {
+function personalEventText(quest, party, rng, result = null) {
   const soloStyle = usesSoloHumanStyle(party);
   const candidates = [];
   humanMembers(party).forEach((adv) => {
@@ -5959,7 +5959,8 @@ function personalEventText(quest, party, rng) {
     }
     if (adv.background === "村の調合係") {
       // ★ 草に関わる依頼（採集・植物・薬草）でだけ草をより分ける（2026-11-11・作者の返事）。ほかは同じ位置に別の文
-      const grassQuest = (quest?.tags ?? []).some((t) => ["採集", "植物", "薬草"].includes(t));
+      //   触れないことにした回（採取見送り）は草を手に取らない（2026-11-11・通読係の指摘）
+      const grassQuest = (quest?.tags ?? []).some((t) => ["採集", "植物", "薬草"].includes(t)) && result !== "採取見送り";
       candidates.push(grassQuest
         ? `${name}は匂いと湿り気だけで、使える草と避ける草をより分けた。手つきに迷いがない。`
         : `${name}は休むたびに、荷の中の薬の包みを指で数え直した。手つきに迷いがない。`);
@@ -9423,7 +9424,10 @@ function generateReportBody(expedition) {
       : churchPatrolOutcomeText(outcome, party, rng, departFilterOf(quest, departConditions));
     add("action", outcomeInfo.line);
     add("afterglow", outcomeInfo.after, outcomeInfo.afterTag);
-    add("afterglow", closingLine);
+    // ★ 引き返した回は巡回を終えていないので「静かな巡回だった」と締めない（2026-11-11・通読係の指摘。抽選は済んでいる）
+    add("afterglow", field.turnBack && closingLine.startsWith("大きな騒ぎのない静かな巡回だった")
+      ? `巡回は途中で切り上げたが、見て回った場所だけは記録に残した。`
+      : closingLine);
 
     return finalizeQuestReport({
       expedition,
@@ -10042,7 +10046,7 @@ function generateReportBody(expedition) {
   const outcomeInfo = field.turnBack
     ? fieldworkTurnBackOutcomeText(quest, party, field.fw)
     : outcomeText(quest, party, itemIds, outcome, rng, depart);
-  const personal = personalEventText(quest, party, rng);
+  const personal = personalEventText(quest, party, rng, outcomeInfo.result);
   const supply = supplyEventText(quest, party, adventurerItemIds, rng, weather);
   const statsLog = statsPersonalityLog(party, rng, quest);
   // 結末（触れたかどうか）を観察記録に渡す（見慣れない草。2026-11-09）
