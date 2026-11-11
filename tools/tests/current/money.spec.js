@@ -456,23 +456,81 @@ test.describe("救済クエスト", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 
-  test("借金中、または借金2回を使い切った状態のとき、必ず枠に入る（それ以外では出ない）", async ({ page }) => {
-    // ★ 「運営不能の直前」の書き直し（裁定 2026-09-22）。⚠️ 作者の定義として確定ではない。違えばここを直す。
-    // ★ 「たまに出る」は 2026-09-26・EX-147 で止めた（暫定確定：N＝∞）。全組の判定は受け入れテストの側にある。
+  test("借金中、または2回使い切りで一番安い依頼に届かないとき、必ず枠に入る（それ以外では出ない）", async ({ page }) => {
+    // ★ 「運営不能の直前」の定義（2026-11-12・EX-173 で作者が確定）。旧定義（2026-09-22 の書き直し）は「借金中、または2回使い切り」。
+    // ★ 「たまに出る」は 2026-11-12・EX-173 で取り下げ（直前にしか出さない＝確定）。全組の判定は受け入れテストの側にある。
     const errors = await freshPage(page);
     await interview(page);
     // 枠が埋まっていても入ることを見るため、進行を先に積んでおく
     const all = await page.evaluate(() => window.masterQuests.filter((q) => !q.hidden && !q.relief).map((q) => q.id));
     await seedClearedQuests(page, all.slice(0, 8));
     const onBoard = () => page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).some((q) => q.relief));
-    expect(await onBoard(), "直前でないのに出ている（N は未確定＝出さない）").toBe(false);
-    await page.evaluate(() => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1 }; });
+    const cheapest = await page.evaluate(() => Math.min(...buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false })
+      .filter((q) => !q.relief && !q.bond).map(questFee).filter((f) => f > 0)));
+    const per = await page.evaluate(() => window.masterMoneyRules.reliefPerBorrow);
+    expect(await onBoard(), "直前でないのに出ている（直前にしか出さない）").toBe(false);
+    await page.evaluate((per) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: per }; }, per);
     expect(await onBoard(), "借金中なのに出ていない").toBe(true);
-    await page.evaluate(() => { state.debt = { active: null, timesBorrowed: 2 }; });
-    expect(await onBoard(), "2回使い切ったのに出ていない").toBe(true);
+    // ★ 2回使い切っても、金に余裕があれば出ない（旧定義ではここで出続けた）
+    await page.evaluate(({ per, cheapest }) => { state.debt = { active: null, timesBorrowed: 2, reliefLeft: per }; state.money = cheapest; }, { per, cheapest });
+    expect(await onBoard(), "2回使い切りでも一番安い依頼に届くなら出ない").toBe(false);
+    await page.evaluate((cheapest) => { state.money = cheapest - 1; }, cheapest);
+    expect(await onBoard(), "2回使い切り・一番安い依頼に届かないのに出ていない").toBe(true);
     // ★ 枠の数は越えない
     expect(await page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).length))
       .toBeLessThanOrEqual(await page.evaluate(() => window.masterBoardRules.slots));
+    // ★ 回数を使い切ると、直前でも出ない
+    await page.evaluate(() => { state.debt.reliefLeft = 0; });
+    expect(await onBoard(), "回数を使い切ったのに出ている").toBe(false);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("救済の回数は借入のたびに元に戻り、前の残りは持ち越さない／出発で1回減る", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const per = window.masterMoneyRules.reliefPerBorrow;
+      const relief = window.masterQuests.find((q) => q.relief);
+      const steps = { initial: state.debt.reliefLeft };
+      state.money = -5;
+      settleNegativeMoney(); // 1回目の借入
+      steps.afterFirst = state.debt.reliefLeft;
+      selectedQuestId = relief.id; selectedAdventurerIds = ["adv_mina"]; selectedSharedItems = []; selectedObsHolders = [];
+      startExpedition();
+      steps.afterDepart = state.debt.reliefLeft;
+      const exp = state.expeditions.find((e) => e.questId === relief.id);
+      exp.startTime = Date.now() - exp.durationMs - 1_000;
+      checkExpeditionCompletion();
+      steps.afterReturn = state.debt.reliefLeft; // 帰りでは減らない
+      state.debt.active = null; // 完済したことにする
+      state.money = -5;
+      settleNegativeMoney(); // 2回目の借入
+      steps.afterSecond = state.debt.reliefLeft;
+      return { per, ...steps, times: state.debt.timesBorrowed };
+    });
+    expect(got.initial).toBe(0);
+    expect(got.afterFirst).toBe(got.per);
+    expect(got.afterDepart).toBe(got.per - 1);
+    expect(got.afterReturn).toBe(got.per - 1);
+    expect(got.times).toBe(2);
+    expect(got.afterSecond, "前の残りを持ち越していない（足し算ではなく元に戻る）").toBe(got.per);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("最後の1回が掲示板に出たときだけ、受付嬢が一言添える（数字は出さない）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const line = await page.evaluate(() => window.masterMoneyRules.texts.reliefLast);
+    const show = async (left) => {
+      await page.evaluate((left) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: left }; setRoute("quests"); }, left);
+      return page.locator("[data-relief-last]").count();
+    };
+    expect(await show(3)).toBe(0);
+    expect(await show(2)).toBe(0);
+    expect(await show(1)).toBe(1);
+    expect(await page.locator("[data-relief-last]").innerText()).toContain(line);
+    expect(await page.locator("[data-relief-last]").innerText()).not.toMatch(/[0-9０-９]/);
+    expect(await show(0), "使い切ったら救済も一言も出ない").toBe(0);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
