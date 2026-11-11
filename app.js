@@ -100,7 +100,7 @@ function moveMoney(amount, label, detail = null) {
 //   ⚠️ ここは所持金が減ったときだけ呼ぶ（報酬や返済で呼ぶ理由は無い）。
 function settleNegativeMoney() {
   if (state.gameOver || !(state.money < 0)) return;
-  const debt = state.debt ?? (state.debt = { active: null, timesBorrowed: 0 });
+  const debt = state.debt ?? (state.debt = { active: null, timesBorrowed: 0, reliefLeft: 0 });
   if (debt.active) {
     state.gameOver = { at: Date.now(), reason: "借金を返しきる前に、また赤字になった" };
     return;
@@ -112,6 +112,8 @@ function settleNegativeMoney() {
   const amount = -state.money + MONEY_RULES.borrowMargin;
   debt.timesBorrowed += 1;
   debt.active = { borrowed: amount, remaining: amount };
+  // ★ 救済の回数は借入のたびに元に戻る。前の残りは持ち越さない（2026-11-12・EX-173）
+  debt.reliefLeft = MONEY_RULES.reliefPerBorrow;
   moveMoney(amount, "借入", `${debt.timesBorrowed}回目`);
   if (!Array.isArray(state.moneyEvents)) state.moneyEvents = [];
   state.moneyEvents.push({
@@ -760,12 +762,28 @@ function buildExpeditionItemMap(party, quest, sharedItemIds, obsHolderIds) {
   return map;
 }
 
-// ★ 運営不能の直前（2026-09-23・EX-144）＝**借金中、または借金2回を使い切った状態**。
-//   救済クエストが必ず掲示板に入る条件。⚠️ 定義は裁定 2026-09-22 の書き直しで、作者の確定ではない。
-function isOnBrinkOfClosing() {
+// ★ 運営不能の直前（2026-11-12・EX-173 で作者が確定）＝**借金中、または「借入を2回使い切り、
+//   かつ所持金が掲示板の一番安い依頼の遠征費にも届かない」とき**。
+//   ★ 固定の金額は置かない。掲示板にある依頼の遠征費で判定する。
+//   ★ 「一番安い依頼」には救済そのものと固有依頼（頼まれごと）を数えない。費用0の依頼（ギルドの掃除）も数えない
+//     ——費用0は「届かない」が起きないので、数えると2回使い切ったあとは直前が二度と来なくなる。
+//   ⚠️ 旧定義（2026-09-22 の書き直し）は「借金中、または借金2回を使い切った状態」。完済しても救済が先頭に居座った。
+//   `boardQuests` は救済を入れる前の掲示板（省けばいまの掲示板から引く）。
+function isOnBrinkOfClosing(boardQuests) {
   if (state.gameOver) return false;
   const debt = state.debt ?? {};
-  return Boolean(debt.active) || (debt.timesBorrowed ?? 0) >= MONEY_RULES.maxBorrowCount;
+  if (debt.active) return true;
+  if ((debt.timesBorrowed ?? 0) < MONEY_RULES.maxBorrowCount) return false;
+  const board = boardQuests ?? buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false });
+  const fees = board.filter((quest) => !quest.relief && !quest.bond).map(questFee).filter((fee) => fee > 0);
+  // ⚠️ 費用のかかる依頼が1つも無いなら、届かない相手が無い＝直前ではない
+  if (fees.length === 0) return false;
+  return (Number.isFinite(state.money) ? state.money : 0) < Math.min(...fees);
+}
+
+// 救済の残りの回数（今の借入の分）。★ 画面に数字は出さない（最後の1回だけ受付嬢が一言添える）
+function reliefLeft() {
+  return Math.max(0, Number(state.debt?.reliefLeft) || 0);
 }
 
 function isShoppingQuest(quest) {
@@ -1073,7 +1091,8 @@ function createInitialState() {
     money: MONEY_RULES.initialMoney,
     moneyLedger: [], // 直近の出入り（新しいものが先頭）。ホームに出す
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
-    debt: { active: null, timesBorrowed: 0 },
+    //   reliefLeft＝今の借入で受けられる救済の残り（2026-11-12・EX-173）。借入のたびに元に戻る
+    debt: { active: null, timesBorrowed: 0, reliefLeft: 0 },
     moneyEvents: [], // 受付嬢の言葉（借入）。ホームで1件ずつ読む
     // 生態目録を渡した印（2026-10-23・EX-163 段階3）。{ at, read, legacy? }。★ 最初の枠が立った封の操作の中でだけ立てる。
     //   古いセーブ（この鍵が無く、面接を終えている）は読み込みで legacy を立てる＝目録を隠さない・一言も出さない。
@@ -1179,7 +1198,11 @@ function normalizeDebt(raw) {
   const active = a && Number.isFinite(a.remaining) && a.remaining > 0
     ? { borrowed: Number.isFinite(a.borrowed) ? a.borrowed : a.remaining, remaining: a.remaining }
     : null;
-  return { active, timesBorrowed: times };
+  // ★ 救済の残り（EX-173）。鍵の無い古いセーブは、今の借入の回数がまるごと残っている扱い（借りたことが無ければ0）
+  const reliefLeft = Number.isFinite(raw?.reliefLeft)
+    ? Math.max(0, Math.min(MONEY_RULES.reliefPerBorrow, raw.reliefLeft))
+    : (times > 0 ? MONEY_RULES.reliefPerBorrow : 0);
+  return { active, timesBorrowed: times, reliefLeft };
 }
 
 // 帰還の通知（1件 → 行列）。★ 同時に2本帰ったとき、片方が黙って消えないようにする。
@@ -3577,7 +3600,7 @@ function questCooldownState(quest, reports) {
 //   - 未消化：**解放の浅い順**（同じ深さなら定義順）。進行に要るものが先に出る。
 //   - 既消化：クールタイムが明けたものだけを、**久しく行っていない順**（同点は定義順）。
 //   ★ 枠は `masterBoardRules.slots`。緊急依頼（捜索チェーン）は枠の外なので、ここには入れない。
-function buildBoardQuests(clearedQuestIds, reports) {
+function buildBoardQuests(clearedQuestIds, reports, { withRelief = true } = {}) {
   const slots = window.masterBoardRules?.slots;
   const candidates = state.quests
     // ★ 救済クエストは通常の候補に入れない（下で「直前」のときだけ先頭に入れる。2026-09-23・EX-144）
@@ -3596,8 +3619,11 @@ function buildBoardQuests(clearedQuestIds, reports) {
     .sort((a, b) => (b.cool.since - a.cool.since) || byOrder(a, b));
   const ordered = [...fresh, ...rested].map((c) => c.quest);
   // ★ 救済クエスト（2026-09-23・EX-144）：**運営不能の直前には必ず枠に入る**（先頭。枠の中なので6枚は越えない）。
-  //   ★ 「必ず」なのでクールタイムを見ない。⚠️ 「たまに出る」（間隔 N）は未確定＝直前以外では出さない。
-  if (isOnBrinkOfClosing()) {
+  //   ★ 「必ず」なのでクールタイムを見ない。★ **直前にしか出さない（N＝∞）を 2026-11-12・EX-173 に確定**（「たまに出る」は取り下げ）。
+  //   ★ **回数を使い切ったら、直前でも出ない**（借入1回につき `reliefPerBorrow` 回。その先の赤字は運営不能）。
+  //   直前の判定は、救済を入れる前の掲示板で見る（救済が枠を1つ取って一番安い依頼を押し出しても、判定は動かさない）。
+  const regular = typeof slots === "number" ? ordered.slice(0, slots) : ordered;
+  if (withRelief && reliefLeft() > 0 && isOnBrinkOfClosing(regular)) {
     state.quests.filter((quest) => quest.relief && !isQuestOnExpedition(quest.id))
       .reverse().forEach((quest) => ordered.unshift(quest));
   }
@@ -3646,6 +3672,8 @@ function renderQuests() {
   const waitingQuests = state.quests.filter((quest) =>
     !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
     && questBoardVisibility(quest, state.reports).reason === "待機中");
+  // ★ 救済の最後の1回が掲示板に出ているとき、受付嬢が一言添える（2026-11-12・EX-173）。★ 数字は出さない
+  const reliefLastLine = reliefLeft() === 1 && boardQuests.some((quest) => quest.relief) ? MONEY_RULES.texts.reliefLast : null;
   // ★ 緊急依頼も同じ規則で下ろす（2026-09-20・EX-138）。出ている間は掲示板に残さない。
   if (urgentQuest && !isQuestOnExpedition(urgentQuest.id) && !chainSlotBusy()) boardQuests.unshift(urgentQuest);
 
@@ -3658,6 +3686,11 @@ function renderQuests() {
     <div class="weather-bar">
       <span class="weather-bar-icon">🚨</span>
       <span class="weather-bar-text">隊商を護り切れなかった。捜索に向かえる者を編成せよ。</span>
+    </div>` : ""}
+    ${reliefLastLine ? `
+    <div class="weather-bar" data-relief-last="1">
+      <span class="weather-bar-icon">💬</span>
+      <span class="weather-bar-text">受付嬢「${escapeHtml(reliefLastLine)}」</span>
     </div>` : ""}
     ${waitingQuests.map((quest) => `
     <div class="weather-bar">
@@ -5282,6 +5315,8 @@ function startExpedition() {
     expedition.stockDrawn = true; // 棚から出した印。帰還時に戻すのはこれがある遠征だけ
   }
   moveMoney(-expedition.fee, questFeeLabel(quest), quest.title);
+  // ★ 救済は受けた（出発した）ときに1回減る（2026-11-12・EX-173）。手ぶらで戻っても戻さない
+  if (quest.relief && state.debt) state.debt.reliefLeft = Math.max(0, reliefLeft() - 1);
   // ★ 割り込む出発も許す（細則3。「可能だが推奨しない行動は縛らない」）。出発した瞬間に借金の判定。
   settleNegativeMoney();
   state.expeditions = [...getExpeditions(), expedition];
