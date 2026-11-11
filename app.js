@@ -5742,7 +5742,10 @@ function roadEventText(quest, eventName, party, itemIds, rng, options = {}) {
       soloStyle
         ? `倒木が道をふさいでいた。${name(warrior)}が枝を払い、自分で安全な迂回路を確かめた。`
         : `倒木が道をふさいでいた。${name(warrior)}が枝を払い、${sameOrName(scout, warrior)}安全な迂回路を探した。`,
-      `古い倒木の裏側に、泥被り茸がいくつか生えていた。${name(herbalist)}は無理に引き抜かず、根元の土ごと採取した。`
+      // ★ 見慣れない草で触れないことにした回（採取見送り）は採らない（2026-11-11・作者の返事 EX172-Q3）。候補の数は同じ
+      options.result === "採取見送り"
+        ? `古い倒木の裏側に、泥被り茸がいくつか生えていた。${name(herbalist)}は採らずに、生えている場所だけを書き留めた。`
+        : `古い倒木の裏側に、泥被り茸がいくつか生えていた。${name(herbalist)}は無理に引き抜かず、根元の土ごと採取した。`
     ],
     森喰い兎: [
       `森喰い兎が薬草袋に飛びついた。${name(scout)}は短弓で牽制し、距離を取らせた。`,
@@ -5946,7 +5949,11 @@ function personalEventText(quest, party, rng) {
       candidates.push(`${name}は休むとき、自然と背中を木や壁に預けて座った。昔の仕事の癖らしい。`);
     }
     if (adv.background === "村の調合係") {
-      candidates.push(`${name}は匂いと湿り気だけで、使える草と避ける草をより分けた。手つきに迷いがない。`);
+      // ★ 草に関わる依頼（採集・植物・薬草）でだけ草をより分ける（2026-11-11・作者の返事）。ほかは同じ位置に別の文
+      const grassQuest = (quest?.tags ?? []).some((t) => ["採集", "植物", "薬草"].includes(t));
+      candidates.push(grassQuest
+        ? `${name}は匂いと湿り気だけで、使える草と避ける草をより分けた。手つきに迷いがない。`
+        : `${name}は休むたびに、荷の中の薬の包みを指で数え直した。手つきに迷いがない。`);
     }
   });
   return pickOne(candidates, rng);
@@ -8998,8 +9005,25 @@ const RECEPTIONIST_REPORT_TEMPLATE = {
 //     ＝既存の報告書は1文字も動かない。
 function generateReport(expedition) {
   const report = generateReportBody(expedition);
+  avoidDoubleElsieEarLine(report, expedition);
   appendAbilityReportLines(report, expedition);
   return report;
+}
+// ★ エルシーの耳の行が1通に2回出ないように（2026-11-11・作者の返事）。特殊裁定のフック「足音を追う」の
+//   「耳が、同じ方角へ何度も立った。」と、依頼ごとのエルシーの行（耳を立てる・耳を動かす）が並んだときだけ、
+//   フックの行を同じ組のもう一方の文にする。乱数は引かない（抽選はもう済んでいる）
+function avoidDoubleElsieEarLine(report, expedition) {
+  const logs = report?.logs;
+  if (!Array.isArray(logs)) return;
+  const hook = (window.masterAdventurers ?? []).find((a) => a.id === "adv_elsie")?.obsession?.triggerTags?.find((t) => t.id === "elsie_trail");
+  const elsie = getAdventurer("adv_elsie");
+  if (!hook || !elsie || !(expedition?.adventurerIds ?? []).includes("adv_elsie")) return;
+  const name = getDisplayName(elsie);
+  const [other, ear] = hook.lines.map((t) => t.replaceAll("{名前}", name));
+  const i = logs.findIndex((l) => l.text === ear);
+  if (i < 0) return;
+  const twice = logs.some((l, j) => j !== i && (l.text ?? "").includes(name) && (l.text ?? "").includes("耳"));
+  if (twice) logs[i] = { ...logs[i], text: other };
 }
 // アビリティの一行（出口で足すもの）。★ 定型の報告書（固有依頼・掃除）には足さない（文を確定稿のまま保つ）。
 function appendAbilityReportLines(report, expedition) {
@@ -10026,7 +10050,7 @@ function generateReportBody(expedition) {
   }).filter(Boolean);
   add("", `編成：${formatNames(party)}。支給品：${supplyDesc.length > 0 ? supplyDesc.join(" / ") : "なし"}。`);
   add("", generateWeatherLog(quest, party, weather, rng, depart), "weather"); // ★ 天候の行の印（EX-157【2】）
-  roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng, { porridge: field.porridge, depart })));
+  roadEvents.forEach((eventName) => add("action", roadEventText(quest, eventName, party, itemIds, rng, { porridge: field.porridge, depart, result: outcomeInfo.result })));
   field.logLines.forEach((line) => add(line.kind, line.text, line.tag));
   if (personal) add("drama", personal);
   if (supply) add("drama", supply);
