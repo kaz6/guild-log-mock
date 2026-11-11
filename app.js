@@ -2187,7 +2187,7 @@ function expeditionBlockedMessage(adventurerIds) {
   return null;
 }
 
-function elsiePartyLogText(quest, party, rng, reportResult = null) {
+function elsiePartyLogText(quest, party, rng, reportResult = null, avoidEar = false) {
   if (!partyHasElsie(party) || rng() > 0.70) return null;
 
   const pool = [
@@ -2333,7 +2333,14 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
 
   // ★ 隣の酒場への買い出しは、届け先がギルドそのもの。樽を届けたあとに「帰り道」と書くと順番が崩れる（EX-172【4】）。
   //   選んだ文を差し替えるだけにして、候補の数（＝乱数の引き方）は変えない。
-  const line = pickOne(pool, rng);
+  let line = pickOne(pool, rng);
+  // ★ 本文にもうエルシーの耳の行があるときは、耳の行を重ねない（2026-11-11・作者の返事）。
+  //   引いた位置から順に、耳の出ない文を選び直す（乱数は引かない・行数は変わらない）
+  if (avoidEar && line?.includes("耳")) {
+    const at = pool.indexOf(line);
+    const alt = pool.map((_, k) => pool[(at + 1 + k) % pool.length]).find((t) => !t.includes("耳"));
+    if (alt) line = alt;
+  }
   if (quest.id === "quest_tavern_errand" && line?.startsWith("帰り道、")) {
     return line.replace("帰り道、", "樽を下ろしたあと、").replace("最後は先頭で門をくぐった", "最後は先頭で受付の脇へ向かった");
   }
@@ -2342,7 +2349,9 @@ function elsiePartyLogText(quest, party, rng, reportResult = null) {
 
 function withElsieLog(report, quest, party, rng) {
   if (!report || !partyHasElsie(party)) return report;
-  const line = elsiePartyLogText(quest, party, rng, report.result);
+  const elsieName = getDisplayName(getAdventurer("adv_elsie") ?? { name: "エルシー" });
+  const hasEar = (report.logs ?? []).some((l) => ((l.text ?? "").includes("エルシー") || (l.text ?? "").includes(elsieName)) && (l.text ?? "").includes("耳"));
+  const line = elsiePartyLogText(quest, party, rng, report.result, hasEar);
   if (!line) return report;
   const logs = [...report.logs];
   const insertAt = logs.length > 0 && logs[logs.length - 1].kind === "afterglow" ? logs.length - 1 : logs.length;
