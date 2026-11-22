@@ -517,7 +517,7 @@ test.describe("救済クエスト", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 
-  test("最後の1回が掲示板に出たときだけ、受付嬢が一言添える（数字は出さない）", async ({ page }) => {
+  test("最後の1回が掲示板に出たときだけ、受付嬢が一言添える（数字は出さない。★ 見せ方は仮・作者の裁定待ち）", async ({ page }) => {
     const errors = await freshPage(page);
     await interview(page);
     const line = await page.evaluate(() => window.masterMoneyRules.texts.reliefLast);
