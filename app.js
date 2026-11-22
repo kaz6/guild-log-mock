@@ -774,11 +774,45 @@ function isOnBrinkOfClosing(boardQuests) {
   const debt = state.debt ?? {};
   if (debt.active) return true;
   if ((debt.timesBorrowed ?? 0) < MONEY_RULES.maxBorrowCount) return false;
+  const cheapest = cheapestBoardFee(boardQuests);
+  // ⚠️ 費用のかかる依頼が1つも無いなら、届かない相手が無い＝直前ではない
+  if (cheapest === null) return false;
+  return (Number.isFinite(state.money) ? state.money : 0) < cheapest;
+}
+
+// 掲示板の一番安い遠征費（救済・固有依頼・費用0の依頼は数えない）。無ければ null。
+//   ★ 「運営不能の直前」と「行き止まり」で**同じ数え方**を使うために切り出した（2026-11-23・P-003。判定は変えていない）。
+function cheapestBoardFee(boardQuests) {
   const board = boardQuests ?? buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false });
   const fees = board.filter((quest) => !quest.relief && !quest.bond).map(questFee).filter((fee) => fee > 0);
-  // ⚠️ 費用のかかる依頼が1つも無いなら、届かない相手が無い＝直前ではない
-  if (fees.length === 0) return false;
-  return (Number.isFinite(state.money) ? state.money : 0) < Math.min(...fees);
+  return fees.length === 0 ? null : Math.min(...fees);
+}
+
+// ★ 行き止まり（2026-11-23・P-003。作者が「畳ませます」と決めた）＝次の全部を満たすとき：
+//   借入を2回使い切った／借金中ではない／救済の残りが0／所持金が掲示板の一番安い依頼の遠征費に届かない。
+//   ★ 遠征に出ている者が1人でもいる間は畳まない（帰れば報酬で届くかもしれない）。
+//   ⚠️ 「一番安い依頼」の数え方は `isOnBrinkOfClosing` と同じ（`cheapestBoardFee`）。買い出し・酒場の酒樽など
+//     報酬の出ない依頼を数えるかは作者の裁定待ち（いまは数える）。
+function isDeadEnd() {
+  if (state.gameOver) return false;
+  const debt = state.debt ?? {};
+  if (debt.active) return false;
+  if ((debt.timesBorrowed ?? 0) < MONEY_RULES.maxBorrowCount) return false;
+  if (reliefLeft() > 0) return false;
+  if (hasExpeditions()) return false;
+  const cheapest = cheapestBoardFee();
+  if (cheapest === null) return false;
+  return (Number.isFinite(state.money) ? state.money : 0) < cheapest;
+}
+
+// 行き止まりなら運営不能にする。畳んだら true（保存は呼び出し側）。
+//   呼ぶ所は2つ：遠征から帰って金の出入りが済んだあと（`completeExpeditionIfDue`・`abortExpeditionWithoutQuest`）と、
+//   セーブを読み込んだとき（起動・綴じた記録へ戻る）。`deadEnd` の印は運営不能の画面の地の文を選ぶのに使う。
+const DEAD_END_REASON = "もう借りられず、どの依頼にも出せなくなった";
+function settleDeadEnd() {
+  if (!isDeadEnd()) return false;
+  state.gameOver = { at: Date.now(), reason: DEAD_END_REASON, deadEnd: true };
+  return true;
 }
 
 // 救済の残りの回数（今の借入の分）。★ 画面に数字は出さない（最後の1回だけ受付嬢が一言添える）
@@ -1779,6 +1813,7 @@ function restoreBoundRecord() {
   // ★ 使い切りにする（裏の1冊が表に出る）。そうしないと、戻った先でも詰んだときに遡れない。
   writeBoundBooks(books.slice(1));
   state = loadState();
+  settleDeadEnd(); // 読み込んだとき（P-003）。保存はこのあと
   selectedQuestId = state.selectedQuestId ?? null;
   selectedAdventurerIds = state.selectedAdventurerIds ?? [];
   selectedSharedItems = state.selectedSharedItems ?? [];
@@ -2442,6 +2477,7 @@ function abortExpeditionWithoutQuest(lost) {
   // ★ 行方不明の時計は、この遠征ぶんを積んでから止める（EX-070 の完了時と同じ扱い）。
   //   ⚠️ 暦は進めない——この回は**無かったことにする**のが EX-097 の扱い。
   closeExpeditionSpanIfIdle(Math.min(Date.now(), expeditionRealEndMs(lost)), { advanceCalendar: false });
+  settleDeadEnd(); // 中断でも遠征費は払ったまま（P-003）
   saveState();
 }
 
@@ -2524,6 +2560,8 @@ function completeExpeditionIfDue(expedition) {
   //   最後の1本が畳まれたときだけ確定し、まだ走っている遠征があれば区間は続く。
   closeExpeditionSpanIfIdle(expeditionRealEndMs(expedition));
   settleMissingDeaths();
+  // ★ 金の出入りが済んだあと（掲示板を見られるようになる前）に行き止まりを見る（2026-11-23・P-003）
+  settleDeadEnd();
   saveState();
 }
 
@@ -2984,7 +3022,7 @@ function gameOverCardHtml() {
       <div class="card-body">
         <p class="eyebrow">Ledger Closed</p>
         <h3>${escapeHtml(t.gameOverTitle)}</h3>
-        <p>${escapeHtml(t.gameOverBody)}</p>
+        <p>${escapeHtml(state.gameOver.deadEnd ? t.gameOverBodyDeadEnd : t.gameOverBody)}</p>
         ${action}
       </div>
     </section>`;
@@ -11674,5 +11712,10 @@ window.debugFieldworkSim = function (questId = "quest_herb", trials = 200, party
 setInterval(() => {
   if (hasExpeditions()) render();
 }, 1000);
+
+// ★ セーブを読み込んだとき、行き止まりなら畳む（2026-11-23・P-003）。遠征が残っていれば何もしない
+//   （それらの帰還は `render()` の先頭で畳まれ、そのあとの `completeExpeditionIfDue` が改めて見る）。
+//   ⚠️ 必ずここ＝評価がすべて終わったあと（上の注意と同じ理由。掲示板の判定は後ろの定数に触る）。
+if (settleDeadEnd()) saveState();
 
 render();

@@ -721,3 +721,151 @@ test.describe("観察記録票は個人（例外）", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
+
+// 行き止まりで畳む（2026-11-23・P-003。作者が「畳ませます」と決めた）。
+//   行き止まり＝借入を2回使い切った／借金中ではない／救済の残りが0／所持金が掲示板の一番安い遠征費に届かない。
+//   ★ 遠征に出ている者が1人でもいる間は畳まない。判定する時点は、遠征から帰って金の出入りが済んだあと／セーブを読み込んだとき。
+//   ⚠️ 値は判定しない（掲示板の一番安い遠征費は `cheapestBoardFee()` から読む）。
+test.describe("行き止まりで畳む", () => {
+  // 進行を積み、借入を2回使い切った状態（救済の残り0・所持金0）にする。★ 進行を積むのは、掲示板に費用のかかる依頼を並べるため
+  async function deadEndSetup(page, { reliefLeft = 0, active = null, money = 0 } = {}) {
+    const errors = await freshPage(page);
+    await interview(page);
+    const all = await page.evaluate(() => window.masterQuests.filter((q) => !q.hidden && !q.relief).map((q) => q.id));
+    await seedClearedQuests(page, all.slice(0, 8));
+    await page.evaluate(({ reliefLeft, active, money }) => {
+      state.debt = { active, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft };
+      state.money = money;
+      state.gameOver = null;
+      saveState();
+    }, { reliefLeft, active, money });
+    return errors;
+  }
+
+  // 遠征を1本、出して（遠征費は引かない）帰す。★ 帰還は本物の経路（checkExpeditionCompletion）。
+  //   `stay` を渡すと、その遠征はまだ帰らない（長い所要時間）まま残す。
+  async function sendAndReturn(page, { questId = "quest_guild_cleanup", partyIds = ["adv_mina"], stay = null } = {}) {
+    return page.evaluate(({ questId, partyIds, stay }) => {
+      const make = (qid, party, seed, late) => ({
+        id: `exp_deadend_${seed}`, questId: qid, adventurerIds: party, adventurerItemIds: {}, itemIds: [],
+        startTime: late ? Date.now() : Date.now() - 60_000, durationMs: late ? 3_600_000 : 1, seed,
+        departTimeOfDay: questTimeOfDay(getQuest(qid), seed), departWeather: "晴れ", firstRunOfQuest: false, elsieAtGuild: true, fee: 0
+      });
+      const list = [make(questId, partyIds, 1, false)];
+      if (stay) list.push(make(stay.questId, stay.partyIds, 2, true));
+      state.expeditions = list;
+      list.forEach((e) => e.adventurerIds.forEach((id) => { const a = getAdventurer(id); if (a) a.status = "遠征中"; }));
+      checkExpeditionCompletion();
+      return {
+        gameOver: JSON.parse(JSON.stringify(state.gameOver)), money: state.money, left: getExpeditions().length,
+        cheapest: cheapestBoardFee(), reward: state.reports[0]?.money?.reward ?? null
+      };
+    }, { questId, partyIds, stay });
+  }
+
+  test("行き止まりで帰ったら、ギルドは畳まれる（理由と画面の地の文つき）", async ({ page }) => {
+    const errors = await deadEndSetup(page);
+    const got = await sendAndReturn(page);
+    // 前提：帰ったあとも所持金は一番安い遠征費に届かない
+    expect(got.cheapest, "掲示板に費用のかかる依頼が無い").not.toBe(null);
+    expect(got.money).toBeLessThan(got.cheapest);
+    expect(got.left).toBe(0);
+    expect(got.gameOver).not.toBe(null);
+    expect(got.gameOver.reason).toBe("もう借りられず、どの依頼にも出せなくなった");
+    // ★ 地の文は行き止まり用（赤字ではないので「赤字のまま」を言わない）
+    await page.evaluate(() => setRoute("home"));
+    const texts = await page.evaluate(() => ({ dead: window.masterMoneyRules.texts.gameOverBodyDeadEnd, red: window.masterMoneyRules.texts.gameOverBody }));
+    await expect(page.locator(".game-over-card p").nth(1)).toHaveText(texts.dead);
+    expect(texts.dead).not.toContain("赤字");
+    // 赤字で畳んだ（印の無い）運営不能は、いままでの地の文のまま
+    await page.evaluate(() => { state.gameOver = { at: Date.now(), reason: "もう借りられないところで、また赤字になった" }; render(); });
+    await expect(page.locator(".game-over-card p").nth(1)).toHaveText(texts.red);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("救済が残っていれば、畳まれない", async ({ page }) => {
+    const errors = await deadEndSetup(page, { reliefLeft: 1 });
+    const got = await sendAndReturn(page);
+    expect(got.money).toBeLessThan(got.cheapest); // 前提：金は届かない
+    expect(got.gameOver).toBe(null);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("借金中は、畳まれない", async ({ page }) => {
+    const errors = await deadEndSetup(page, { active: { borrowed: 200, remaining: 120 } });
+    const got = await sendAndReturn(page);
+    expect(got.gameOver).toBe(null);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("借入を使い切っていなければ、畳まれない", async ({ page }) => {
+    const errors = await deadEndSetup(page);
+    await page.evaluate(() => { state.debt.timesBorrowed = window.masterMoneyRules.maxBorrowCount - 1; });
+    const got = await sendAndReturn(page);
+    expect(got.money).toBeLessThan(got.cheapest);
+    expect(got.gameOver).toBe(null);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("遠征に出ている者がいる間は畳まれず、最後の1本が帰ったら畳まれる", async ({ page }) => {
+    const errors = await deadEndSetup(page);
+    const first = await sendAndReturn(page, { stay: { questId: "quest_tavern_errand", partyIds: ["adv_gadd"] } });
+    expect(first.left).toBe(1); // 1本は帰り、1本は出たまま
+    expect(first.gameOver).toBe(null);
+    // もう1本を帰す
+    const second = await page.evaluate(() => {
+      const exp = getExpeditions()[0];
+      exp.startTime = Date.now() - exp.durationMs - 1_000;
+      checkExpeditionCompletion();
+      return { gameOver: JSON.parse(JSON.stringify(state.gameOver)), left: getExpeditions().length, money: state.money, cheapest: cheapestBoardFee() };
+    });
+    expect(second.left).toBe(0);
+    expect(second.money).toBeLessThan(second.cheapest);
+    expect(second.gameOver).not.toBe(null);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("所持金がちょうど一番安い遠征費なら畳まれない（1円足りなければ畳まれる）", async ({ page }) => {
+    const errors = await deadEndSetup(page);
+    const got = await page.evaluate(() => {
+      const cheapest = cheapestBoardFee();
+      state.money = cheapest;
+      const exact = { dead: isDeadEnd(), settled: settleDeadEnd(), gameOver: state.gameOver };
+      state.money = cheapest - 1;
+      const short = { dead: isDeadEnd(), settled: settleDeadEnd(), gameOver: state.gameOver && { deadEnd: state.gameOver.deadEnd } };
+      return { exact, short };
+    });
+    expect(got.exact).toEqual({ dead: false, settled: false, gameOver: null });
+    expect(got.short).toEqual({ dead: true, settled: true, gameOver: { deadEnd: true } });
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("行き止まりのセーブを読み込むと畳まれる（遠征が残っていれば畳まれない）", async ({ page }) => {
+    const errors = await deadEndSetup(page);
+    // ★ 行き止まりのまま保存（畳むのは読み込みの側）。gameOver はまだ立っていない
+    expect(await page.evaluate(() => { saveState(); return state.gameOver; })).toBe(null);
+    await page.reload();
+    await page.waitForTimeout(400);
+    const got = await page.evaluate(() => ({ gameOver: state.gameOver && { deadEnd: state.gameOver.deadEnd, reason: state.gameOver.reason } }));
+    expect(got.gameOver).toEqual({ deadEnd: true, reason: "もう借りられず、どの依頼にも出せなくなった" });
+    await expect(page.locator(".game-over-card")).toBeVisible();
+    // 畳んだ状態は保存され、読み込み直しても変わらない
+    await page.reload();
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => state.gameOver.deadEnd)).toBe(true);
+    // 遠征が残っているセーブは、読み込みでは畳まない
+    await page.evaluate(() => {
+      state.gameOver = null;
+      state.expeditions = [{
+        id: "exp_deadend_stay", questId: "quest_guild_cleanup", adventurerIds: ["adv_mina"], adventurerItemIds: {}, itemIds: [],
+        startTime: Date.now(), durationMs: 3_600_000, seed: 3, departTimeOfDay: questTimeOfDay(getQuest("quest_guild_cleanup"), 3),
+        departWeather: "晴れ", firstRunOfQuest: false, elsieAtGuild: true, fee: 0
+      }];
+      saveState();
+    });
+    await page.reload();
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => ({ gameOver: state.gameOver, left: getExpeditions().length }))).toEqual({ gameOver: null, left: 1 });
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
