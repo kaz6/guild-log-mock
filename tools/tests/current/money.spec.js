@@ -979,3 +979,141 @@ test.describe("一番安い依頼に、報酬の出ない依頼を数えない",
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
+
+// ★ 掲示板には稼げる依頼を必ず1つは並べる（2026-11-23・P-009。作者の裁定「ひとつはだす」）。
+//   稼げる依頼＝救済でも固有依頼でもなく、報酬が出て、遠征費がかかる依頼（`isBoardEarner`。「一番安い依頼」の数え方と同じ）。
+//   ⚠️ 試験は依頼を自前の小さな表（state.quests）に置き換えて組む。値は questFee から読み、固定の金額は置かない。
+test.describe("掲示板に稼げる依頼を必ず1つは並べる", () => {
+  // ページの中で使う共通の準備（page.evaluate は閉包を持てないので、文字列で渡して new Function で組む）
+  const setup = `
+    const pick = (id) => window.masterQuests.find((x) => x.id === id);
+    const base = pick("quest_church_patrol");
+    const earner = (id, fee) => ({ ...base, id, title: id, unlockedBy: undefined, unlockedAfterCount: undefined, money: { fee } });
+    const filler = (id) => ({ ...pick("quest_tavern_errand"), id, title: id, oneTime: false }); // 報酬の出ない依頼
+    const relief = window.masterQuests.filter((x) => x.relief);
+    state.gameOver = null; state.expeditions = [];
+    return { earner, filler, relief };
+  `;
+
+  test("枠があふれて稼げる依頼が落ちるとき、1つ入る（枠は6を超えない）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate((setup) => {
+      const { earner, filler, relief } = new Function(setup)();
+      const slots = window.masterBoardRules.slots;
+      // 報酬の出ない依頼で枠をちょうど埋め、稼げる依頼は7番目（そのままなら枠から落ちる）
+      const fillers = Array.from({ length: slots }, (_, i) => filler(`t_filler_${i}`));
+      const paying = earner("t_paying", 60);
+      state.quests = [...fillers, paying, ...relief];
+      const board = buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false });
+      return { slots, ids: board.map((q) => q.id), fillerIds: fillers.map((q) => q.id) };
+    }, setup);
+    expect(got.ids).toHaveLength(got.slots);
+    expect(got.ids).toContain("t_paying");
+    expect(got.ids.slice(0, got.slots - 1), "外すのは枠の最後だけ（残りの並びは変わらない）").toEqual(got.fillerIds.slice(0, got.slots - 1));
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("クールタイムの小休止で稼げる依頼が引っ込んでいても、遠征費の一番安い1つが入る", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate((setup) => {
+      const { earner, filler, relief } = new Function(setup)();
+      const dear = earner("t_dear", 60), cheap = earner("t_cheap", 30);
+      state.quests = [filler("t_filler_a"), dear, cheap, ...relief];
+      // どちらも小休止にする。★ reports は新しいものが先頭。安いほうは1回目（必要数1）の直後、
+      //   高いほうは2回目（必要数2）で1本前＝どちらも「行ってからの本数」が必要数に届かない
+      const reports = [{ questId: "t_cheap" }, { questId: "t_dear" }, { questId: "t_dear" }];
+      const rested = [dear, cheap].every((q) => !questCooldownState(q, reports).ready);
+      const board = buildBoardQuests(getClearedQuestIds(), reports, { withRelief: false });
+      return { rested, ids: board.map((q) => q.id) };
+    }, setup);
+    expect(got.rested, "前提：どちらも小休止").toBe(true);
+    expect(got.ids).toEqual(["t_filler_a", "t_cheap"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("もともと稼げる依頼が並んでいれば、何も変わらない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate((setup) => {
+      const { earner, filler, relief } = new Function(setup)();
+      const cooling = earner("t_cooling", 10), paying = earner("t_paying", 60);
+      state.quests = [filler("t_filler_a"), paying, cooling, ...relief];
+      const reports = [{ questId: "t_cooling" }]; // 安いほうは小休止。高いほうが並んでいる
+      const board = buildBoardQuests(getClearedQuestIds(), reports, { withRelief: false });
+      return board.map((q) => q.id);
+    }, setup);
+    expect(got, "並んでいる稼げる依頼があれば、小休止の安い依頼を足さない").toEqual(["t_filler_a", "t_paying"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("出せない依頼は入れない（解放前・いま遠征に出ている）。解放済みの稼げる依頼が無ければ何もしない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate((setup) => {
+      const { earner, filler, relief } = new Function(setup)();
+      const locked = { ...earner("t_locked", 30), unlockedBy: "t_never" };
+      const out = earner("t_out", 30);
+      state.quests = [filler("t_filler_a"), locked, out, ...relief];
+      const ids = () => buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false }).map((q) => q.id);
+      const lockedOnly = (() => { state.quests = [filler("t_filler_a"), locked, ...relief]; return ids(); })();
+      // 稼げる依頼が遠征に出ている間は、同じ依頼を二重に出せないので入れない
+      state.quests = [filler("t_filler_a"), out, ...relief];
+      state.expeditions = [{ id: "exp_t_out", questId: "t_out", adventurerIds: [], itemIds: [], startTime: Date.now(), durationMs: 1_000_000, seed: 1 }];
+      const onExpedition = ids();
+      return { lockedOnly, onExpedition };
+    }, setup);
+    expect(got.lockedOnly).toEqual(["t_filler_a"]);
+    expect(got.onExpedition).toEqual(["t_filler_a"]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("はじめの掲示板（酒場と掃除だけ）には何も足さない。そこでは借金も起きない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const ids = buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false }).map((q) => q.id);
+      const tavern = window.masterQuests.find((x) => x.id === "quest_tavern_errand");
+      return { ids, cheapest: cheapestBoardFee(), afterTavern: state.money - questFee(tavern), brink: isOnBrinkOfClosing(), dead: isDeadEnd() };
+    });
+    expect(got.ids.sort()).toEqual(["quest_guild_cleanup", "quest_tavern_errand"]);
+    expect(got.cheapest).toBe(null);
+    expect(got.afterTavern, "前提：はじめの所持金なら、酒樽の代金を払っても赤字にならない（＝借入に入れない）").toBeGreaterThanOrEqual(0);
+    expect(got.brink).toBe(false);
+    expect(got.dead).toBe(false);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("入れた稼げる依頼が「一番安い依頼」になる。届かなければ直前（救済が稼げる依頼と並ぶ・6枠のまま）、救済も尽きれば行き止まり", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate((setup) => {
+      const { earner, filler, relief } = new Function(setup)();
+      const slots = window.masterBoardRules.slots;
+      const fillers = Array.from({ length: slots }, (_, i) => filler(`t_filler_${i}`));
+      const paying = earner("t_paying", 60);
+      state.quests = [...fillers, paying, ...relief];
+      const max = window.masterMoneyRules.maxBorrowCount;
+      state.debt = { active: null, timesBorrowed: max, reliefLeft: window.masterMoneyRules.reliefPerBorrow };
+      state.money = questFee(paying) - 1;
+      const withRelief = buildBoardQuests(getClearedQuestIds(), state.reports).map((q) => q.id);
+      const brink = isOnBrinkOfClosing();
+      // 届くなら直前にならない
+      state.money = questFee(paying);
+      const reaches = { brink: isOnBrinkOfClosing(), relief: buildBoardQuests(getClearedQuestIds(), state.reports).some((q) => q.relief) };
+      // 救済も尽きていれば、行き止まり
+      state.money = questFee(paying) - 1;
+      state.debt = { active: null, timesBorrowed: max, reliefLeft: 0 };
+      return { slots, withRelief, brink, cheapest: cheapestBoardFee(), fee: questFee(paying), reaches, dead: isDeadEnd() };
+    }, setup);
+    expect(got.cheapest, "入れた依頼が一番安い依頼として数えられる").toBe(got.fee);
+    expect(got.brink).toBe(true);
+    expect(got.withRelief).toHaveLength(got.slots);
+    expect(got.withRelief[0]).toBe("quest_relief_odd_jobs");
+    expect(got.withRelief, "救済が枠を取っても、稼げる依頼は押し出されない").toContain("t_paying");
+    expect(got.reaches).toEqual({ brink: false, relief: false });
+    expect(got.dead).toBe(true);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
