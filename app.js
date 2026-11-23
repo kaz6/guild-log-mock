@@ -795,8 +795,15 @@ function isRewardlessQuest(quest) {
 //     出しても所持金が増えない依頼に払えるだけでは、立て直せない。
 function cheapestBoardFee(boardQuests) {
   const board = boardQuests ?? buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false });
-  const fees = board.filter((quest) => !quest.relief && !quest.bond && !isRewardlessQuest(quest)).map(questFee).filter((fee) => fee > 0);
+  const fees = board.filter(isBoardEarner).map(questFee).filter((fee) => fee > 0);
   return fees.length === 0 ? null : Math.min(...fees);
+}
+
+// 稼げる依頼＝救済でも固有依頼でもなく、報酬が出る依頼（費用0は数えない＝`cheapestBoardFee` の `fee > 0` で外す）。
+//   ★ 「一番安い依頼」の数え方（`cheapestBoardFee`）と「掲示板に稼げる依頼を必ず1つ」（`buildBoardQuests`・2026-11-23・P-009）が
+//     **同じ答えを使う**ための切り出し。数え方の定義はここ1か所（P-004 で決めたとおり）。
+function isBoardEarner(quest) {
+  return !quest.relief && !quest.bond && !isRewardlessQuest(quest) && questFee(quest) > 0;
 }
 
 // ★ 行き止まり（2026-11-23・P-003。作者が「畳ませます」と決めた）＝次の全部を満たすとき：
@@ -3676,12 +3683,32 @@ function buildBoardQuests(clearedQuestIds, reports, { withRelief = true } = {}) 
   //   ★ 「必ず」なのでクールタイムを見ない。★ **直前にしか出さない（N＝∞）を 2026-11-12・EX-173 に確定**（「たまに出る」は取り下げ）。
   //   ★ **回数を使い切ったら、直前でも出ない**（借入1回につき `reliefPerBorrow` 回。その先の赤字は運営不能）。
   //   直前の判定は、救済を入れる前の掲示板で見る（救済が枠を1つ取って一番安い依頼を押し出しても、判定は動かさない）。
-  const regular = typeof slots === "number" ? ordered.slice(0, slots) : ordered;
+  let regular = typeof slots === "number" ? ordered.slice(0, slots) : ordered;
+  // ★ 掲示板には稼げる依頼を必ず1つは並べる（2026-11-23・P-009。作者の裁定「ひとつはだす」）。
+  //   枠の中に稼げる依頼が1つも無く、**解放済みで出せる**稼げる依頼があれば、遠征費の一番安い1つを入れる（同額は定義順）。
+  //   ★ 出せる＝掲示板の候補（`candidates`）のうち、クールタイムの小休止だけは無視する。
+  //     解放前・一度きりの済み・再出現の待機中／解決済み・いま出ている・チェーンの同時1本は、これまでどおり守る（出せない）。
+  //   ★ 枠があふれるときは、枠の最後（＝一番優先度の低い依頼）を外して入れる（仮決め）。
+  //   ★ 判定は救済を入れる前の枠で行い、ここで入れた依頼は「一番安い依頼」（`cheapestBoardFee`）にも数える
+  //     ＝掲示板に見えている依頼と、直前・行き止まりの判定が食い違わない。
+  //   ⚠️ 解放済みの稼げる依頼が1つも無い掲示板（はじめの酒場と掃除だけ）では、何も入れない。
+  let forced = null;
+  if (regular.every((quest) => !isBoardEarner(quest))) {
+    forced = candidates.map((c) => c.quest).filter(isBoardEarner)
+      .reduce((best, quest) => (best === null || questFee(quest) < questFee(best) ? quest : best), null);
+    if (forced) {
+      regular = typeof slots === "number" && regular.length >= slots ? [...regular.slice(0, slots - 1), forced] : [...regular, forced];
+      ordered.splice(0, ordered.length, ...regular);
+    }
+  }
   if (withRelief && reliefLeft() > 0 && isOnBrinkOfClosing(regular)) {
     state.quests.filter((quest) => quest.relief && !isQuestOnExpedition(quest.id))
       .reverse().forEach((quest) => ordered.unshift(quest));
   }
-  return typeof slots === "number" ? ordered.slice(0, slots) : ordered;
+  const board = typeof slots === "number" ? ordered.slice(0, slots) : ordered;
+  // ⚠️ 救済が枠を1つ取って、入れた稼げる依頼が押し出されたら、枠の最後（救済でない側）に入れ直す
+  if (forced && !board.includes(forced)) board[board.length - 1] = forced;
+  return board;
 }
 
 function renderQuests() {
