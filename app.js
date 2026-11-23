@@ -85,12 +85,16 @@ function questFeeLabel(quest) {
 
 // 帳簿に1行つけて、所持金を動かす。★ 0円の出入りは帳簿に書かない（掃除のように費用の無い依頼で行が埋まらないように）。
 const MONEY_LEDGER_KEEP = 8;
-function moveMoney(amount, label, detail = null) {
+//   ★ 畳まれた画面の帳簿（P-011）のために、上限の無い全履歴 `moneyHistory`（古いものが先頭）にも同じ行を足す。
+//     `ref`＝遠征の id（遠征費と報酬を同じ依頼の1行にまとめるため。借入・返済・買い出しは持たない）。
+function moveMoney(amount, label, detail = null, ref = null, questId = null) {
   if (!Number.isFinite(amount) || amount === 0) return;
   state.money = (Number.isFinite(state.money) ? state.money : 0) + amount;
   if (!Array.isArray(state.moneyLedger)) state.moneyLedger = [];
   state.moneyLedger.unshift({ at: Date.now(), amount, label, detail, balance: state.money });
   state.moneyLedger.length = Math.min(state.moneyLedger.length, MONEY_LEDGER_KEEP);
+  if (!Array.isArray(state.moneyHistory)) state.moneyHistory = [];
+  state.moneyHistory.push({ amount, label, detail, ref, questId });
 }
 
 // ★ 所持金がマイナスになったら借りる。借りられなければ運営不能（2026-09-21 確定・設計ページ）。
@@ -128,9 +132,9 @@ function settleNegativeMoney() {
 // 報酬を受け取る。★ 借金があれば**報酬から天引き**する（細則2・自動）。
 //   手動にすると、返し忘れたまま次のマイナスで運営不能＝知らなかったで終わる理不尽になる。
 //   帳簿には「報酬」と「返済」を別の行でつける（天引きされたことが見えるように）。
-function receiveReward(reward, detail) {
+function receiveReward(reward, detail, ref = null, questId = null) {
   if (!(reward > 0)) return;
-  moveMoney(reward, "報酬", detail);
+  moveMoney(reward, "報酬", detail, ref, questId);
   const active = state.debt?.active;
   if (!active) return;
   const repay = Math.min(reward, active.remaining);
@@ -1146,6 +1150,7 @@ function createInitialState() {
     //   ★ 旧セーブは `{ ...base, ...parsed }` で欠けが埋まる（`schemaVersion` は上げない＝EX-125 と同じ形）。
     money: MONEY_RULES.initialMoney,
     moneyLedger: [], // 直近の出入り（新しいものが先頭）。ホームに出す
+    moneyHistory: [], // 全部の出入り（古いものが先頭・上限なし。P-011）。畳まれた画面の帳簿がこれを読む
     // 借金：同時に抱えられるのは1つ（active）／ゲーム全体で2回まで（timesBorrowed）
     //   reliefLeft＝今の借入で受けられる救済の残り（2026-11-12・EX-173）。借入のたびに元に戻る
     debt: { active: null, timesBorrowed: 0, reliefLeft: 0 },
@@ -1226,6 +1231,7 @@ function loadState() {
     if (!Array.isArray(merged.moneyLedger)) merged.moneyLedger = [];
     if (!Array.isArray(merged.moneyEvents)) merged.moneyEvents = [];
     if (!Number.isFinite(merged.money)) merged.money = MONEY_RULES.initialMoney;
+    merged.moneyHistory = normalizeMoneyHistory(parsed, merged);
     merged.stock = normalizeStock(parsed.stock);
     // ★ 生態目録の解禁（EX-163）：鍵の無い古いセーブで面接を終えているなら、目録はもう見たことがある＝隠さない
     if (parsed.ecologyBook === undefined && parsed.player?.interviewDone) merged.ecologyBook = { at: null, read: true, legacy: true };
@@ -1246,6 +1252,23 @@ function loadState() {
 function normalizeExpeditions(parsed) {
   if (Array.isArray(parsed?.expeditions)) return parsed.expeditions.filter(Boolean);
   return parsed?.expedition ? [parsed.expedition] : [];
+}
+
+// 金の全履歴（P-011）。鍵の無い古いセーブは、読める分（直近8行の帳簿）から起こし、
+//   はじめの所持金から今の所持金までの差を「繰越」の1行にして先頭へ置く（＝合計はかならず所持金に合う）。
+//   ★ 仮決め（作者・チャットの裁定待ち）。`schemaVersion` は上げない。
+function normalizeMoneyHistory(parsed, merged) {
+  if (Array.isArray(parsed?.moneyHistory)) {
+    return parsed.moneyHistory.filter((row) => row && Number.isFinite(row.amount));
+  }
+  const rows = (Array.isArray(merged.moneyLedger) ? merged.moneyLedger : [])
+    .filter((entry) => entry && Number.isFinite(entry.amount))
+    .map((entry) => ({ amount: entry.amount, label: entry.label ?? "", detail: entry.detail ?? null, ref: null, questId: null }))
+    .reverse(); // 帳簿は新しいものが先頭。履歴は古いものが先頭
+  const money = Number.isFinite(merged.money) ? merged.money : MONEY_RULES.initialMoney;
+  const carry = money - MONEY_RULES.initialMoney - rows.reduce((sum, row) => sum + row.amount, 0);
+  if (carry !== 0) rows.unshift({ amount: carry, label: MONEY_RULES.texts.gameOverLedger.carry, detail: null, ref: null, questId: null, carry: true });
+  return rows;
 }
 
 function normalizeDebt(raw) {
@@ -2542,7 +2565,7 @@ function completeExpeditionIfDue(expedition) {
   const feePaid = Number.isFinite(expedition.fee) ? expedition.fee : 0;
   const reward = Number.isFinite(expedition.fee) ? questReward(questForMoney, report.result, feePaid) : 0;
   report.money = { fee: feePaid, reward };
-  receiveReward(reward, questForMoney?.title ?? null);
+  receiveReward(reward, questForMoney?.title ?? null, expedition.id, expedition.questId);
   // ★ 在庫（2026-09-23・EX-144）：買い出しなら書き付けの品を買い、そうでなければ持ち出した品を棚へ戻す。
   settleShopping(expedition, report);
   returnItemsToStock(expedition, report);
@@ -3023,6 +3046,86 @@ function bindRestoreConfirmHtml(book, unbound) {
         </div>`;
 }
 
+// 畳まれた画面の帳簿（2026-11-23・P-011。作者の裁定）。★ 赤字で畳まれたときも、行き止まりで畳まれたときも、同じ形。
+//   `state.moneyHistory`（古いものが先頭）から、はじめの所持金→出入り→合計→収支 を組む。
+//   ★ 同じ遠征（ref）の遠征費と報酬は、依頼の1行にまとめる（位置は出発＝遠征費を払った時点。まだ帰っていなければ報酬は「—」）。
+//     借入・返済・買い出しは、それぞれ1行。★ はじめの所持金＋全行の和＝畳まれた時点の所持金（moneyLedgerSummary().sum で確かめる）。
+//   ⚠️ 全履歴を持たない古いセーブは、読める分（直近の帳簿）＋「繰越」の1行（normalizeMoneyHistory）。
+function moneyRowKind(row) {
+  const L = MONEY_RULES.texts.gameOverLedger;
+  if (row.carry) return "carry";
+  if (row.label === L.reward) return "reward";
+  if (row.label === "借入") return "borrow";
+  if (row.label === "返済") return "repay";
+  if (row.label === "買い出し") return "shopping";
+  return "fee";
+}
+
+function moneyLedgerSummary() {
+  const history = Array.isArray(state.moneyHistory) ? state.moneyHistory : [];
+  const items = [];
+  const byRef = new Map();
+  const totals = { fee: 0, reward: 0, borrow: 0, repay: 0, shopping: 0, carry: 0 };
+  history.forEach((row) => {
+    const kind = moneyRowKind(row);
+    totals[kind] += row.amount;
+    if ((kind === "fee" || kind === "reward") && row.ref) {
+      let item = byRef.get(row.ref);
+      if (!item) {
+        item = { type: "quest", ref: row.ref, title: row.detail ?? "", questId: row.questId ?? null, feeLabel: null, fee: null, reward: null };
+        byRef.set(row.ref, item);
+        items.push(item);
+      }
+      if (kind === "fee") { item.fee = (item.fee ?? 0) + row.amount; item.feeLabel = row.label; if (row.detail) item.title = row.detail; }
+      else item.reward = (item.reward ?? 0) + row.amount;
+      return;
+    }
+    items.push({ type: "plain", kind, label: row.label, detail: row.detail, amount: row.amount });
+  });
+  const money = Number.isFinite(state.money) ? state.money : 0;
+  // 依頼の行：帰ってきた遠征（もう state.expeditions に無い）で報酬が無いものは 0。まだ出ているものは「—」
+  items.forEach((item) => {
+    if (item.type !== "quest") return;
+    if (item.fee === null) item.fee = 0;
+    item.pending = item.reward === null && !!getExpeditionById(item.ref);
+    if (item.reward === null) item.reward = 0;
+  });
+  const sum = MONEY_RULES.initialMoney + Object.values(totals).reduce((a, b) => a + b, 0);
+  return { start: MONEY_RULES.initialMoney, items, totals, money, sum };
+}
+
+function gameOverLedgerHtml() {
+  const t = MONEY_RULES.texts;
+  const L = t.gameOverLedger;
+  const sum = moneyLedgerSummary();
+  const signed = (n) => `${n > 0 ? "＋" : ""}${formatMoneyAmount(n)}`;
+  const row = (label, value) => `<li><span class="game-over-ledger-label">${escapeHtml(label)}</span><span class="game-over-ledger-amount">${escapeHtml(value)}</span></li>`;
+  const rows = [row(L.start, formatMoneyAmount(sum.start))];
+  sum.items.forEach((item) => {
+    if (item.type === "quest") {
+      const label = `${item.title}　${item.feeLabel ?? questFeeLabel(getQuest(item.questId))} ${formatMoneyAmount(item.fee)}　${L.reward} ${item.pending ? L.notReturned : signed(item.reward)}`;
+      rows.push(`<li class="game-over-ledger-quest"><span class="game-over-ledger-label">${escapeHtml(label)}</span><span class="game-over-ledger-amount">${escapeHtml(signed(item.fee + item.reward))}</span></li>`);
+    } else {
+      rows.push(row(`${item.label}${item.detail ? `（${item.detail}）` : ""}`, signed(item.amount)));
+    }
+  });
+  rows.push(row(L.feeTotal, formatMoneyAmount(sum.totals.fee)));
+  rows.push(row(L.rewardTotal, signed(sum.totals.reward)));
+  if (sum.items.some((item) => item.kind === "borrow")) rows.push(row(L.borrowTotal, signed(sum.totals.borrow)));
+  if (sum.items.some((item) => item.kind === "repay")) rows.push(row(L.repayTotal, formatMoneyAmount(sum.totals.repay)));
+  if (sum.items.some((item) => item.kind === "shopping")) rows.push(row(L.shoppingTotal, formatMoneyAmount(sum.totals.shopping)));
+  rows.push(row(L.balance, formatMoneyAmount(sum.money)));
+  return `<ul class="game-over-ledger" data-game-over-ledger="1">${rows.join("")}<li class="game-over-ledger-end">${escapeHtml(t.gameOverEnd)}</li></ul>`;
+}
+
+// 運営不能の間の受付嬢の言葉（作者の稿）。1行＝会話の窓の1ページ。【主人公】はプレイヤー名（無記名は記録員）
+function gameOverReceptionWindowHtml() {
+  const name = receptionTalkName();
+  const w = speechWindow("gameOverReception",
+    MONEY_RULES.texts.gameOverReceptionLines.map((line) => [escapeHtml(line.replaceAll("【主人公】", name))]));
+  return w.html + (w.last ? "" : w.more);
+}
+
 // 運営不能（2026-09-23・EX-144）。★ 記録の終わり方の一つで、「負け」ではない（設計ページ）。
 //   ★ **直前からやり直せる**（細則5）＝EX-141 の「最後に綴じた記録まで戻る」が本番の入口になる。
 //   ⚠️ 綴じた記録が1冊も無いときは戻り先が無い。そのときは**最初からやり直す**しかない（実装側の判断）。
@@ -3043,7 +3146,7 @@ function gameOverCardHtml() {
       <div class="card-body">
         <p class="eyebrow">Ledger Closed</p>
         <h3>${escapeHtml(t.gameOverTitle)}</h3>
-        <p>${escapeHtml(state.gameOver.deadEnd ? t.gameOverBodyDeadEnd : t.gameOverBody)}</p>
+        ${gameOverLedgerHtml()}
         ${action}
       </div>
     </section>`;
@@ -3339,15 +3442,15 @@ function renderHome() {
           <div>
             <p class="eyebrow">Guild Reception</p>
             <h3>受付嬢</h3>
-            <div class="speech">
-              ${state.gameOver ? escapeHtml(MONEY_RULES.texts.gameOverReception) : `${state.player?.name ? `${escapeHtml(state.player.name)}さん、` : ""}${unopened.length > 0
+            ${state.gameOver ? gameOverReceptionWindowHtml() : `<div class="speech">
+              ${state.player?.name ? `${escapeHtml(state.player.name)}さん、` : ""}${unopened.length > 0
                 ? `おかえりなさい。未開封の報告書が ${unopened.length} 通、届いています。落ち着いて、一通ずつ確認しましょう。`
                 : expeditions.length > 1
                   ? `遠征中の一行が${expeditions.length}組あります。扉の音がしたら、わたしが報告書をお持ちしますね。`
                   : expeditions.length === 1
                   ? "遠征中の一行があります。扉の音がしたら、わたしが報告書をお持ちしますね。"
-                  : "本日の依頼掲示板を確認できます。出発前の支給品も、忘れずに選んでくださいね。"}`}
-            </div>
+                  : "本日の依頼掲示板を確認できます。出発前の支給品も、忘れずに選んでくださいね。"}
+            </div>`}
             <div class="button-row" style="margin-top: 16px;">
               ${state.gameOver ? "" : `<button class="primary-button" onclick="setRoute('quests')">依頼を選ぶ</button>`}
               <button class="secondary-button" onclick="setRoute('adventurers')">名簿を見る</button>
@@ -5392,7 +5495,7 @@ function startExpedition() {
     expedition.sharedItemIds.forEach((itemId) => addStock(itemId, -1));
     expedition.stockDrawn = true; // 棚から出した印。帰還時に戻すのはこれがある遠征だけ
   }
-  moveMoney(-expedition.fee, questFeeLabel(quest), quest.title);
+  moveMoney(-expedition.fee, questFeeLabel(quest), quest.title, expedition.id, quest.id);
   // ★ 救済は受けた（出発した）ときに1回減る（2026-11-12・EX-173）。手ぶらで戻っても戻さない
   if (quest.relief && state.debt) state.debt.reliefLeft = Math.max(0, reliefLeft() - 1);
   // ★ 割り込む出発も許す（細則3。「可能だが推奨しない行動は縛らない」）。出発した瞬間に借金の判定。

@@ -7,7 +7,7 @@
 //   - それ以外 → 窓のカードの見出し（h3）。受付嬢のカードは「受付嬢」、固有依頼の連鎖は本人（連鎖の id から）
 //   - ホームのタップの一言（ROOM_REACTIONS）は表から直に読む。エルシーの行は地の文なので「語り」
 // ★ 道：面接（記名／無記名 × 志望動機3つ × 名簿を保存／あとで）・序盤の受付嬢の会話2つ・白紙の本・命名の直後の一言・
-//   固有依頼の連鎖（文面のある人ぜんぶの相談と感謝）・体験版の終わりの合図（文は表から）・タップの一言。
+//   固有依頼の連鎖（文面のある人ぜんぶの相談と感謝）・畳まれたときの受付嬢（P-011）・体験版の終わりの合図（文は表から）・タップの一言。
 //   ★ 道を足したら、ここにも足す（漏れは表に合わない文として出ず、黙って抜ける）。
 //
 // 使い方：node tools/voice-lines.js [出力先.json]   （省略時は標準出力）
@@ -103,6 +103,8 @@ async function collect() {
         state.bondChain[entry.id] = { consultAt: 1 }; home();
         state.bondChain[entry.id] = { consultAt: 1, consultRead: true, thanksAt: 1 }; home();
       });
+      // 畳まれたときの受付嬢（2026-11-23・P-011。作者の稿。ホームの会話の窓に出る）
+      state.gameOver = { at: 1, reason: "（書き出し用）" }; home(); state.gameOver = null;
       // 命名の直後の一言（名前は仮の例）
       firstNameSealParagraphs("ふくみみ").forEach((p, pi) => p.forEach((line) => out.push({ speaker: "受付嬢", text: strip(line), source: `firstNameSeal#${pi + 1}` })));
       // 体験版の終わりの合図（/trial/ でだけ出る。文は表から）
