@@ -832,8 +832,7 @@ function settleDeadEnd() {
   return true;
 }
 
-// 救済の残りの回数（今の借入の分）。★ 画面に数字は出さない（最後の1回だけ受付嬢が一言添える）
-// ※ この見せ方は仮・作者の裁定待ち（DECISION_LOG 2026-11-12 の未確定）。数字を出すか一言で伝えるかは未確定
+// 救済の残りの回数（今の借入の分）。★ 画面には何も出さない（数字も、受付嬢の一言も。2026-11-23 作者の裁定：「何も出さない」）
 function reliefLeft() {
   return Math.max(0, Number(state.debt?.reliefLeft) || 0);
 }
@@ -3753,9 +3752,6 @@ function renderQuests() {
   const waitingQuests = state.quests.filter((quest) =>
     !quest.hidden && isQuestUnlocked(quest, clearedQuestIds)
     && questBoardVisibility(quest, state.reports).reason === "待機中");
-  // ★ 救済の最後の1回が掲示板に出ているとき、受付嬢が一言添える（2026-11-12・EX-173）。★ 数字は出さない
-  //   ※ 見せ方は仮・作者の裁定待ち（DECISION_LOG 2026-11-12 の未確定）
-  const reliefLastLine = reliefLeft() === 1 && boardQuests.some((quest) => quest.relief) ? MONEY_RULES.texts.reliefLast : null;
   // ★ 緊急依頼も同じ規則で下ろす（2026-09-20・EX-138）。出ている間は掲示板に残さない。
   if (urgentQuest && !isQuestOnExpedition(urgentQuest.id) && !chainSlotBusy()) boardQuests.unshift(urgentQuest);
 
@@ -3768,11 +3764,6 @@ function renderQuests() {
     <div class="weather-bar">
       <span class="weather-bar-icon">🚨</span>
       <span class="weather-bar-text">隊商を護り切れなかった。捜索に向かえる者を編成せよ。</span>
-    </div>` : ""}
-    ${reliefLastLine ? `
-    <div class="weather-bar" data-relief-last="1">
-      <span class="weather-bar-icon">💬</span>
-      <span class="weather-bar-text">受付嬢「${escapeHtml(reliefLastLine)}」</span>
     </div>` : ""}
     ${waitingQuests.map((quest) => `
     <div class="weather-bar">
