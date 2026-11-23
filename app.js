@@ -951,6 +951,11 @@ const recorderBadgeCard = document.getElementById("recorderBadgeCard");
 //   const は宣言より前に読めないので、state の初期化より前に置くこと。
 const GROWTH_ELIGIBLE_STAT_KEYS = ["combat", "exploration", "investigation", "negotiation", "support", "survival"];
 
+// 生態目録の分類から外した語（2026-11-23・P-007）。古いセーブでこれを選んでいた頁は、読み込み時に空欄（未分類）へ戻す
+//   （ほかの分類は変えない）。★ ここに置く理由は上の GROWTH_ELIGIBLE_STAT_KEYS と同じ：loadState() が
+//   migrateEcologyRecord 経由で読むので、state の初期化より前に宣言する（下に置くとセーブがあるときだけ例外になり、保存データが捨てられる）。
+const ECOLOGY_RECORD_REMOVED_CATEGORIES = ["菌類", "その他"];
+
 let state = loadState();
 // 既存セーブの手当て（2026-09-17・EX-117）：**すでに読了ハンコを押してある報告書**の分の枠を、
 // 読み込み時に立てる。★ 枠が立つ規則を後から入れたので、これが無いと**古いセーブだけ
@@ -4374,7 +4379,10 @@ const ECOLOGY_RECORD_AXES = ["形", "色", "大きさ", "数", "動き", "痕跡
 
 // 分類の選択肢。★ `observationKind` からは自動で入れない——**分類はプレイヤーの仕事**
 //   （2026-09-17 の裁定2）。空＝未分類で始まる。
-const ECOLOGY_RECORD_CATEGORIES = ["獣", "鳥", "虫", "植物", "菌類", "水棲", "魔物", "怪異", "人工物", "その他"];
+// ★ 2026-11-23・P-007：作者の裁定で11語に差し替え（「菌類」「その他」は外した）。並び順は仮決め（作者は順を指定していない）。
+//   「人」は、亜人を「人」に入れるかどうかの二択の受け皿（分類欄の中で選ぶ）。
+const ECOLOGY_RECORD_CATEGORIES = ["獣", "鳥", "虫", "植物", "水棲", "家畜", "人", "魔物", "怪異", "石", "人工物"];
+// （外した語の一覧 ECOLOGY_RECORD_REMOVED_CATEGORIES は、loadState() が読むので state の初期化より前に置いてある）
 
 // ── 命名（2026-09-17・EX-118） ────────────────────────────────────────────
 // ★ 解禁条件＝O が **12軸中7軸以上**埋まっていること（2026-09-17 の裁定1）。
@@ -4446,6 +4454,8 @@ function migrateEcologyRecord(raw) {
     if (val.id && Array.isArray(val.confirmed)) {      // 移行済み（EX-117 の形）
       const moved = renameId(val.id);
       out[moved] = moved === val.id ? val : { ...val, id: moved };
+      // 外した分類（菌類・その他）は未分類へ戻す（2026-11-23・P-007）
+      if (ECOLOGY_RECORD_REMOVED_CATEGORIES.includes(out[moved].category)) out[moved] = { ...out[moved], category: "" };
       return;
     }
     seq += 1;
@@ -4466,7 +4476,7 @@ function migrateEcologyRecord(raw) {
       nameDraft: "",        // 確定前の下書き（何度でも書き直せる）
       nameConfirmedAt: null,
       area: val.area || "",
-      category: val.category === "未分類" ? "" : (val.category || ""),
+      category: (val.category === "未分類" || ECOLOGY_RECORD_REMOVED_CATEGORIES.includes(val.category)) ? "" : (val.category || ""),
       confirmed: [],                  // O
       guess: "",                      // A
       nextCheck: val.nextCheck || "", // P（旧5欄の「次に確認したいこと」は意味が同じなので移す）
