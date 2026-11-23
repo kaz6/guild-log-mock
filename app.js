@@ -767,6 +767,7 @@ function buildExpeditionItemMap(party, quest, sharedItemIds, obsHolderIds) {
 //   ★ 固定の金額は置かない。掲示板にある依頼の遠征費で判定する。
 //   ★ 「一番安い依頼」には救済そのものと固有依頼（頼まれごと）を数えない。費用0の依頼（ギルドの掃除）も数えない
 //     ——費用0は「届かない」が起きないので、数えると2回使い切ったあとは直前が二度と来なくなる。
+//   ★ 報酬の出ない依頼（買い出し・酒場の酒樽）も数えない（2026-11-23・P-004。数え方は `cheapestBoardFee` の1か所）。
 //   ⚠️ 旧定義（2026-09-22 の書き直し）は「借金中、または借金2回を使い切った状態」。完済しても救済が先頭に居座った。
 //   `boardQuests` は救済を入れる前の掲示板（省けばいまの掲示板から引く）。
 function isOnBrinkOfClosing(boardQuests) {
@@ -780,19 +781,27 @@ function isOnBrinkOfClosing(boardQuests) {
   return (Number.isFinite(state.money) ? state.money : 0) < cheapest;
 }
 
-// 掲示板の一番安い遠征費（救済・固有依頼・費用0の依頼は数えない）。無ければ null。
-//   ★ 「運営不能の直前」と「行き止まり」で**同じ数え方**を使うために切り出した（2026-11-23・P-003。判定は変えていない）。
+// 報酬の出ない依頼＝依頼データの `money.reward` が固定で 0（買い出し・酒場の酒樽・掃除・固有依頼）。
+//   ★ `reward` を持たない依頼は「遠征費 × 結末の段の倍率」（`questReward`）で払う側＝報酬の出る依頼として数える。
+//   （仮決め・2026-11-23・P-004：結末しだいで0になる未達があっても、完遂・部分では払うので「出ない依頼」には数えない）
+function isRewardlessQuest(quest) {
+  return typeof quest?.money?.reward === "number" && quest.money.reward <= 0;
+}
+
+// 掲示板の一番安い遠征費（救済・固有依頼・費用0の依頼・報酬の出ない依頼は数えない）。無ければ null。
+//   ★ 「運営不能の直前」と「行き止まり」で**同じ数え方**を使うために切り出した（2026-11-23・P-003）。数え方はここ1か所。
+//   ★ 報酬の出ない依頼（買い出し・酒樽）を数えない（2026-11-23・P-004。作者が「数えません」と決めた）。
+//     出しても所持金が増えない依頼に払えるだけでは、立て直せない。
 function cheapestBoardFee(boardQuests) {
   const board = boardQuests ?? buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false });
-  const fees = board.filter((quest) => !quest.relief && !quest.bond).map(questFee).filter((fee) => fee > 0);
+  const fees = board.filter((quest) => !quest.relief && !quest.bond && !isRewardlessQuest(quest)).map(questFee).filter((fee) => fee > 0);
   return fees.length === 0 ? null : Math.min(...fees);
 }
 
 // ★ 行き止まり（2026-11-23・P-003。作者が「畳ませます」と決めた）＝次の全部を満たすとき：
 //   借入を2回使い切った／借金中ではない／救済の残りが0／所持金が掲示板の一番安い依頼の遠征費に届かない。
 //   ★ 遠征に出ている者が1人でもいる間は畳まない（帰れば報酬で届くかもしれない）。
-//   ⚠️ 「一番安い依頼」の数え方は `isOnBrinkOfClosing` と同じ（`cheapestBoardFee`）。買い出し・酒場の酒樽など
-//     報酬の出ない依頼を数えるかは作者の裁定待ち（いまは数える）。
+//   ⚠️ 「一番安い依頼」の数え方は `isOnBrinkOfClosing` と同じ（`cheapestBoardFee`。報酬の出ない依頼は数えない＝2026-11-23・P-004）。
 function isDeadEnd() {
   if (state.gameOver) return false;
   const debt = state.debt ?? {};
