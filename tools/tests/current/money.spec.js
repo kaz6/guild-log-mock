@@ -465,9 +465,8 @@ test.describe("救済クエスト", () => {
     const all = await page.evaluate(() => window.masterQuests.filter((q) => !q.hidden && !q.relief).map((q) => q.id));
     await seedClearedQuests(page, all.slice(0, 8));
     const onBoard = () => page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).some((q) => q.relief));
-    // ★ 報酬の出ない依頼（money.reward が固定で 0＝買い出し・酒樽）は数えない（2026-11-23・P-004）
-    const cheapest = await page.evaluate(() => Math.min(...buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false })
-      .filter((q) => !q.relief && !q.bond && !(typeof q.money?.reward === "number" && q.money.reward <= 0)).map(questFee).filter((f) => f > 0)));
+    // ★ 一番安い遠征費の数え方は本体の関数（報酬の出ない依頼・救済・固有依頼・費用0は数えない）。試験で数え直さない（2026-11-23・P-005）
+    const cheapest = await page.evaluate(() => cheapestBoardFee());
     const per = await page.evaluate(() => window.masterMoneyRules.reliefPerBorrow);
     expect(await onBoard(), "直前でないのに出ている（直前にしか出さない）").toBe(false);
     await page.evaluate((per) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: per }; }, per);

@@ -209,6 +209,7 @@ grep -rnE "test\.(fixme|skip)\(" tools/tests/               # 走らないテス
 - ★ **Chromium が取れない環境（クラウド）での走らせ方**（2026-11-23・P-001／P-002 で確かめた。`npm test` 全体＝約18分）。**リポジトリの設定ファイルは書き換えず、作業場の外に置く**：
   ①設定ファイルに `use: { channel: "chrome" }`（`/usr/bin/google-chrome`）を書き、`testDir` と `@playwright/test` の require を絶対パスにして `npx playwright test -c <その設定> --project=current` で走らせる。
   ②`voice.spec.js` など子プロセスで chromium を呼ぶ試験のために、作業場の外に `chromium_headless_shell-1194/chrome-linux/headless_shell` → `/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell` の symlink を作る（★ ディレクトリごとの symlink では足りない。中の名前が違う）。`PLAYWRIGHT_BROWSERS_PATH` をその親に向ける。
+  ③★ 上の版番号（1194・1243）とパスは 2026-11-23 のクラウドで確かめた値で、環境が変わると違うことがある。違ったら `ls /opt/pw-browsers` で実物を見て合わせる（2026-11-23・P-005）。
 
 #### ★★ 対比較（不一致0）— 自走の安全網
 
