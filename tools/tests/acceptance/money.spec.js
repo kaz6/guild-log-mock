@@ -20,7 +20,7 @@ const { freshPage, interview, boardTitles, seedClearedQuests } = require("../hel
 
 // ★ 救済クエスト（2026-11-12・EX-173 で作者が確定。正本は DECISION_LOG の 2026-11-12 の3節）。
 //   ① **直前にしか出さない（N＝∞）を確定**。2026-09-21 の「たまに出る」は取り下げ（2026-09-26・EX-147 の「暫定確定」がこれで確定になった）。
-//   ② 「直前」＝**借金中、または「借入を2回使い切り、かつ所持金が掲示板の一番安い依頼の遠征費にも届かない」とき**。
+//   ② 「直前」＝**「もう借りられない（借金中、または借入を2回使い切った）」かつ「所持金が掲示板の一番安い依頼の遠征費にも届かない」とき**（2026-11-23・P-008：作者の裁定1（A）で、借金中も届けば直前ではなくなった）。
 //      固定の金額は置かない。「一番安い依頼」に救済そのもの・固有依頼（費用0）は数えない。
 //   ③ **金策ループは回数で閉じる**：借入1回につき決まった回数まで（値は仮＝`reliefPerBorrow`）。使い切ったら直前でも出ない。
 //   ★ 値（回数・遠征費・報酬）は判定しない。data-money.js から読み、「その値どおりか」だけを見る。
@@ -84,6 +84,7 @@ test.describe("救済クエスト", () => {
       }
       // 対照：直前にすると出る（判定が死んでいないことの確認）
       state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: per };
+      state.money = 0; // ⚠️ 2026-11-23・P-008：借金中も「所持金が届かない」ときだけ直前（直前の対照なので、届かない所持金にする）
       const brinkShows = buildBoardQuests(new Set(normal), state.reports).some((q) => q.relief);
       state.debt = { active: null, timesBorrowed: 0, reliefLeft: 0 };
       state.money = window.masterMoneyRules.initialMoney;
@@ -122,8 +123,12 @@ test.describe("救済クエスト", () => {
     expect(early.freeVisible, "前提：費用0の依頼が掲示板に見えている").toBe(true);
     expect(early.cheapest, "前提：報酬の出る依頼が並んでいて、一番安い遠征費がある").toBeGreaterThan(0);
     expect(early.shown, "費用0の依頼を一番安い依頼に数えている").toBe(true);
-    // 借金中は今までどおり、金があっても出る
-    expect((await reliefProbe(page, { debt: { active: { borrowed: 200, remaining: 50 }, timesBorrowed: 1, reliefLeft: 1 }, money: 100000 })).shown).toBe(true);
+    // ★ 2026-11-23 作者の裁定1（A）：借金中でも、一番安い依頼の遠征費に届くなら出ない／届かなければ出る
+    //   （変える前：「借金中は今までどおり、金があっても出る」＝所持金 100000 で shown が true）
+    const debtNow = { active: { borrowed: 200, remaining: 50 }, timesBorrowed: 1, reliefLeft: 1 };
+    expect((await reliefProbe(page, { debt: debtNow, money: 100000 })).shown, "借金中でも金があって届くなら出ない").toBe(false);
+    expect((await reliefProbe(page, { debt: debtNow, money: "cheapest" })).shown, "借金中・ちょうど届くなら出ない").toBe(false);
+    expect((await reliefProbe(page, { debt: debtNow, money: "belowCheapest" })).shown, "借金中・届かないなら出る").toBe(true);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 

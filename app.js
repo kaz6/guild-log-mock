@@ -762,8 +762,9 @@ function buildExpeditionItemMap(party, quest, sharedItemIds, obsHolderIds) {
   return map;
 }
 
-// ★ 運営不能の直前（2026-11-12・EX-173 で作者が確定）＝**借金中、または「借入を2回使い切り、
-//   かつ所持金が掲示板の一番安い依頼の遠征費にも届かない」とき**。
+// ★ 運営不能の直前（2026-11-12・EX-173 で作者が確定。2026-11-23・P-008 で作者の裁定1（A）により改めた）＝
+//   **「もう借りられない（借金中、または借入を2回使い切った）」かつ「所持金が掲示板の一番安い依頼の遠征費にも届かない」とき**。
+//   ★ 借金中でも、所持金が一番安い（稼げる）依頼の遠征費に届くなら直前ではない＝救済を出さない（旧：借金中は無条件に直前）。
 //   ★ 固定の金額は置かない。掲示板にある依頼の遠征費で判定する。
 //   ★ 「一番安い依頼」には救済そのものと固有依頼（頼まれごと）を数えない。費用0の依頼（ギルドの掃除）も数えない
 //     ——費用0は「届かない」が起きないので、数えると2回使い切ったあとは直前が二度と来なくなる。
@@ -773,10 +774,10 @@ function buildExpeditionItemMap(party, quest, sharedItemIds, obsHolderIds) {
 function isOnBrinkOfClosing(boardQuests) {
   if (state.gameOver) return false;
   const debt = state.debt ?? {};
-  if (debt.active) return true;
-  if ((debt.timesBorrowed ?? 0) < MONEY_RULES.maxBorrowCount) return false;
+  // 「もう借りられない」＝借金中（借金は同時に1つまで）、または借入を2回使い切った。どちらでもなければ直前ではない
+  if (!debt.active && (debt.timesBorrowed ?? 0) < MONEY_RULES.maxBorrowCount) return false;
   const cheapest = cheapestBoardFee(boardQuests);
-  // ⚠️ 費用のかかる依頼が1つも無いなら、届かない相手が無い＝直前ではない
+  // ⚠️ 費用のかかる依頼が1つも無いなら、届かない相手が無い＝直前ではない（借金中も同じ。2026-11-23・P-008）
   if (cheapest === null) return false;
   return (Number.isFinite(state.money) ? state.money : 0) < cheapest;
 }

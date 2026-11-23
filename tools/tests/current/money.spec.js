@@ -456,7 +456,7 @@ test.describe("救済クエスト", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 
-  test("借金中、または2回使い切りで一番安い依頼に届かないとき、必ず枠に入る（それ以外では出ない）", async ({ page }) => {
+  test("借金中または2回使い切りで、一番安い依頼の遠征費に届かないとき、必ず枠に入る（それ以外では出ない。2026-11-23 作者の裁定1（A）で借金中も届けば出ない）", async ({ page }) => {
     // ★ 「運営不能の直前」の定義（2026-11-12・EX-173 で作者が確定）。旧定義（2026-09-22 の書き直し）は「借金中、または2回使い切り」。
     // ★ 「たまに出る」は 2026-11-12・EX-173 で取り下げ（直前にしか出さない＝確定）。全組の判定は受け入れテストの側にある。
     const errors = await freshPage(page);
@@ -469,8 +469,11 @@ test.describe("救済クエスト", () => {
     const cheapest = await page.evaluate(() => cheapestBoardFee());
     const per = await page.evaluate(() => window.masterMoneyRules.reliefPerBorrow);
     expect(await onBoard(), "直前でないのに出ている（直前にしか出さない）").toBe(false);
-    await page.evaluate((per) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: per }; }, per);
-    expect(await onBoard(), "借金中なのに出ていない").toBe(true);
+    // ★ 2026-11-23・P-008（作者の裁定1・A）：借金中でも、所持金が一番安い依頼の遠征費に届くなら出ない。届かなければ出る（旧：借金中は金があっても出た）
+    await page.evaluate(({ per, cheapest }) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: per }; state.money = cheapest; }, { per, cheapest });
+    expect(await onBoard(), "借金中でも一番安い依頼に届くなら出ない").toBe(false);
+    await page.evaluate((cheapest) => { state.money = cheapest - 1; }, cheapest);
+    expect(await onBoard(), "借金中・一番安い依頼に届かないのに出ていない").toBe(true);
     // ★ 2回使い切っても、金に余裕があれば出ない（旧定義ではここで出続けた）
     await page.evaluate(({ per, cheapest }) => { state.debt = { active: null, timesBorrowed: 2, reliefLeft: per }; state.money = cheapest; }, { per, cheapest });
     expect(await onBoard(), "2回使い切りでも一番安い依頼に届くなら出ない").toBe(false);
@@ -521,8 +524,10 @@ test.describe("救済クエスト", () => {
     const errors = await freshPage(page);
     await interview(page);
     const line = await page.evaluate(() => window.masterMoneyRules.texts.reliefLast);
+    // ⚠️ 2026-11-23・P-008：借金中でも、掲示板に報酬の出る依頼があり所持金が届けば救済は出ない。直前になる状態（報酬の出る依頼が並ぶ掲示板＋所持金0）から始める
+    await seedClearedQuests(page, ["quest_tavern_errand", "quest_guild_cleanup"]);
     const show = async (left) => {
-      await page.evaluate((left) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: left }; setRoute("quests"); }, left);
+      await page.evaluate((left) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: left }; state.money = 0; setRoute("quests"); }, left);
       return page.locator("[data-relief-last]").count();
     };
     expect(await show(3)).toBe(0);
