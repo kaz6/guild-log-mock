@@ -784,14 +784,18 @@ test.describe("行き止まりで畳む", () => {
     expect(got.left).toBe(0);
     expect(got.gameOver).not.toBe(null);
     expect(got.gameOver.reason).toBe("もう借りられず、どの依頼にも出せなくなった");
-    // ★ 地の文は行き止まり用（赤字ではないので「赤字のまま」を言わない）
+    // ★ 地の文は帳簿の羅列（P-011）。行き止まりでも赤字でも同じ形で、最後の行は「破綻した。」。「赤字のまま」の地の文は無い
     await page.evaluate(() => setRoute("home"));
-    const texts = await page.evaluate(() => ({ dead: window.masterMoneyRules.texts.gameOverBodyDeadEnd, red: window.masterMoneyRules.texts.gameOverBody }));
-    await expect(page.locator(".game-over-card p").nth(1)).toHaveText(texts.dead);
-    expect(texts.dead).not.toContain("赤字");
-    // 赤字で畳んだ（印の無い）運営不能は、いままでの地の文のまま
+    const end = await page.evaluate(() => window.masterMoneyRules.texts.gameOverEnd);
+    expect(end).toBe("破綻した。");
+    await expect(page.locator(".game-over-ledger li").last()).toHaveText(end);
+    const texts = await page.evaluate(() => window.masterMoneyRules.texts);
+    expect(texts.gameOverBody, "旧い地の文は消えた").toBeUndefined();
+    expect(texts.gameOverBodyDeadEnd, "旧い地の文は消えた").toBeUndefined();
+    await expect(page.locator(".game-over-card")).not.toContainText("赤字のまま");
+    // 赤字で畳んだ（印の無い）運営不能も、同じ形
     await page.evaluate(() => { state.gameOver = { at: Date.now(), reason: "もう借りられないところで、また赤字になった" }; render(); });
-    await expect(page.locator(".game-over-card p").nth(1)).toHaveText(texts.red);
+    await expect(page.locator(".game-over-ledger li").last()).toHaveText(end);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 
@@ -1121,6 +1125,194 @@ test.describe("掲示板に稼げる依頼を必ず1つは並べる", () => {
     expect(got.withRelief, "救済が枠を取っても、稼げる依頼は押し出されない").toContain("t_paying");
     expect(got.reaches).toEqual({ brink: false, relief: false });
     expect(got.dead).toBe(true);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
+
+// 畳まれた画面の帳簿の羅列と受付嬢の言葉（2026-11-23・P-011。作者の裁定）。
+//   ★ 赤字で畳まれたときも行き止まりで畳まれたときも同じ形：こなした依頼・借入・返済・買い出しを古い順に1行ずつ、
+//     合計・収支のあと、最後の行は「破綻した。」。受付嬢の6行は作者の稿を一字一句そのまま（【主人公】だけ名前に置き換える）。
+//   ⚠️ 見出しの言葉（借入・返済・繰越 など）は仮決め（作者の確認待ち）。値は判定しない。
+test.describe("畳まれた画面の帳簿", () => {
+  // 全部入りの筋書き：依頼（帰還）→ 赤字で借入 → 依頼（返済つき）→ 買い出し → 救済 → 出たまま帰らない遠征 → 赤字で畳む
+  //   ★ 出発も帰還も本物の経路（startExpedition・checkExpeditionCompletion）。出入りは moveMoney だけを通る。
+  async function fullScenario(page) {
+    return page.evaluate(() => {
+      const go = (questId, party, { stay = false, shared = [] } = {}) => {
+        selectedQuestId = questId; selectedAdventurerIds = [...party]; selectedSharedItems = [...shared]; selectedObsHolders = [];
+        startExpedition();
+        const exp = state.expeditions.find((e) => e.questId === questId && !e.__seen);
+        if (!exp) throw new Error(`出発できなかった：${questId}`);
+        if (stay) { exp.__seen = true; return exp; }
+        exp.startTime = Date.now() - exp.durationMs - 1_000;
+        checkExpeditionCompletion();
+        party.forEach((id) => { const a = getAdventurer(id); if (a) { a.status = "待機中"; a.injury = null; } });
+        return exp;
+      };
+      const per = window.masterMoneyRules.reliefPerBorrow;
+      go("quest_old_house_cleanup", ["adv_mina"]);                 // 依頼：遠征費→報酬
+      const low = state.money - 5;
+      moveMoney(-low, "テスト用の出費"); // 所持金を5にして、次の出発で赤字にする
+      go("quest_old_house_cleanup", ["adv_mina"]);                 // 割り込み出発→借入→帰還で報酬→返済
+      state.debt.reliefLeft = per;
+      go(window.masterQuests.find((q) => q.relief).id, ["adv_gadd"]); // 救済の依頼
+      go("quest_shopping", ["adv_mina"], { shared: ["item_bandage"] }); // 買い出し
+      const pending = go("quest_old_house_cleanup", ["adv_elne"], { stay: true }); // 出たまま帰らない
+      for (let i = 0; i < 3 && !state.gameOver; i++) { moveMoney(-(Math.max(0, state.money) + 1), "テスト用の出費"); settleNegativeMoney(); }
+      saveState(); setRoute("home");
+      return { pendingId: pending.id };
+    });
+  }
+
+  test("全部入りの筋書きで、はじめの所持金＋全行の和＝所持金。依頼の行・借入・返済・買い出し・救済・出たままの遠征が並ぶ", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await seedClearedQuests(page, ["quest_tavern_errand", "quest_guild_cleanup"]);
+    const { pendingId } = await fullScenario(page);
+    const got = await page.evaluate(() => {
+      const sum = moneyLedgerSummary();
+      const rowsTotal = sum.start + sum.items.reduce((a, it) => a + (it.type === "quest" ? it.fee + it.reward : it.amount), 0);
+      return {
+        gameOver: state.gameOver, money: state.money, sum: sum.sum, rowsTotal, totals: sum.totals,
+        items: sum.items.map((it) => it.type === "quest" ? { q: it.title, fee: it.fee, reward: it.reward, pending: it.pending } : { k: it.kind, label: it.label }),
+        reportFee: state.reports.reduce((a, r) => a + (r.money?.fee ?? 0), 0),
+        reportReward: state.reports.reduce((a, r) => a + (r.money?.reward ?? 0), 0),
+        reportShopping: state.reports.reduce((a, r) => a + (r.money?.shopping ? r.money.shopping.unitPrice * r.money.shopping.bought.length : 0), 0),
+        pendingFee: getExpeditions().reduce((a, e) => a + (e.fee ?? 0), 0),
+        testSpend: -state.moneyHistory.filter((r) => r.label === "テスト用の出費").reduce((a, r) => a + r.amount, 0), // 前提づくりの出費（遠征費の行に数えられる）
+        reliefTitle: window.masterQuests.find((q) => q.relief).title
+      };
+    });
+    expect(got.gameOver, "赤字で畳まれた").not.toBe(null);
+    expect(got.gameOver.deadEnd).toBeUndefined();
+    // ★ 収支が合う（これが本体の確かめ）
+    expect(got.rowsTotal).toBe(got.money);
+    expect(got.sum).toBe(got.money);
+    // 羅列に出る種類：借入・返済・買い出し・救済の依頼・出たままの遠征（報酬「—」）
+    const kinds = got.items.filter((i) => i.k).map((i) => i.k);
+    for (const k of ["borrow", "repay", "shopping"]) expect(kinds, `${k} の行が無い`).toContain(k);
+    expect(got.items.some((i) => i.q === got.reliefTitle), "救済の依頼の行").toBe(true);
+    expect(got.items.filter((i) => i.pending).length, "出たまま帰らない遠征が1本").toBe(1);
+    // 合計は、報告書と出たままの遠征の数の和と合う
+    expect(-got.totals.fee - got.testSpend).toBe(got.reportFee + got.pendingFee);
+    expect(got.totals.reward).toBe(got.reportReward);
+    expect(-got.totals.shopping).toBe(got.reportShopping);
+    // 画面：はじめの所持金の行が先頭、最後の行は「破綻した。」、出たままの報酬は「—」
+    const lis = page.locator(".game-over-ledger li");
+    const texts = await lis.allInnerTexts();
+    expect(texts[0]).toContain(await page.evaluate(() => window.masterMoneyRules.texts.gameOverLedger.start));
+    expect(texts.at(-1)).toBe("破綻した。");
+    expect(texts.some((t) => t.includes("報酬 —")), "帰っていない遠征の報酬は—").toBe(true);
+    expect(texts.some((t) => t.startsWith("収支") && t.includes(String(got.money).replace("-", "−")))).toBe(true);
+    expect(pendingId).toBeTruthy();
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("行き止まりで畳まれたときも、同じ形の羅列で終わる（所持金に合う）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => {
+      moveMoney(-(state.money - 3), "テスト用の出費");
+      state.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft: 0 };
+      state.gameOver = { at: Date.now(), reason: "もう借りられず、どの依頼にも出せなくなった", deadEnd: true };
+      saveState(); setRoute("home");
+    });
+    const sum = await page.evaluate(() => { const s = moneyLedgerSummary(); return { sum: s.sum, money: state.money, n: s.items.length }; });
+    expect(sum.sum).toBe(sum.money);
+    expect(sum.n).toBe(1); // 出費の1行だけ
+    await expect(page.locator(".game-over-ledger li").last()).toHaveText("破綻した。");
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("同じ依頼を2回こなしても、遠征ごとに別の行になる（遠征の id でまとめる）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      for (let i = 0; i < 2; i++) {
+        selectedQuestId = "quest_old_house_cleanup"; selectedAdventurerIds = ["adv_mina"]; selectedSharedItems = []; selectedObsHolders = [];
+        startExpedition();
+        const exp = state.expeditions[0];
+        exp.startTime = Date.now() - exp.durationMs - 1_000;
+        checkExpeditionCompletion();
+        const a = getAdventurer("adv_mina"); a.status = "待機中"; a.injury = null;
+      }
+      const s = moneyLedgerSummary();
+      return { quests: s.items.filter((it) => it.type === "quest").length, sum: s.sum, money: state.money };
+    });
+    expect(got.quests).toBe(2);
+    expect(got.sum).toBe(got.money);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("古いセーブ（全履歴の鍵が無い）は、読める分＋「繰越」の1行で、合計が所持金に合う", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => {
+      moveMoney(-40, "遠征費", "廃屋の片付け");
+      moveMoney(25, "報酬", "廃屋の片付け");
+      saveState();
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      delete saved.moneyHistory;          // 古いセーブの形
+      saved.money = saved.money - 70;     // 直近の帳簿に残っていない昔の出入りがあった
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    });
+    await page.reload();
+    await page.waitForTimeout(400);
+    const got = await page.evaluate(() => {
+      const s = moneyLedgerSummary();
+      return { sum: s.sum, money: state.money, carry: state.moneyHistory.filter((r) => r.carry).map((r) => r.amount), n: state.moneyHistory.length, label: window.masterMoneyRules.texts.gameOverLedger.carry };
+    });
+    expect(got.sum).toBe(got.money);
+    expect(got.carry).toEqual([-70]);
+    expect(got.n).toBe(3); // 繰越・遠征費・報酬
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("綴じた記録まで戻ると、全履歴も綴じた時点に戻る／最初からやり直すと空", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      moveMoney(-10, "テスト用の出費");
+      bindRecord();
+      const atBind = state.moneyHistory.length;
+      moveMoney(-10, "テスト用の出費");
+      const grown = state.moneyHistory.length;
+      restoreBoundRecord();
+      return { atBind, grown, restored: state.moneyHistory.length, fresh: createInitialState().moneyHistory };
+    });
+    expect(got.grown).toBe(got.atBind + 1);
+    expect(got.restored, "未来の行が残っていない").toBe(got.atBind);
+    expect(got.fresh).toEqual([]);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("受付嬢の言葉は作者の稿の6行そのまま。【主人公】はプレイヤー名に置き換わり、1ページずつ出る", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page, "カズ");
+    const want = [
+      "あら〜、少し無駄遣いし過ぎちゃいましたかねぇ…",
+      "このギルドは本日をもって解散です！",
+      "カズさんも、職業斡旋所で次のお仕事見つけてくださいね！応援してますよ！",
+      "わたしですか？わたしはべつのギルドに受付として異動です！意外と安定してるんですよ〜",
+      "また、いつか会いましょう！",
+      "あ、記録員バッジは返却してくださいね。"
+    ];
+    // データの側は稿のまま（【主人公】は置き換え前）
+    const data = await page.evaluate(() => window.masterMoneyRules.texts.gameOverReceptionLines);
+    expect(data.map((l) => l.replace("【主人公】", "カズ"))).toEqual(want);
+    expect(await page.evaluate(() => window.masterMoneyRules.texts.gameOverReception), "旧い一言は消えた").toBeUndefined();
+    await page.evaluate(() => { state.gameOver = { at: Date.now(), reason: "もう借りられないところで、また赤字になった" }; setRoute("home"); });
+    const pages = [];
+    for (let i = 0; i < 12; i++) {
+      pages.push(await page.locator('[data-window="gameOverReception"]').innerText());
+      const next = page.locator('[data-window="gameOverReception"] ~ .button-row .window-next');
+      if (!(await next.count())) break;
+      await next.click();
+    }
+    // ★ 長い行は窓が「。！？」で割ることがある。つなげれば6行と一致する
+    expect(pages.join("")).toBe(want.join(""));
+    expect(pages.length, "1行ずつ出る（まとめて出さない）").toBeGreaterThanOrEqual(6);
+    expect(pages[0]).toBe(want[0]);
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });

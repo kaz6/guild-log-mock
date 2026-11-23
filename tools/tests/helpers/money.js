@@ -14,11 +14,12 @@ async function settleExpedition(page, { questId, tier }) {
     const quest = getQuest(questId);
     const moneyBefore = state.money;
     const fee = questFee(quest);
-    moveMoney(-fee, questFeeLabel(quest), quest.title);
+    const expId = `exp_test_${seed}_${tier}`;
+    moveMoney(-fee, questFeeLabel(quest), quest.title, expId, questId); // ★ 出発と同じ（遠征の id つき。畳まれた画面の帳簿がまとめる）
     settleNegativeMoney(); // ★ 出発と同じ：遠征費で割り込んだら、その場で借金の判定
     const now = Date.now();
     state.expeditions = [...getExpeditions(), {
-      id: `exp_test_${seed}_${tier}`, questId, adventurerIds: party, adventurerItemIds: {}, itemIds: [],
+      id: expId, questId, adventurerIds: party, adventurerItemIds: {}, itemIds: [],
       startTime: now - 60_000, durationMs: 1, seed, departTimeOfDay: questTimeOfDay(quest, seed), departWeather: "晴れ", // ★ 基準と同じ時間帯（2026-11-09）
       firstRunOfQuest: false, elsieAtGuild: true, fee
     }];

@@ -1452,6 +1452,36 @@ hr.soft {
   border-left: 4px solid var(--ink, #333);
 }
 
+/* 畳まれた画面の帳簿の羅列（2026-11-23・P-011）。★ 依頼の数が多くても全部並べる（折りたたまない。仮決め） */
+.game-over-ledger {
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.game-over-ledger li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line, rgba(0, 0, 0, 0.12));
+}
+
+.game-over-ledger-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.game-over-ledger li.game-over-ledger-end {
+  justify-content: flex-start;
+  border-bottom: 0;
+  font-weight: 700;
+}
+
 /* 在庫と買い出し（2026-09-23・EX-144）。★ 買い出しの枠は「まだ無い物」なので半透明 */
 .item-assign-btn.item-wish.is-ghost { opacity: 0.55; border-style: dashed; }
 .item-assign-btn.item-wish.is-ghost.selected { opacity: 0.8; }
