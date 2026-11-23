@@ -520,22 +520,29 @@ test.describe("救済クエスト", () => {
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 
-  test("最後の1回が掲示板に出たときだけ、受付嬢が一言添える（数字は出さない。★ 見せ方は仮・作者の裁定待ち）", async ({ page }) => {
+  test("救済の残りは画面に何も出さない：最後の1回でも、受付嬢の一言も数字も出ない（2026-11-23 作者の裁定）", async ({ page }) => {
     const errors = await freshPage(page);
     await interview(page);
-    const line = await page.evaluate(() => window.masterMoneyRules.texts.reliefLast);
     // ⚠️ 2026-11-23・P-008：借金中でも、掲示板に報酬の出る依頼があり所持金が届けば救済は出ない。直前になる状態（報酬の出る依頼が並ぶ掲示板＋所持金0）から始める
     await seedClearedQuests(page, ["quest_tavern_errand", "quest_guild_cleanup"]);
     const show = async (left) => {
       await page.evaluate((left) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: left }; state.money = 0; setRoute("quests"); }, left);
-      return page.locator("[data-relief-last]").count();
+      return page.evaluate(() => ({
+        marker: document.querySelectorAll("[data-relief-last]").length,
+        relief: [...document.querySelectorAll(".quest-card")].some((el) => el.textContent.includes(window.masterQuests.find((q) => q.relief).title)),
+        bars: [...document.querySelectorAll(".weather-bar")].map((el) => el.textContent),
+      }));
     };
-    expect(await show(3)).toBe(0);
-    expect(await show(2)).toBe(0);
-    expect(await show(1)).toBe(1);
-    expect(await page.locator("[data-relief-last]").innerText()).toContain(line);
-    expect(await page.locator("[data-relief-last]").innerText()).not.toMatch(/[0-9０-９]/);
-    expect(await show(0), "使い切ったら救済も一言も出ない").toBe(0);
+    for (const left of [3, 2, 1, 0]) {
+      const got = await show(left);
+      expect(got.marker, `残り${left}：救済の一言の欄が無い`).toBe(0);
+      expect(got.bars.some((t) => t.includes("受付嬢")), `残り${left}：天気の帯に受付嬢の一言が出ない`).toBe(false);
+    }
+    // 残り1のとき：救済の依頼は掲示板に出ている（＝以前は一言が出た状態）。それでも一言も数字も出ない
+    const last = await show(1);
+    expect(last.relief, "残り1：救済の依頼は出ている").toBe(true);
+    expect(await page.evaluate(() => window.masterMoneyRules.texts.reliefLast), "texts.reliefLast は消えた").toBeUndefined();
+    expect(await page.locator("body").innerText()).not.toContain("これで最後");
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
