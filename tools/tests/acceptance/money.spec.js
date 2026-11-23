@@ -16,7 +16,7 @@
 //   最初は固定でよい」）。だからここでは**額そのものを判定しない**——
 //   「減る」「正である」「1本ずつ引く」のように、**値が決まっても壊れない形**だけを書く。
 const { test, expect } = require("@playwright/test");
-const { freshPage, interview, boardTitles } = require("../helpers/app");
+const { freshPage, interview, boardTitles, seedClearedQuests } = require("../helpers/app");
 
 // ★ 救済クエスト（2026-11-12・EX-173 で作者が確定。正本は DECISION_LOG の 2026-11-12 の3節）。
 //   ① **直前にしか出さない（N＝∞）を確定**。2026-09-21 の「たまに出る」は取り下げ（2026-09-26・EX-147 の「暫定確定」がこれで確定になった）。
@@ -39,7 +39,9 @@ async function reliefProbe(page, setup) {
     else if (setup.money === "belowCheapest") state.money = cheapest - 1;
     else state.money = setup.money;
     const shown = buildBoardQuests(cleared, state.reports).some((q) => q.relief);
-    return { cheapest, shown, brink: isOnBrinkOfClosing(regular), money: state.money };
+    // ★ 費用0の依頼（救済・固有依頼を除く）がその掲示板に見えているか（「一番安い依頼に費用0を数えない」の前提の確認用）
+    const freeVisible = regular.some((q) => !q.relief && !q.bond && questFee(q) === 0);
+    return { cheapest, shown, brink: isOnBrinkOfClosing(regular), money: state.money, freeVisible };
   }, setup);
 }
 
@@ -113,10 +115,12 @@ test.describe("救済クエスト", () => {
       // ★ 固定の金額ではない：0 でも出る
       expect((await reliefProbe(page, { cleared, debt, money: 0 })).shown).toBe(true);
     }
-    // ★ 「一番安い依頼」に費用0の依頼を数えない：はじめの掲示板（酒場＝費用あり／掃除＝費用0）で、所持金0なら出る
-    const early = await reliefProbe(page, { cleared: 0, debt: { active: null, timesBorrowed: max, reliefLeft: 1 }, money: 0 });
-    const freeVisible = await page.evaluate(() => buildBoardQuests(new Set(), state.reports, { withRelief: false }).some((q) => questFee(q) === 0));
-    expect(freeVisible, "前提：費用0の依頼が掲示板に見えている").toBe(true);
+    // ★ 「一番安い依頼」に費用0の依頼を数えない：掃除をまだ終えていない掲示板（`cleared: 2`＝上のループと同じ進み。掃除＝費用0 が見えていて、報酬の出る依頼も並ぶ）で、所持金0なら出る
+    //   ⚠️ 2026-11-23・P-006：以前は「はじめの掲示板（酒場＋掃除だけ）」で見ていたが、P-004 で報酬の出ない依頼を数えなくなり、
+    //     そこは一番安い遠征費が無い（null）＝直前にならない掲示板になった。確かめる中身（費用0を数えない）は変えず、報酬の出る依頼が並ぶ状態に直した。
+    const early = await reliefProbe(page, { cleared: 2, debt: { active: null, timesBorrowed: max, reliefLeft: 1 }, money: 0 });
+    expect(early.freeVisible, "前提：費用0の依頼が掲示板に見えている").toBe(true);
+    expect(early.cheapest, "前提：報酬の出る依頼が並んでいて、一番安い遠征費がある").toBeGreaterThan(0);
     expect(early.shown, "費用0の依頼を一番安い依頼に数えている").toBe(true);
     // 借金中は今までどおり、金があっても出る
     expect((await reliefProbe(page, { debt: { active: { borrowed: 200, remaining: 50 }, timesBorrowed: 1, reliefLeft: 1 }, money: 100000 })).shown).toBe(true);
@@ -145,6 +149,9 @@ test.describe("救済クエスト", () => {
     const errors = await freshPage(page);
     await interview(page);
     // ★ 2回使い切り・所持金0。毎回、謝礼をほかで使い切った（＝直前のまま）ことにして、救済だけを出し続ける
+    //   ⚠️ 2026-11-23・P-006：掲示板に報酬の出る依頼が並ぶ状態から始める（P-004 で報酬の出ない依頼を数えなくなり、
+    //     はじめの掲示板では一番安い遠征費が無い＝直前にならないため）。酒場と掃除を終えた報告書を先に積む。
+    await seedClearedQuests(page, ["quest_tavern_errand", "quest_guild_cleanup"]);
     const got = await page.evaluate(() => {
       const per = window.masterMoneyRules.reliefPerBorrow;
       state.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft: per };
@@ -155,7 +162,12 @@ test.describe("救済クエスト", () => {
         state.money = 0;
         const board = buildBoardQuests(getClearedQuestIds(), state.reports);
         if (!board.some((q) => q.id === relief.id)) {
+          // ⚠️ 2026-11-23・P-006：回数を使い切ったあと、所持金が届かず遠征も無いこの状態は行き止まり（P-003）で、ギルドは畳まれている。
+          //   `isOnBrinkOfClosing` は運営不能のあいだ false を返すので、畳んだ印を一時的に外して「直前の条件のままか」だけを見る（直後に戻す）。
+          const closed = state.gameOver;
+          state.gameOver = null;
           brinkAtEnd = isOnBrinkOfClosing();
+          state.gameOver = closed;
           break;
         }
         selectedQuestId = relief.id;
@@ -179,6 +191,7 @@ test.describe("救済クエスト", () => {
     // ★ 謝礼を貯めた場合も、回数を越えては受けられない（状態で抜けるか回数で止まるか、どちらでも per 回まで）
     const hoard = await page.evaluate(() => {
       const per = window.masterMoneyRules.reliefPerBorrow;
+      state.gameOver = null; // ⚠️ 2026-11-23・P-006：直前のループが行き止まりで畳まれて終わるので、この場面は畳まれる前から始め直す
       state.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft: per };
       state.money = 0;
       const relief = window.masterQuests.find((q) => q.relief);
@@ -203,6 +216,8 @@ test.describe("救済クエスト", () => {
   test("古いセーブ（残りの回数の鍵が無い）で壊れない：今の借入の回数がまるごと残っている扱い", async ({ page }) => {
     const errors = await freshPage(page);
     await interview(page);
+    // ⚠️ 2026-11-23・P-006：報酬の出る依頼が掲示板に並ぶ状態（酒場と掃除を終えたあと）のセーブで読み込む（理由はループの試験と同じ）
+    await seedClearedQuests(page, ["quest_tavern_errand", "quest_guild_cleanup"]);
     const key = await page.evaluate(() => {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       saved.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount }; // ★ reliefLeft が無い（EX-173 より前の形）
