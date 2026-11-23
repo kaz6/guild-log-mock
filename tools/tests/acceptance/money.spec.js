@@ -33,7 +33,8 @@ async function reliefProbe(page, setup) {
     const cleared = new Set(normal.slice(0, setup.cleared ?? normal.length));
     state.debt = { ...setup.debt };
     const regular = buildBoardQuests(cleared, state.reports, { withRelief: false });
-    const cheapest = Math.min(...regular.filter((q) => !q.relief && !q.bond).map(questFee).filter((f) => f > 0));
+    // ★ 報酬の出ない依頼（money.reward が固定で 0＝買い出し・酒樽）は数えない（2026-11-23・P-004）
+    const cheapest = Math.min(...regular.filter((q) => !q.relief && !q.bond && !(typeof q.money?.reward === "number" && q.money.reward <= 0)).map(questFee).filter((f) => f > 0));
     if (setup.money === "cheapest") state.money = cheapest;
     else if (setup.money === "belowCheapest") state.money = cheapest - 1;
     else state.money = setup.money;

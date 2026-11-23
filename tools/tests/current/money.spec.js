@@ -465,8 +465,9 @@ test.describe("救済クエスト", () => {
     const all = await page.evaluate(() => window.masterQuests.filter((q) => !q.hidden && !q.relief).map((q) => q.id));
     await seedClearedQuests(page, all.slice(0, 8));
     const onBoard = () => page.evaluate(() => buildBoardQuests(getClearedQuestIds(), state.reports).some((q) => q.relief));
+    // ★ 報酬の出ない依頼（money.reward が固定で 0＝買い出し・酒樽）は数えない（2026-11-23・P-004）
     const cheapest = await page.evaluate(() => Math.min(...buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false })
-      .filter((q) => !q.relief && !q.bond).map(questFee).filter((f) => f > 0)));
+      .filter((q) => !q.relief && !q.bond && !(typeof q.money?.reward === "number" && q.money.reward <= 0)).map(questFee).filter((f) => f > 0)));
     const per = await page.evaluate(() => window.masterMoneyRules.reliefPerBorrow);
     expect(await onBoard(), "直前でないのに出ている（直前にしか出さない）").toBe(false);
     await page.evaluate((per) => { state.debt = { active: { borrowed: 200, remaining: 120 }, timesBorrowed: 1, reliefLeft: per }; }, per);
@@ -866,6 +867,111 @@ test.describe("行き止まりで畳む", () => {
     await page.reload();
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => ({ gameOver: state.gameOver, left: getExpeditions().length }))).toEqual({ gameOver: null, left: 1 });
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+});
+
+// 「一番安い依頼」に、報酬の出ない依頼を数えない（2026-11-23・P-004。作者が「数えません」と決めた）。
+//   報酬の出ない依頼＝依頼データの `money.reward` が固定で 0（買い出し・酒場の酒樽・掃除・固有依頼）。
+//   ★ 数え方は `cheapestBoardFee` の1か所。「運営不能の直前」と「行き止まり」の両方がそれを通る。
+//   ⚠️ 値は判定しない（遠征費は questFee から読む）。見るのは「どれが数えられるか」と、その結果の直前・行き止まり。
+test.describe("一番安い依頼に、報酬の出ない依頼を数えない", () => {
+  test("遠征費がかかる報酬の出ない依頼（買い出し・酒樽）は数えず、報酬の出る依頼だけで決まる", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const q = (id) => window.masterQuests.find((x) => x.id === id);
+      const tavern = q("quest_tavern_errand"), shopping = q("quest_shopping"), church = q("quest_church_patrol");
+      // 除く対象：遠征費がかかるのに報酬の出ない依頼（費用0のものは、これまでも数えていない）
+      const rewardlessWithFee = window.masterQuests.filter((x) => !x.relief && !x.bond && isRewardlessQuest(x) && questFee(x) > 0).map((x) => x.id).sort();
+      return {
+        rewardlessWithFee,
+        fees: { tavern: questFee(tavern), shopping: questFee(shopping), church: questFee(church) },
+        all: cheapestBoardFee([tavern, shopping, church]),
+        paidOnly: cheapestBoardFee([church]),
+        rewardlessOnly: cheapestBoardFee([tavern, shopping]),
+        // 報酬の出る依頼（reward を持たず、遠征費 × 段の倍率で払う側）は、除かない
+        payingKept: window.masterQuests.filter((x) => !x.relief && !x.bond && typeof x.money?.reward !== "number").every((x) => !isRewardlessQuest(x))
+      };
+    });
+    expect(got.rewardlessWithFee).toEqual(["quest_shopping", "quest_tavern_errand"]);
+    // 前提：報酬の出ない2件のほうが、報酬の出る依頼より安い（数えれば一番安い依頼が変わる）
+    expect(Math.min(got.fees.tavern, got.fees.shopping)).toBeLessThan(got.fees.church);
+    expect(got.all).toBe(got.fees.church);
+    expect(got.paidOnly).toBe(got.fees.church);
+    expect(got.rewardlessOnly, "報酬の出ない依頼だけなら、数える依頼が無い").toBe(null);
+    expect(got.payingKept).toBe(true);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("払えるのが報酬の出ない依頼だけのとき、直前になる（救済が出る）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const per = await page.evaluate(() => window.masterMoneyRules.reliefPerBorrow);
+    // 酒樽（報酬なし）には払えるが、報酬の出る依頼には1円届かない
+    const got = await page.evaluate(({ per }) => {
+      const pick = (id) => window.masterQuests.find((x) => x.id === id);
+      const paying = { ...pick("quest_church_patrol"), unlockedBy: undefined, unlockedAfterCount: undefined };
+      const rewardless = pick("quest_tavern_errand");
+      state.quests = [rewardless, paying, ...window.masterQuests.filter((x) => x.relief)];
+      state.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft: per };
+      state.gameOver = null; state.expeditions = [];
+      state.money = questFee(paying) - 1;
+      return {
+        rewardlessFee: questFee(rewardless), payingFee: questFee(paying), money: state.money,
+        brink: isOnBrinkOfClosing(),
+        reliefOnBoard: buildBoardQuests(getClearedQuestIds(), state.reports).some((x) => x.relief),
+        boardHasRewardless: buildBoardQuests(getClearedQuestIds(), state.reports, { withRelief: false }).some((x) => x.id === "quest_tavern_errand")
+      };
+    }, { per });
+    expect(got.money, "前提：報酬の出ない依頼には払える").toBeGreaterThanOrEqual(got.rewardlessFee);
+    expect(got.money, "前提：報酬の出る依頼には届かない").toBeLessThan(got.payingFee);
+    expect(got.boardHasRewardless, "前提：報酬の出ない依頼も掲示板に並んでいる").toBe(true);
+    expect(got.brink).toBe(true);
+    expect(got.reliefOnBoard).toBe(true);
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("払えるのが報酬の出ない依頼だけで、救済も使い切っていれば、畳まれる", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const pick = (id) => window.masterQuests.find((x) => x.id === id);
+      const paying = { ...pick("quest_church_patrol"), unlockedBy: undefined, unlockedAfterCount: undefined };
+      const rewardless = pick("quest_tavern_errand");
+      state.quests = [rewardless, paying, ...window.masterQuests.filter((x) => x.relief)];
+      state.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft: 0 };
+      state.gameOver = null; state.expeditions = [];
+      state.money = questFee(paying) - 1;
+      const before = { rewardlessFee: questFee(rewardless), money: state.money, dead: isDeadEnd() };
+      const settled = settleDeadEnd();
+      return { ...before, settled, gameOver: state.gameOver && { deadEnd: state.gameOver.deadEnd } };
+    });
+    expect(got.money).toBeGreaterThanOrEqual(got.rewardlessFee);
+    expect(got.dead).toBe(true);
+    expect(got.settled).toBe(true);
+    expect(got.gameOver).toEqual({ deadEnd: true });
+    expect(errors, errors.join(" | ")).toEqual([]);
+  });
+
+  test("報酬の出る依頼に届くなら、直前にも行き止まりにもならない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const got = await page.evaluate(() => {
+      const pick = (id) => window.masterQuests.find((x) => x.id === id);
+      const paying = { ...pick("quest_church_patrol"), unlockedBy: undefined, unlockedAfterCount: undefined };
+      const rewardless = pick("quest_tavern_errand");
+      state.quests = [rewardless, paying, ...window.masterQuests.filter((x) => x.relief)];
+      state.gameOver = null; state.expeditions = [];
+      const out = {};
+      for (const reliefLeft of [0, window.masterMoneyRules.reliefPerBorrow]) {
+        state.debt = { active: null, timesBorrowed: window.masterMoneyRules.maxBorrowCount, reliefLeft };
+        state.money = questFee(paying); // ちょうど届く
+        out[`exact_${reliefLeft}`] = { brink: isOnBrinkOfClosing(), dead: isDeadEnd() };
+      }
+      return out;
+    });
+    Object.values(got).forEach((v) => expect(v).toEqual({ brink: false, dead: false }));
     expect(errors, errors.join(" | ")).toEqual([]);
   });
 });
