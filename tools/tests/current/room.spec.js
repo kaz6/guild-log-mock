@@ -45,9 +45,27 @@ test.describe("ホームの窓（EX-161）", () => {
     // 押すと報告書棚が見える位置まで動く（画面は home のまま）
     await page.waitForTimeout(700);
     expect(await page.evaluate(() => { const r = document.getElementById("reportShelf").getBoundingClientRect(); return r.top >= 0 && r.top < window.innerHeight; })).toBe(true);
-    for (const id of ["shelf", "badge", "counter", "backyard"]) {
+    // 2026-11-24 作者：本棚は名簿類を開くようになった（P-014）ので、用途の無い物から外す
+    for (const id of ["badge", "counter", "backyard"]) {
       await expect(page.locator(`button[data-room-object="${id}"]`)).toHaveCount(0);
     }
+    expect(errors).toEqual([]);
+  });
+
+  test("本棚を押すと名簿の画面が開く。書類の吹き出しの名簿と同じ画面（P-014・2026-11-24 作者）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    // 真ん中の枚で、本棚に枠（触れる物）が出る
+    expect(await page.evaluate(() => roomPanel)).toBe(1);
+    await expect(page.locator('button[data-room-object="shelf"]')).toHaveCount(1);
+    await page.locator('[data-room-object="shelf"]').click({ force: true });
+    const viaShelf = await page.evaluate(() => ({ route, title: document.getElementById("viewTitle").textContent }));
+    expect(viaShelf.route).toBe("adventurers");
+    await page.evaluate(() => setRoute("home"));
+    await page.locator('[data-room-object="papers"]').click({ force: true });
+    await page.locator(".room-bubble-item", { hasText: "名簿" }).click();
+    const viaPapers = await page.evaluate(() => ({ route, title: document.getElementById("viewTitle").textContent }));
+    expect(viaShelf).toEqual(viaPapers);
     expect(errors).toEqual([]);
   });
 

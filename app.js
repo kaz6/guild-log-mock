@@ -3237,7 +3237,8 @@ const ROOM_OBJECTS = [
   { id: "badge", panel: 0, label: "証", x: 8, y: 80, w: 20, h: 10 },
   // ── 真ん中 ──
   { id: "board", panel: 1, label: "掲示板", x: 13, y: 28, w: 26, h: 18, act: () => setRoute("quests") },
-  { id: "shelf", panel: 1, label: "本棚", x: 42, y: 22, w: 53, h: 27 },
+  // ★ 本棚＝名簿類（2026-11-24 作者）。開く先は書類の吹き出しの「名簿」と同じ画面（入口が複数でも開く先は同じ）。新しい画面は作らない
+  { id: "shelf", panel: 1, label: "本棚", x: 42, y: 22, w: 53, h: 27, act: () => setRoute("adventurers") },
   { id: "papers", panel: 1, label: "書類", x: 3, y: 84, w: 55, h: 12, act: () => toggleRoomMenu("papers") },
   { id: "pile", panel: 1, label: "書類の山", x: 66, y: 84, w: 26, h: 12, act: () => openReportShelf() },
   // ── 右 ──
