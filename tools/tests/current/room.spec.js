@@ -38,7 +38,8 @@ test.describe("ホームの窓（EX-161）", () => {
     });
     await page.locator('[data-room-object="book"]').click({ force: true });
     expect(await page.evaluate(() => route)).toBe("ecology");
-    await page.evaluate(() => { setRoute("home"); roomPanel = 2; render(); });
+    // 2026-11-24 作者・M1 に合わせる：書類の山は真ん中の枚（旧：右）
+    await page.evaluate(() => { setRoute("home"); roomPanel = 1; render(); });
     await page.locator('[data-room-object="pile"]').click({ force: true });
     expect(await page.evaluate(() => route)).toBe("home");
     // 押すと報告書棚が見える位置まで動く（画面は home のまま）
@@ -139,18 +140,68 @@ test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
     const errors = await freshPage(page);
     await interview(page);
     const notice = page.locator(".room-notice");
-    await page.evaluate(() => { roomPanel = 0; render(); });
+    // 2026-11-24 作者・M1 に合わせる：受付嬢もエルシーの場所も右の枚（旧：受付嬢は左）
+    await page.evaluate(() => { roomPanel = 2; render(); });
     await page.locator('button[data-room-object="receptionist"]').click({ force: true });
     await expect(notice).toHaveText("はい、なんでしょう。");
     await page.locator('button[data-room-object="receptionist"]').click({ force: true });
     await expect(notice).toHaveText("記録員さん、今日もお疲れさまです。");
-    await page.locator(".room-arrow.right").click();
-    await page.locator(".room-arrow.right").click();
+    // 枚を移すと一言は消える。戻ってエルシーを押す
+    await page.locator(".room-arrow.left").click();
     await expect(notice).toBeHidden();
+    await page.locator(".room-arrow.right").click();
     await page.locator('button[data-room-object="elsie"]').click({ force: true });
     await expect(notice).toHaveText("エルシーは尻尾を振った。");
     await page.locator('button[data-room-object="elsie"]').click({ force: true });
     await expect(notice).toHaveText("撫でると、エルシーは目を細めた。");
     expect(errors).toEqual([]);
+  });
+});
+
+// 2026-11-24 作者・M1 に合わせる（P-012）：物は決まった枚に出る。枠が重ならず、窓の外へ出ない。
+test.describe("物の置き場所（拠点の絵 M1・P-012）", () => {
+  const EXPECTED = {
+    左: ["backyard", "book", "badge"],
+    真ん中: ["board", "shelf", "papers", "pile"],
+    右: ["receptionist", "counter", "grave", "elsie", "pen"]
+  };
+  test("各物が決まった枚にある（物の働きは変わらない）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const actual = await page.evaluate(() => {
+      const out = { 左: [], 真ん中: [], 右: [] };
+      for (const o of ROOM_OBJECTS) out[ROOM_PANELS[o.panel]].push(o.id);
+      return out;
+    });
+    for (const k of Object.keys(EXPECTED)) expect(actual[k].slice().sort(), `${k}の枚`).toEqual(EXPECTED[k].slice().sort());
+    // 画面でも、死者がいれば墓標を含めて全部が決まった枚に出る
+    await page.evaluate(() => {
+      state.adventurers[0].status = "死亡";
+      state.ecologyRecord = { er_t: { id: "er_t", target: "森喰い兎", name: null, nameDraft: "", nameConfirmedAt: null, area: "", category: "", confirmed: [], guess: "", nextCheck: "", legacy: "" } };
+      render();
+    });
+    for (const [i, name] of ["左", "真ん中", "右"].entries()) {
+      const ids = await page.locator(`.room-panel[data-room-panel="${i}"] [data-room-object]`).evaluateAll((els) => els.map((e) => e.dataset.roomObject));
+      expect(ids.slice().sort(), `${name}の枚に出る物`).toEqual(EXPECTED[name].slice().sort());
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test("枠は同じ枚の中で重ならず、触れる物の触れる範囲（±3）も窓の外へ出ない", async ({ page }) => {
+    await freshPage(page);
+    await interview(page);
+    const problems = await page.evaluate(() => {
+      const bad = [];
+      for (const o of ROOM_OBJECTS) {
+        const m = o.act ? 3 : 0;
+        if (o.x - m < 0 || o.y - m < 0 || o.x + o.w + m > 100 || o.y + o.h + m > 100) bad.push(`${o.id}：窓の外へ出る`);
+      }
+      for (const a of ROOM_OBJECTS) for (const b of ROOM_OBJECTS) {
+        if (a.id >= b.id || a.panel !== b.panel) continue;
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) bad.push(`${a.id}と${b.id}：枠が重なる`);
+      }
+      return bad;
+    });
+    expect(problems).toEqual([]);
   });
 });
