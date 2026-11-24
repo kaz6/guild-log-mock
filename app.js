@@ -3228,19 +3228,24 @@ const ROOM_START_PANEL = 1; // 起動時は真ん中（仮）
 // act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
 //   enabled: 触れる条件（偽のあいだは枠なし・反応なし。無ければ常に）。
 const ROOM_OBJECTS = [
-  { id: "receptionist", panel: 0, label: "受付嬢", x: 8, y: 14, w: 40, h: 34, act: () => tapRoomReaction("receptionist") },
-  { id: "counter", panel: 0, label: "カウンター", x: 4, y: 52, w: 56, h: 14 },
-  { id: "backyard", panel: 0, label: "バックヤード", x: 62, y: 14, w: 32, h: 40 },
+  // ★ 割り当ては拠点の絵 M1 の配置に合わせる（2026-11-24 作者・DECISION_LOG 2026-11-24）。左＝バックヤード・本・証（仮）／真ん中＝掲示板・本棚・書類・書類の山（仮）／右＝受付嬢・カウンター・エルシーの場所・墓標・ペン。
+  //   位置（x・y・w・h）は M1 を3つに割って測った仮の値。枠が重ならず、触れる物の触れる範囲（±3）が窓の外へ出ない形に直してある。
+  // ── 左 ──
+  { id: "backyard", panel: 0, label: "バックヤード", x: 46, y: 18, w: 23, h: 41 },
   // ★ 本＝生態目録。最初の生き物に出会うまでは枠を付けず触れない（EX-163 段階3。enabled が偽のあいだは act が無い物と同じ扱い）
-  { id: "book", panel: 0, label: "本", x: 62, y: 74, w: 26, h: 14, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() },
-  { id: "board", panel: 1, label: "掲示板", x: 14, y: 12, w: 72, h: 38, act: () => setRoute("quests") },
-  { id: "papers", panel: 1, label: "書類", x: 14, y: 74, w: 40, h: 14, act: () => toggleRoomMenu("papers") },
-  { id: "badge", panel: 1, label: "証", x: 66, y: 60, w: 22, h: 14 },
-  { id: "shelf", panel: 2, label: "本棚", x: 6, y: 10, w: 44, h: 40 },
-  { id: "elsie", panel: 2, label: "エルシーの場所", x: 54, y: 56, w: 40, h: 16, act: () => tapRoomReaction("elsie") },
-  { id: "grave", panel: 2, label: "墓標", x: 56, y: 14, w: 36, h: 36, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
-  { id: "pile", panel: 2, label: "書類の山", x: 8, y: 74, w: 36, h: 14, act: () => openReportShelf() },
-  { id: "pen", panel: 2, label: "ペン", x: 62, y: 80, w: 26, h: 10, act: () => toggleRoomMenu("pen") }
+  { id: "book", panel: 0, label: "本", x: 37, y: 78, w: 38, h: 12, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() },
+  { id: "badge", panel: 0, label: "証", x: 8, y: 80, w: 20, h: 10 },
+  // ── 真ん中 ──
+  { id: "board", panel: 1, label: "掲示板", x: 13, y: 28, w: 26, h: 18, act: () => setRoute("quests") },
+  { id: "shelf", panel: 1, label: "本棚", x: 42, y: 22, w: 53, h: 27 },
+  { id: "papers", panel: 1, label: "書類", x: 3, y: 84, w: 55, h: 12, act: () => toggleRoomMenu("papers") },
+  { id: "pile", panel: 1, label: "書類の山", x: 66, y: 84, w: 26, h: 12, act: () => openReportShelf() },
+  // ── 右 ──
+  { id: "receptionist", panel: 2, label: "受付嬢", x: 3, y: 30, w: 15, h: 14, act: () => tapRoomReaction("receptionist") },
+  { id: "counter", panel: 2, label: "カウンター", x: 0, y: 46, w: 24, h: 12 },
+  { id: "grave", panel: 2, label: "墓標", x: 46, y: 40, w: 14, h: 20, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
+  { id: "elsie", panel: 2, label: "エルシーの場所", x: 3, y: 62, w: 23, h: 8, act: () => tapRoomReaction("elsie") },
+  { id: "pen", panel: 2, label: "ペン", x: 3, y: 80, w: 32, h: 16, act: () => toggleRoomMenu("pen") }
 ];
 // 吹き出しの目次（段階2）。★ 中身は増減する前提で表にする。act は物と同じ「今ある画面を開く」だけ。
 //   ★ 入口が複数でも開く先は同じ画面（名簿はナビからも書類からも同じ名簿の画面）。show：出す条件（無ければ常に）。
