@@ -48,7 +48,12 @@ test("出発すると、依頼の時間帯（出発前の遠征の回数で決�
   await interview(page, "カズ");
   const r = await page.evaluate(() => {
     const origHours = Date.prototype.getHours;
-    Date.prototype.getHours = () => { throw new Error("端末の時刻を読んだ"); };
+    // 2026-11-27・P-015：ホームの背景の光（roomHourNow＝端末の時刻で朝・昼・夕を決める。見た目だけ）は読んでよい。
+    //   ★ 出発の時間帯の決め方（questTimeOfDay・startExpedition）が端末の時刻を読んだら、これまでどおり落ちる。
+    Date.prototype.getHours = function () {
+      if (new Error().stack.includes("roomHourNow")) return origHours.call(this);
+      throw new Error("端末の時刻を読んだ");
+    };
     try {
       state.money = 9999;
       state.worldState.totalExpeditions = 5;
