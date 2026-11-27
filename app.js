@@ -3269,7 +3269,7 @@ function roomShadow(hour, season) {
   return {
     dx: +(s * 0.45).toFixed(3),
     len: +(1 + 0.9 * a).toFixed(3),
-    alpha: +((0.55 - 0.2 * a) * (season === "winter" ? 0.5 : 1)).toFixed(3)
+    alpha: +((0.6 - 0.2 * a) * (season === "winter" ? 0.5 : 1)).toFixed(3)
   };
 }
 const ROOM_OBJECTS = [
