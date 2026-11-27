@@ -489,7 +489,7 @@ test.describe("ホームの背景（絵の層・P-015）", () => {
     expect(errors).toEqual([]);
   });
 
-  test("物の枠は絵の上の決まった場所に出る（枠を測って、表の％と合う）。受付嬢の層と枠の位置がずれる所は一覧に残す（直さない）", async ({ page }) => {
+  test("物の枠は絵の上の決まった場所に出る（枠を測って、表の％と合う）", async ({ page }) => {
     const errors = await freshPage(page);
     await interview(page);
     const r = await page.evaluate(() => {
