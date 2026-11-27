@@ -3238,23 +3238,28 @@ const ROOM_HIT_MARGIN_X = 1;
 const ROOM_HIT_MARGIN_Y = 3;
 // act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
 //   enabled: 触れる条件（偽のあいだは枠なし・反応なし。無ければ常に）。
-//   位置は絵全体に対する％（x・w は横、y・h は縦）。★ 絵の上の場所は 2026-11-24 の拠点の絵 M1 に合わせた3枚の値（P-012）を
-//   横長1枚に換算しただけ：x＝(枚の番号×100＋枚の中の x)÷3、w＝枚の中の w÷3（y・h は同じ）。M1（2.35:1）で測った値なので、新しい絵とずれる所がある（直していない）。
+//   位置は絵全体に対する％（x・w は横、y・h は縦）。★ 2026-11-27・P-017：**絵に物がある枠**（受付嬢・カウンター・本・掲示板・バックヤード・本棚）を、
+//   絵（assets/home の土台の絵。季節が違っても物の位置は同じ）の物の上に合わせ直した（値は仮・目測。作者未確認）。
+//   証・エルシーの場所・ペン・墓標は絵に物が無い（作者の判断待ち）。書類・書類の山は絵の手前の開いた本の上にある。どちらもこの回の対象外なので、
+//   P-012 の3枚の値（M1 に合わせたもの）を横長1枚に換算したまま動かしていない（P-015）。
+//   ★ 枠が重なるときは手前に見える物（受付嬢）を優先：本棚は受付嬢の左まで、カウンターは受付嬢の下から。
+//   ★ 触れる範囲（.room-hit）は枠より大きく、重なるときは**あとに書いた物が手前**。本棚は掲示板より前に、受付嬢は本棚より後に書く。
 const ROOM_OBJECTS = [
-  // ── 左だった枚（旧：左）──
-  { id: "backyard", label: "バックヤード", x: 15.33, y: 18, w: 7.67, h: 41 },
+  // ── 左 ──
+  { id: "backyard", label: "バックヤード", x: 17, y: 20, w: 7, h: 32 }, // 絵の奥の暗いアーチ
   // ★ 本＝生態目録。最初の生き物に出会うまでは枠を付けず触れない（EX-163 段階3。enabled が偽のあいだは act が無い物と同じ扱い）
-  { id: "book", label: "本", x: 12.33, y: 78, w: 12.67, h: 12, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() },
+  { id: "book", label: "本", x: 14.3, y: 73.4, w: 12, h: 9, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() }, // 床の閉じた本
   { id: "badge", label: "証", x: 2.67, y: 80, w: 6.67, h: 10 },
-  // ── 真ん中だった枚（旧：真ん中）──
-  { id: "board", label: "掲示板", x: 37.67, y: 28, w: 8.67, h: 18, act: () => setRoute("quests") },
+  // ── 真ん中 ──
   // ★ 本棚＝名簿類（2026-11-24 作者）。開く先は書類の吹き出しの「名簿」と同じ画面（入口が複数でも開く先は同じ）。新しい画面は作らない
-  { id: "shelf", label: "本棚", x: 47.33, y: 22, w: 17.67, h: 27, act: () => setRoute("adventurers") },
+  //   絵の奥の右の棚のうち、掲示板の右から受付嬢の左まで（受付嬢と重ならない範囲）
+  { id: "shelf", label: "本棚", x: 47.7, y: 25, w: 10.3, h: 18.3, act: () => setRoute("adventurers") },
+  { id: "board", label: "掲示板", x: 38.7, y: 27, w: 8.9, h: 13.5, act: () => setRoute("quests") }, // 木の幹に掛かった板
   { id: "papers", label: "書類", x: 34.33, y: 84, w: 18.33, h: 12, act: () => toggleRoomMenu("papers") },
   { id: "pile", label: "書類の山", x: 55.33, y: 84, w: 8.67, h: 12, act: () => openReportShelf() },
-  // ── 右だった枚（旧：右）──
-  { id: "receptionist", label: "受付嬢", x: 67.67, y: 30, w: 5, h: 14, act: () => tapRoomReaction("receptionist") },
-  { id: "counter", label: "カウンター", x: 66.67, y: 46, w: 8, h: 12 },
+  // ── 右 ──
+  { id: "counter", label: "カウンター", x: 51.4, y: 43.3, w: 21.9, h: 12.1 }, // 絵の長いカウンター（天板から下。受付嬢の下から）
+  { id: "receptionist", label: "受付嬢", x: 58, y: 29.5, w: 7.5, h: 13.8, act: () => tapRoomReaction("receptionist") }, // 絵の受付嬢（透明な余白を除いた人の形）
   { id: "grave", label: "墓標", x: 82, y: 40, w: 4.67, h: 20, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
   { id: "elsie", label: "エルシーの場所", x: 67.67, y: 62, w: 7.67, h: 8, act: () => tapRoomReaction("elsie") },
   { id: "pen", label: "ペン", x: 67.67, y: 80, w: 10.67, h: 16, act: () => toggleRoomMenu("pen") }

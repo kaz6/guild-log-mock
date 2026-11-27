@@ -163,23 +163,37 @@ test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
   });
 });
 
-// 2026-11-24 作者・M1 に合わせる（P-012）→ 2026-11-27・P-015 で横長1枚に換算した。
-//   ★ 物の「絵の上の場所」は動かさない。P-012 の3枚の値（枚の番号・枚の中の ％）を固定の表として持ち、
-//     x＝(枚の番号×100＋x)÷3・w＝w÷3（y・h は同じ）に換算した値と、いまの ROOM_OBJECTS が一致することを確かめる。
+// 2026-11-24 作者・M1 に合わせる（P-012）→ 2026-11-27・P-015 で横長1枚に換算 → 同日・P-017 で、絵に物がある枠だけ絵の物の上に合わせ直した。
+//   ★ 絵に物が無い（または対象外の）枠は、P-012 の3枚の値（枚の番号・枚の中の ％）を固定の表として持ち、
+//     x＝(枚の番号×100＋x)÷3・w＝w÷3（y・h は同じ）に換算した値と、いまの ROOM_OBJECTS が一致することを確かめる（動かしていない証拠）。
 const PANEL_TABLE = {
-  backyard: [0, 46, 18, 23, 41], book: [0, 37, 78, 38, 12], badge: [0, 8, 80, 20, 10],
-  board: [1, 13, 28, 26, 18], shelf: [1, 42, 22, 53, 27], papers: [1, 3, 84, 55, 12], pile: [1, 66, 84, 26, 12],
-  receptionist: [2, 3, 30, 15, 14], counter: [2, 0, 46, 24, 12], grave: [2, 46, 40, 14, 20], elsie: [2, 3, 62, 23, 8], pen: [2, 3, 80, 32, 16]
+  badge: [0, 8, 80, 20, 10],
+  papers: [1, 3, 84, 55, 12], pile: [1, 66, 84, 26, 12],
+  grave: [2, 46, 40, 14, 20], elsie: [2, 3, 62, 23, 8], pen: [2, 3, 80, 32, 16]
 };
-test.describe("物の置き場所（拠点の絵 M1・P-012 を横長1枚に換算・P-015）", () => {
-  test("各物の位置が、3枚の値を換算したものと一致する（絵の上の場所は動いていない）。物の数も同じ", async ({ page }) => {
+// ★ 絵に物がある枠（P-017）。位置は絵全体に対する％。assets/home の土台の絵（季節が違っても物の位置は同じ）の物の上に合わせた値。
+//   受付嬢は透明な余白を除いた人の形（絵の人は x59.3〜64.1・y30.9〜43.1）を含む。カウンターは受付嬢の下から、本棚は受付嬢の左まで（受付嬢が手前）。
+const PICTURE_TABLE = {
+  backyard: [17, 20, 7, 32], book: [14.3, 73.4, 12, 9], board: [38.7, 27, 8.9, 13.5], shelf: [47.7, 25, 10.3, 18.3],
+  receptionist: [58, 29.5, 7.5, 13.8], counter: [51.4, 43.3, 21.9, 12.1]
+};
+// 絵の受付嬢の人の形（絵の上の％。受付嬢の絵の透明度が半分より濃い所の外枠）。真ん中を押すと受付嬢の一言が出る
+const RECEPTIONIST_FIGURE = { x: 59.3, y: 30.9, w: 4.8, h: 12.2 };
+const ALL_IDS = [...Object.keys(PANEL_TABLE), ...Object.keys(PICTURE_TABLE)].sort();
+test.describe("物の置き場所（絵の物に合わせた枠・P-017／ほかは拠点の絵 M1・P-012 を横長1枚に換算・P-015）", () => {
+  test("絵に物がある枠は絵の物の上の値。ほかは3枚の値を換算したものと一致する（動いていない）。物の数も同じ", async ({ page }) => {
     const errors = await freshPage(page);
     await interview(page);
     const objs = await page.evaluate(() => ROOM_OBJECTS.map((o) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: o.h, panel: o.panel })));
-    expect(objs.map((o) => o.id).sort()).toEqual(Object.keys(PANEL_TABLE).sort());
+    expect(objs.map((o) => o.id).sort()).toEqual(ALL_IDS);
     for (const o of objs) {
-      const [p, x, y, w, h] = PANEL_TABLE[o.id];
       expect(o.panel, `${o.id}：枚の番号はもう持たない`).toBeUndefined();
+      if (PICTURE_TABLE[o.id]) {
+        const [x, y, w, h] = PICTURE_TABLE[o.id];
+        expect([o.x, o.y, o.w, o.h], `${o.id}：絵の物に合わせた値`).toEqual([x, y, w, h]);
+        continue;
+      }
+      const [p, x, y, w, h] = PANEL_TABLE[o.id];
       expect(Math.abs(o.x - (p * 100 + x) / 3), `${o.id} の x`).toBeLessThan(0.01);
       expect(Math.abs(o.w - w / 3), `${o.id} の w`).toBeLessThan(0.01);
       expect(o.y, `${o.id} の y`).toBe(y);
@@ -192,7 +206,7 @@ test.describe("物の置き場所（拠点の絵 M1・P-012 を横長1枚に換�
       render();
     });
     const ids = await page.locator(".room-objects [data-room-object]").evaluateAll((els) => els.map((e) => e.dataset.roomObject));
-    expect(ids.slice().sort()).toEqual(Object.keys(PANEL_TABLE).sort());
+    expect(ids.slice().sort()).toEqual(ALL_IDS);
     expect(errors).toEqual([]);
   });
 
@@ -213,6 +227,75 @@ test.describe("物の置き場所（拠点の絵 M1・P-012 を横長1枚に換�
       return bad;
     });
     expect(problems).toEqual([]);
+  });
+
+  // ★ P-017：絵の物の上を押して、その物の働きが起きる（いまは絵の受付嬢を押すと本棚が開く、が一番目立った）。
+  //   座標で押す（force の click は要素の真ん中へ送るので、重なりの手前・奥は確かめられない）。
+  const pointOf = (page, xPct, yPct) => page.evaluate(([x, y]) => {
+    const r = document.querySelector(".room-stage").getBoundingClientRect();
+    return { x: r.left + (r.width * x) / 100, y: r.top + (r.height * y) / 100, inView: r.top + (r.height * y) / 100 < window.innerHeight };
+  }, [xPct, yPct]);
+
+  test("絵の受付嬢（人の形の真ん中）を押すと受付嬢の一言。本棚の名簿ではない。本棚の真ん中を押すと名簿（P-017）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.waitForTimeout(2200); // 受付嬢のフェードのあと
+    const fig = RECEPTIONIST_FIGURE;
+    const pr = await pointOf(page, fig.x + fig.w / 2, fig.y + fig.h / 2);
+    expect(pr.inView).toBe(true);
+    await page.mouse.click(pr.x, pr.y);
+    await expect(page.locator(".room-notice")).toHaveText("はい、なんでしょう。");
+    expect(await page.evaluate(() => route)).toBe("home");
+    // 人の形の四隅の少し内側も受付嬢（本棚にはならない）
+    for (const [dx, dy] of [[0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85]]) {
+      const q = await pointOf(page, fig.x + fig.w * dx, fig.y + fig.h * dy);
+      const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-room-object]")?.dataset.roomObject ?? null, [q.x, q.y]);
+      expect(hit, `人の形の内側(${dx},${dy})`).toBe("receptionist");
+    }
+    // 本棚の真ん中
+    const [sx, sy, sw, sh] = PICTURE_TABLE.shelf;
+    const ps = await pointOf(page, sx + sw / 2, sy + sh / 2);
+    await page.mouse.click(ps.x, ps.y);
+    expect(await page.evaluate(() => route)).toBe("adventurers");
+    expect(errors).toEqual([]);
+  });
+
+  test("掲示板・本の真ん中を押すと、それぞれの画面が開く。触れる物は、枠の真ん中でその物の枠が手前にある（重なりで取られない）（P-017）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => {
+      state.adventurers[0].status = "死亡";
+      state.ecologyRecord = { er_t: { id: "er_t", target: "森喰い兎", name: null, nameDraft: "", nameConfirmedAt: null, area: "", category: "", confirmed: [], guess: "", nextCheck: "", legacy: "" } };
+      render();
+    });
+    // 触れる物すべて：枠の真ん中にある一番手前の物は、その物自身
+    const wrong = await page.evaluate(() => {
+      const r = document.querySelector(".room-stage").getBoundingClientRect();
+      const out = [];
+      for (const o of ROOM_OBJECTS) {
+        if (!o.act || (o.show && !o.show()) || (o.enabled && !o.enabled())) continue;
+        const x = r.left + (r.width * (o.x + o.w / 2)) / 100;
+        const y = r.top + (r.height * (o.y + o.h / 2)) / 100;
+        if (y >= window.innerHeight) continue; // 窓の外（画面の下）は別の確かめ
+        const got = document.elementFromPoint(x, y)?.closest("[data-room-object]")?.dataset.roomObject ?? null;
+        if (got !== o.id) out.push(`${o.id}：真ん中を押すと ${got}`);
+      }
+      return out;
+    });
+    expect(wrong).toEqual([]);
+    for (const [id, expected] of [["board", "quests"], ["book", "ecology"]]) {
+      const [x, y, w, h] = PICTURE_TABLE[id];
+      const p = await pointOf(page, x + w / 2, y + h / 2);
+      expect(p.inView, `${id} が画面に入る`).toBe(true);
+      await page.mouse.click(p.x, p.y);
+      expect(await page.evaluate(() => route), id).toBe(expected);
+      await page.evaluate(() => setRoute("home"));
+    }
+    // 用途の無いカウンターとバックヤードは、押しても何も起きない（枠も反応も無い）
+    for (const id of ["counter", "backyard"]) {
+      await expect(page.locator(`button[data-room-object="${id}"]`), id).toHaveCount(0);
+    }
+    expect(errors).toEqual([]);
   });
 });
 
