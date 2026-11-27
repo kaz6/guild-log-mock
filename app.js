@@ -2680,6 +2680,7 @@ function render() {
   document.body.dataset.look = PAPER_LOOK_ROUTES.includes(route) ? "paper" : "";
   if (route !== "report") resetReportTyping(); // 報告書を離れたら文字送りの進みを捨てる（開き直したら最初から）
   if (route !== "report") stampedNowReportId = null; // 判子の直後の表示も、画面を離れたら捨てる
+  if (route !== "home") roomState.fadeArmed = true; // ホームを離れたら、次に開くとき受付嬢をフェードで出す（P-015）
 
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.route === route));
   navButtons.forEach((button) => { if (button.dataset.route === "ecology") button.hidden = !isEcologyBookShown(); }); // EX-163 段階3
@@ -3218,35 +3219,45 @@ function bindCardHtml() {
       </section>`;
 }
 
-// ── ホームの窓（2026-10-22・EX-161 段階1）────────────────────────────────────
-//   ★ 縦長の3枚（左・真ん中・右）を ▶◀ で切り替える。絵はまだ無いので仮の線画（枠と文字ラベル）。
+// ── ホームの窓（2026-10-22・EX-161 段階1。2026-11-27・P-015 で背景を絵の層にした）──────────────────
+//   ★ ホームは**横長の部屋1枚**（絵は 1368×677。縮めない・切らない・伸ばさない。2026-11-25 作者。3枚と ◀▶ はやめた）。
+//     横長の画面（PC）：部屋のほぼ全体を一度に見せる。窓の高さは絵の比に合わせ、上限（仮・画面の高さの70%）に当たったら左右に余白。
+//     縦長の画面（スマホ）：窓の高さは従来どおり（画面の高さの半分・最低280px）。絵を高さに合わせて置き、指でなぞって左右を見渡す（端で止まる）。
+//   ★ 背景は assets/home の層：季節4つ（冬は扉を閉めた絵＝木漏れ日の層なし）＋夏だけ朝・昼・夕の3枚を時刻でなめらかに切り替える。
+//     木漏れ日の層はゆっくり揺らし、雪は冬の窓の中だけ、落ち葉は秋に木から降らせる。受付嬢は透明度だけで出す（試作の値。作者が確定）。
+//   ★ 季節と時刻の決め方は**仮・作者未確認**：端末の日付（3〜5月＝春・6〜8月＝夏・9〜11月＝秋・12〜2月＝冬）と端末の時刻
+//     （7時＝朝・12時＝昼・17時＝夕。6時より前は朝、18時より後は夕のまま。夜の絵はまだ無い）。?dev=1 のときだけ変えられる。
 //   ★ 見た目と導線だけ。遊びの仕組み・データは変えない。物は表（ROOM_OBJECTS）で持つ。
 //   ★ 枠は「触れる物」だけに出す（枠の見せ方は .room-frame に集約＝後で差し替えやすい）。触れる範囲（.room-hit）は枠より大きい。
-//   ★ 窓の高さは変数 --room-h（style.css）。
-const ROOM_PANELS = ["左", "真ん中", "右"];
-const ROOM_START_PANEL = 1; // 起動時は真ん中（仮）
+//   ★ 1秒ごとの再描画でも、背景（常設の窓＝roomView）は**外さずそのまま残す**：外すと揺れ・フェードが最初からやり直しになり、
+//     スマホでなぞっている最中の指も切れる。ホームを離れて戻ったときだけ付け直し、揺れの位相・なぞった位置を戻す。
+const ROOM_IMG_W = 1368;
+const ROOM_IMG_H = 677;
+// 触れる範囲は枠より大きい。★ 3枚だった頃の「枠の左右・上下に3%」＝絵全体では左右1%・上下3%（大きさを変えない）
+const ROOM_HIT_MARGIN_X = 1;
+const ROOM_HIT_MARGIN_Y = 3;
 // act: 押したときの動作（無いものは「まだ用途が決まっていない」＝枠なし・反応なし）。show: 出す条件（無ければ常に）。
 //   enabled: 触れる条件（偽のあいだは枠なし・反応なし。無ければ常に）。
+//   位置は絵全体に対する％（x・w は横、y・h は縦）。★ 絵の上の場所は 2026-11-24 の拠点の絵 M1 に合わせた3枚の値（P-012）を
+//   横長1枚に換算しただけ：x＝(枚の番号×100＋枚の中の x)÷3、w＝枚の中の w÷3（y・h は同じ）。M1（2.35:1）で測った値なので、新しい絵とずれる所がある（直していない）。
 const ROOM_OBJECTS = [
-  // ★ 割り当ては拠点の絵 M1 の配置に合わせる（2026-11-24 作者・DECISION_LOG 2026-11-24）。左＝バックヤード・本・証（仮）／真ん中＝掲示板・本棚・書類・書類の山（仮）／右＝受付嬢・カウンター・エルシーの場所・墓標・ペン。
-  //   位置（x・y・w・h）は M1 を3つに割って測った仮の値。枠が重ならず、触れる物の触れる範囲（±3）が窓の外へ出ない形に直してある。
-  // ── 左 ──
-  { id: "backyard", panel: 0, label: "バックヤード", x: 46, y: 18, w: 23, h: 41 },
+  // ── 左だった枚（旧：左）──
+  { id: "backyard", label: "バックヤード", x: 15.33, y: 18, w: 7.67, h: 41 },
   // ★ 本＝生態目録。最初の生き物に出会うまでは枠を付けず触れない（EX-163 段階3。enabled が偽のあいだは act が無い物と同じ扱い）
-  { id: "book", panel: 0, label: "本", x: 37, y: 78, w: 38, h: 12, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() },
-  { id: "badge", panel: 0, label: "証", x: 8, y: 80, w: 20, h: 10 },
-  // ── 真ん中 ──
-  { id: "board", panel: 1, label: "掲示板", x: 13, y: 28, w: 26, h: 18, act: () => setRoute("quests") },
+  { id: "book", label: "本", x: 12.33, y: 78, w: 12.67, h: 12, act: () => setRoute("ecology"), enabled: () => isEcologyBookShown() },
+  { id: "badge", label: "証", x: 2.67, y: 80, w: 6.67, h: 10 },
+  // ── 真ん中だった枚（旧：真ん中）──
+  { id: "board", label: "掲示板", x: 37.67, y: 28, w: 8.67, h: 18, act: () => setRoute("quests") },
   // ★ 本棚＝名簿類（2026-11-24 作者）。開く先は書類の吹き出しの「名簿」と同じ画面（入口が複数でも開く先は同じ）。新しい画面は作らない
-  { id: "shelf", panel: 1, label: "本棚", x: 42, y: 22, w: 53, h: 27, act: () => setRoute("adventurers") },
-  { id: "papers", panel: 1, label: "書類", x: 3, y: 84, w: 55, h: 12, act: () => toggleRoomMenu("papers") },
-  { id: "pile", panel: 1, label: "書類の山", x: 66, y: 84, w: 26, h: 12, act: () => openReportShelf() },
-  // ── 右 ──
-  { id: "receptionist", panel: 2, label: "受付嬢", x: 3, y: 30, w: 15, h: 14, act: () => tapRoomReaction("receptionist") },
-  { id: "counter", panel: 2, label: "カウンター", x: 0, y: 46, w: 24, h: 12 },
-  { id: "grave", panel: 2, label: "墓標", x: 46, y: 40, w: 14, h: 20, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
-  { id: "elsie", panel: 2, label: "エルシーの場所", x: 3, y: 62, w: 23, h: 8, act: () => tapRoomReaction("elsie") },
-  { id: "pen", panel: 2, label: "ペン", x: 3, y: 80, w: 32, h: 16, act: () => toggleRoomMenu("pen") }
+  { id: "shelf", label: "本棚", x: 47.33, y: 22, w: 17.67, h: 27, act: () => setRoute("adventurers") },
+  { id: "papers", label: "書類", x: 34.33, y: 84, w: 18.33, h: 12, act: () => toggleRoomMenu("papers") },
+  { id: "pile", label: "書類の山", x: 55.33, y: 84, w: 8.67, h: 12, act: () => openReportShelf() },
+  // ── 右だった枚（旧：右）──
+  { id: "receptionist", label: "受付嬢", x: 67.67, y: 30, w: 5, h: 14, act: () => tapRoomReaction("receptionist") },
+  { id: "counter", label: "カウンター", x: 66.67, y: 46, w: 8, h: 12 },
+  { id: "grave", label: "墓標", x: 82, y: 40, w: 4.67, h: 20, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
+  { id: "elsie", label: "エルシーの場所", x: 67.67, y: 62, w: 7.67, h: 8, act: () => tapRoomReaction("elsie") },
+  { id: "pen", label: "ペン", x: 67.67, y: 80, w: 10.67, h: 16, act: () => toggleRoomMenu("pen") }
 ];
 // 吹き出しの目次（段階2）。★ 中身は増減する前提で表にする。act は物と同じ「今ある画面を開く」だけ。
 //   ★ 入口が複数でも開く先は同じ画面（名簿はナビからも書類からも同じ名簿の画面）。show：出す条件（無ければ常に）。
@@ -3274,32 +3285,236 @@ function tapRoomReaction(id) {
   showRoomNotice(lines[n % lines.length]);
 }
 
-let roomPanel = ROOM_START_PANEL;
 let roomNotice = "";
 let roomMenu = null; // 吹き出しを開いている物の id
 
-function roomWindowHtml() {
-  const panels = ROOM_PANELS.map((name, i) => `
-      <div class="room-panel" data-room-panel="${i}" aria-label="${name}">
-        ${ROOM_OBJECTS.filter((o) => o.panel === i && (!o.show || o.show())).map((o) => o.act && (!o.enabled || o.enabled())
-          ? `<button class="room-hit" type="button" data-room-object="${o.id}" style="left:${o.x - 3}%;top:${o.y - 3}%;width:${o.w + 6}%;height:${o.h + 6}%" onclick="tapRoomObject('${o.id}')"><span class="room-frame">${o.label}</span></button>`
-          : `<span class="room-thing" data-room-object="${o.id}" style="left:${o.x}%;top:${o.y}%;width:${o.w}%;height:${o.h}%">${o.label}</span>`).join("")}
-      </div>`).join("");
-  return `
-    <section class="room-window" aria-label="ギルドの中">
-      <div class="room-strip" style="transform:translateX(${-roomPanel * 100}%)">${panels}</div>
-      <button class="room-arrow left" type="button" aria-label="左へ" onclick="shiftRoom(-1)"${roomPanel === 0 ? " disabled" : ""}>◀</button>
-      <button class="room-arrow right" type="button" aria-label="右へ" onclick="shiftRoom(1)"${roomPanel === ROOM_PANELS.length - 1 ? " disabled" : ""}>▶</button>
-      ${roomMenuHtml()}
-      <p class="room-notice" role="status"${roomNotice ? "" : " hidden"}>${escapeHtml(roomNotice)}</p>
-    </section>`;
+// 背景の層（assets/home）。木漏れ日の層の揺れ：dur＝1往復の秒・dx＝横の振れ幅・gain＝明るさ（どれも試作の値）。冬は木漏れ日の層が無い。
+const ROOM_ASSET_DIR = "assets/home/";
+const ROOM_SEASON_FX = {
+  spring: { dur: 10, dx: ".3%", gain: 1.6 },
+  summer: { dur: 7, dx: ".45%", gain: 1.45 },
+  autumn: { dur: 8, dx: ".8%", gain: 1.4 },
+  winter: null
+};
+const ROOM_FADE_MS = 1600; // 受付嬢が出る時間（遅れ0.4秒＋1.2秒。試作の値）
+const ROOM_FADE_DELAY_MS = 400;
+// 受付嬢の絵の位置（絵全体に対する％。試作の値＝作者が確定）。ホームを最初に開いたとき、ここが見える位置から始める（仮）
+const ROOM_RECEPTIONIST_CENTER = 54.82 + 12.06 / 2;
+
+// 常設の窓。★ 外さずに使い回す（上の注）。roomState は描き直しをまたいで持つ値。
+let roomView = null;
+const roomState = {
+  t0: performance.now(),        // 揺れの位相の基準
+  particleT0: performance.now(), // 雪・落ち葉の位相の基準（作り直した時刻）
+  particleSeason: null,
+  fadeArmed: true,              // 次にホームを開いたとき受付嬢をフェードで出す（ホームを離れるたびに立て直す）
+  fadeStart: null,
+  scrollLeft: null,             // なぞった位置（null＝まだ決めていない）
+  restoring: false,
+  objectsHtml: null,
+  devSeason: null,              // ?dev=1 の操作（null＝端末の日付・時刻のまま）
+  devHour: null
+};
+
+function roomSeasonNow() {
+  if (DEV_MODE && roomState.devSeason) return roomState.devSeason;
+  const m = new Date().getMonth() + 1;
+  return m >= 3 && m <= 5 ? "spring" : m >= 6 && m <= 8 ? "summer" : m >= 9 && m <= 11 ? "autumn" : "winter";
+}
+function roomHourNow() {
+  if (DEV_MODE && Number.isFinite(roomState.devHour)) return roomState.devHour;
+  const d = new Date();
+  return Math.min(18, Math.max(6, d.getHours() + d.getMinutes() / 60));
+}
+// 夏だけ朝・昼・夕を時刻で重ねる（7時＝朝・12時＝昼・17時＝夕）。ほかの季節は昼の1枚。
+function roomWeights(season, hour) {
+  if (season !== "summer") return { morning: 0, noon: 1, evening: 0 };
+  if (hour <= 7) return { morning: 1, noon: 0, evening: 0 };
+  if (hour < 12) { const n = (hour - 7) / 5; return { morning: 1 - n, noon: n, evening: 0 }; }
+  if (hour < 17) { const e = (hour - 12) / 5; return { morning: 0, noon: 1 - e, evening: e }; }
+  return { morning: 0, noon: 0, evening: 1 };
+}
+// 雪と落ち葉の粒の値（乱数は使わず、番号から決める）
+function roomPseudo(i, k) {
+  const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function buildRoomView() {
+  const el = document.createElement("section");
+  el.className = "room-window";
+  el.setAttribute("aria-label", "ギルドの中");
+  const groups = ["morning", "noon", "evening"].map((t) =>
+    `<div class="room-tg" data-t="${t}" hidden><img class="room-st" alt="" draggable="false"><div class="room-sun"><img class="room-dp" alt="" draggable="false"></div></div>`).join("");
+  el.innerHTML = `
+    <div class="room-viewport">
+      <div class="room-scroll" tabindex="0">
+        <div class="room-stage moving">
+          ${groups}
+          <img class="room-uk" src="${ROOM_ASSET_DIR}summer-uketsuke.png" alt="" draggable="false">
+          <div class="room-fx"><div class="room-snowwin"></div></div>
+          <div class="room-objects"></div>
+        </div>
+      </div>
+      <p class="room-notice" role="status" hidden></p>
+    </div>
+    ${DEV_MODE ? `
+    <div class="room-dev" data-room-dev>
+      <div class="room-dev-row" role="group" aria-label="季節">
+        ${[["auto", "自動"], ["spring", "春"], ["summer", "夏"], ["autumn", "秋"], ["winter", "冬"]].map(([k, l]) => `<button type="button" class="room-dev-btn" data-room-dev-season="${k}" aria-pressed="false">${l}</button>`).join("")}
+      </div>
+      <div class="room-dev-row">
+        <label>時刻 <input type="range" class="room-dev-hour" min="6" max="18" step="0.25" value="12"></label>
+        <output class="room-dev-hourout"></output>
+        <button type="button" class="room-dev-btn" data-room-dev-now>いまの時刻</button>
+      </div>
+    </div>` : ""}`;
+  el.querySelector(".room-scroll").addEventListener("scroll", (e) => {
+    if (!roomState.restoring) roomState.scrollLeft = e.currentTarget.scrollLeft;
+  });
+  if (DEV_MODE) {
+    el.querySelectorAll("[data-room-dev-season]").forEach((b) => b.addEventListener("click", () => {
+      roomState.devSeason = b.dataset.roomDevSeason === "auto" ? null : b.dataset.roomDevSeason;
+      syncRoomView();
+    }));
+    el.querySelector(".room-dev-hour").addEventListener("input", (e) => { roomState.devHour = Number(e.currentTarget.value); syncRoomView(); });
+    el.querySelector("[data-room-dev-now]").addEventListener("click", () => { roomState.devHour = null; syncRoomView(); });
+  }
+  return el;
+}
+
+function roomSetSrc(img, name) {
+  const url = ROOM_ASSET_DIR + name;
+  if (img.dataset.src !== url) { img.dataset.src = url; img.src = url; }
+}
+
+// 季節・時刻に合わせて絵の層・粒を整える。★ 揺れの位相は触らない（動いている最中に触ると跳ぶ）。
+function syncRoomView() {
+  const el = roomView;
+  if (!el) return;
+  const season = roomSeasonNow();
+  const hour = roomHourNow();
+  const winter = season === "winter";
+  const W = roomWeights(season, hour);
+  const stage = el.querySelector(".room-stage");
+  const fx = ROOM_SEASON_FX[season];
+  if (fx) {
+    stage.style.setProperty("--dur", `${fx.dur}s`);
+    stage.style.setProperty("--dx", fx.dx);
+    stage.style.setProperty("--gain", String(fx.gain));
+  }
+  el.querySelectorAll(".room-tg").forEach((g) => {
+    const t = g.dataset.t;
+    g.style.opacity = String(W[t]);
+    g.hidden = W[t] === 0;
+    if (W[t] === 0) return;
+    const key = season === "summer" && t !== "noon" ? `summer-${t}` : season;
+    roomSetSrc(g.querySelector(".room-st"), winter ? "winter-orig.jpg" : `${key}-static.jpg`);
+    const sun = g.querySelector(".room-sun");
+    sun.hidden = winter;
+    if (!winter) roomSetSrc(g.querySelector(".room-dp"), `${key}-dapple.jpg`);
+  });
+  // 受付嬢の色寄せ（夕方は暖かく少し暗く、朝は少し明るく。試作の値）
+  const e = W.evening;
+  const m = W.morning;
+  stage.style.setProperty("--ukf", `brightness(${(1 - 0.22 * e + 0.04 * m).toFixed(2)}) sepia(${(0.45 * e).toFixed(2)}) saturate(${(1 + 0.3 * e - 0.15 * m).toFixed(2)})`);
+  stage.dataset.season = season;
+  stage.dataset.hour = String(hour);
+  if (roomState.particleSeason !== season) {
+    roomState.particleSeason = season;
+    roomState.particleT0 = performance.now();
+    buildRoomParticles(el, season);
+    setRoomParticleDelays(el);
+  }
+  if (DEV_MODE) {
+    el.querySelectorAll("[data-room-dev-season]").forEach((b) => b.setAttribute("aria-pressed", String((roomState.devSeason ?? "auto") === b.dataset.roomDevSeason)));
+    const H = Math.floor(hour);
+    el.querySelector(".room-dev-hour").value = String(hour);
+    el.querySelector(".room-dev-hourout").textContent = `${H}:${String(Math.round((hour - H) * 60)).padStart(2, "0")}`;
+  }
+}
+
+// 落ち葉（秋・木から）と雪（冬・窓の中だけ）。季節が替わったときだけ作り直す。
+function buildRoomParticles(el, season) {
+  const fx = el.querySelector(".room-fx");
+  fx.querySelectorAll(".room-leaf").forEach((n) => n.remove());
+  const win = el.querySelector(".room-snowwin");
+  win.innerHTML = "";
+  if (season === "autumn") {
+    const colors = ["#c8501e", "#e0862a", "#a8381a", "#d9a02c"];
+    for (let i = 0; i < 9; i++) {
+      const n = document.createElement("i");
+      n.className = "room-leaf";
+      const dur = 7 + roomPseudo(i, 5) * 6;
+      n.style.left = `${18 + roomPseudo(i, 1) * 48}%`;
+      n.style.top = `${4 + roomPseudo(i, 2) * 20}%`;
+      n.style.setProperty("--lc", colors[i % 4]);
+      n.style.setProperty("--lx", `${(roomPseudo(i, 3) * 6 - 3).toFixed(1)}cqw`);
+      n.style.animationDuration = `${dur.toFixed(1)}s`;
+      n.dataset.dur = dur.toFixed(1);
+      n.dataset.ph = (roomPseudo(i, 4) * 12).toFixed(1);
+      fx.appendChild(n);
+    }
+  }
+  if (season === "winter") {
+    for (let i = 0; i < 26; i++) {
+      const n = document.createElement("i");
+      n.className = "room-flake";
+      const dur = 4 + roomPseudo(i, 5) * 5;
+      n.style.left = `${roomPseudo(i, 1) * 95}%`;
+      n.style.width = `${4 + roomPseudo(i, 2) * 7}%`;
+      n.style.setProperty("--sx", `${roomPseudo(i, 3) * 60 - 30}%`);
+      n.style.animationDuration = `${dur.toFixed(1)}s`;
+      n.dataset.dur = dur.toFixed(1);
+      n.dataset.ph = (roomPseudo(i, 4) * 9).toFixed(1);
+      win.appendChild(n);
+    }
+  }
+}
+
+// 付け直したとき（アニメーションが最初からやり直しになるとき）に、位相を元の続きへ合わせる。
+function setRoomParticleDelays(el) {
+  const now = performance.now();
+  const swayDur = ROOM_SEASON_FX[roomSeasonNow()]?.dur;
+  if (swayDur) {
+    const d = -(((now - roomState.t0) / 1000) % swayDur);
+    el.querySelectorAll(".room-dp").forEach((n) => { n.style.animationDelay = `${d.toFixed(3)}s`; });
+  }
+  el.querySelectorAll(".room-leaf, .room-flake").forEach((n) => {
+    const dur = Number(n.dataset.dur);
+    const d = -((((now - roomState.particleT0) / 1000) + Number(n.dataset.ph)) % dur);
+    n.style.animationDelay = `${d.toFixed(3)}s`;
+  });
+}
+
+// ホームの窓の中身（物の枠・吹き出し・一言）を今の状態に合わせる。背景の層には触らない。
+function updateRoomObjects() {
+  const el = roomView;
+  const layer = el.querySelector(".room-objects");
+  const html = roomObjectsHtml();
+  if (html !== roomState.objectsHtml) { // 変わっていなければ触らない（押している最中の枠を作り直して、押しを落とさない）
+    roomState.objectsHtml = html;
+    layer.innerHTML = html;
+  }
+  const note = el.querySelector(".room-notice");
+  if (note.textContent !== roomNotice) note.textContent = roomNotice;
+  note.hidden = !roomNotice;
+}
+
+function roomObjectsHtml() {
+  const mx = ROOM_HIT_MARGIN_X;
+  const my = ROOM_HIT_MARGIN_Y;
+  return ROOM_OBJECTS.filter((o) => !o.show || o.show()).map((o) => o.act && (!o.enabled || o.enabled())
+    ? `<button class="room-hit" type="button" data-room-object="${o.id}" style="left:${+(o.x - mx).toFixed(2)}%;top:${o.y - my}%;width:${+(o.w + mx * 2).toFixed(2)}%;height:${o.h + my * 2}%" onclick="tapRoomObject('${o.id}')"><span class="room-frame" style="inset:${+(my / (o.h + my * 2) * 100).toFixed(2)}% ${+(mx / (o.w + mx * 2) * 100).toFixed(2)}%">${o.label}</span></button>`
+    : `<span class="room-thing" data-room-object="${o.id}" style="left:${o.x}%;top:${o.y}%;width:${o.w}%;height:${o.h}%">${o.label}</span>`).join("") + roomMenuHtml();
 }
 
 function roomMenuHtml() {
   const o = ROOM_OBJECTS.find((x) => x.id === roomMenu);
   const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
-  if (!o || o.panel !== roomPanel || items.length === 0) return "";
-  return `<div class="room-bubble" role="menu" style="${o.x > 50 ? `right:${Math.max(100 - o.x - o.w, 2)}%` : `left:${Math.max(o.x, 2)}%`};bottom:${100 - o.y + 2}%">${items.map((m) =>
+  if (!o || items.length === 0) return "";
+  // 吹き出しは窓の中（絵の上）に出す＝物と一緒になぞって動く。右寄りの物は右端をそろえる
+  return `<div class="room-bubble" role="menu" style="${o.x > 70 ? `right:${+Math.max(100 - o.x - o.w, 1).toFixed(2)}%` : `left:${+Math.max(o.x, 1).toFixed(2)}%`};bottom:${100 - o.y + 2}%">${items.map((m) =>
     `<button class="room-bubble-item" type="button" role="menuitem" onclick="tapRoomMenuItem('${m.id}')">${m.label}</button>`).join("")}</div>`;
 }
 
@@ -3314,24 +3529,8 @@ function tapRoomMenuItem(id) {
   const item = (ROOM_MENUS[roomMenu] ?? []).find((m) => m.id === id);
   roomMenu = null;
   document.querySelector(".room-bubble")?.remove();
+  roomState.objectsHtml = null; // 吹き出しを外したので、次の描き直しで物の枠を作り直す
   if (item?.act) item.act();
-}
-
-// ★ 1秒ごとの再描画でも位置が戻らないよう、番号は変数で持ち、押したときは全体を描き直さずに動かす（動きも途切れない）
-function shiftRoom(dir) {
-  const next = Math.max(0, Math.min(ROOM_PANELS.length - 1, roomPanel + dir));
-  if (next === roomPanel) return;
-  roomPanel = next;
-  roomNotice = "";
-  roomMenu = null;
-  document.querySelector(".room-bubble")?.remove();
-  const win = document.querySelector(".room-window");
-  if (!win) return;
-  win.querySelector(".room-strip").style.transform = `translateX(${-roomPanel * 100}%)`;
-  win.querySelector(".room-arrow.left").disabled = roomPanel === 0;
-  win.querySelector(".room-arrow.right").disabled = roomPanel === ROOM_PANELS.length - 1;
-  const note = win.querySelector(".room-notice");
-  if (note) note.hidden = true;
 }
 
 function tapRoomObject(id) {
@@ -3343,6 +3542,63 @@ function showRoomNotice(text) {
   roomNotice = text;
   render();
 }
+
+// ホームの html に窓を差し込む。★ 窓（roomView）がいまホームに付いていれば、**外さずに**まわりだけ入れ替える
+//   （外すと揺れ・フェードがやり直しになり、スマホでなぞっている最中の指も切れる）。付いていなければ（ほかの画面から戻った）付け直し、
+//   揺れの位相・なぞった位置を戻して、受付嬢をフェードで出す。
+function setHomeHtml(html) {
+  if (!roomView) roomView = buildRoomView();
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const slot = [...tpl.content.childNodes].find((n) => n.id === "roomSlot");
+  const attached = roomView.parentNode === app;
+  if (attached && slot) {
+    const before = [];
+    const after = [];
+    let seen = false;
+    for (const n of [...tpl.content.childNodes]) {
+      if (n === slot) { seen = true; continue; }
+      (seen ? after : before).push(n);
+    }
+    for (const c of [...app.childNodes]) if (c !== roomView) c.remove();
+    roomView.before(...before);
+    roomView.after(...after);
+    syncRoomView();
+    updateRoomObjects();
+    return;
+  }
+  if (slot) slot.replaceWith(roomView);
+  app.replaceChildren(tpl.content);
+  syncRoomView();
+  updateRoomObjects();
+  const scroller = roomView.querySelector(".room-scroll");
+  roomState.restoring = true;
+  if (roomState.scrollLeft === null) {
+    // 最初は受付嬢が見える位置から（仮）。横長の画面で全体が入るなら 0 のまま
+    const stageW = roomView.querySelector(".room-stage").offsetWidth;
+    roomState.scrollLeft = Math.max(0, stageW * ROOM_RECEPTIONIST_CENTER / 100 - scroller.clientWidth / 2);
+  }
+  scroller.scrollLeft = roomState.scrollLeft;
+  roomState.restoring = false;
+  setRoomParticleDelays(roomView);
+  const uk = roomView.querySelector(".room-uk");
+  const now = performance.now();
+  if (roomState.fadeArmed) { // ホームを開いたときに1回（ほかの画面から戻ったとき）
+    roomState.fadeArmed = false;
+    roomState.fadeStart = now;
+  }
+  const since = now - (roomState.fadeStart ?? -Infinity);
+  if (since < ROOM_FADE_MS) {
+    uk.className = "room-uk fade";
+    uk.style.animationDelay = `${((ROOM_FADE_DELAY_MS - since) / 1000).toFixed(3)}s`;
+  } else {
+    uk.className = "room-uk shown";
+    uk.style.animationDelay = "";
+  }
+}
+
+// 端末の時刻に合わせた光の移り変わりを、遠征が無くて描き直しが走らないあいだも進める（1分ごと・仮）
+setInterval(() => { if (roomView?.isConnected) syncRoomView(); }, 60000);
 
 // ── ホームの付箋（2026-10-23・EX-163 段階2）──────────────────────────────────
 // ★ 「次にすること」を1枚だけ貼る。件数・期限・点滅は出さない（急かさない）。タップで剝がせる。
@@ -3410,10 +3666,10 @@ function renderHome() {
   const returnedReport = returnedReports[0] ?? null;
   const returnedQuest = returnedReport ? getQuest(returnedReport.questId) : null;
 
-  app.innerHTML = `
+  setHomeHtml(`
     ${paperSignboardHtml()}
     ${stickyNoteHtml()}
-    ${roomWindowHtml()}
+    <div id="roomSlot"></div>
     ${gameOverCardHtml()}
     ${moneyEventCardHtml()}
     ${receptionTalkCardHtml()}
@@ -3483,7 +3739,7 @@ function renderHome() {
     ${walletCardHtml()}
 
     ${expeditions.map(expeditionProgressHtml).join("")}
-  `;
+  `);
 }
 
 // ギルドの財布（2026-09-23・EX-144）。★ 所持金と直近の出入りだけを出す。

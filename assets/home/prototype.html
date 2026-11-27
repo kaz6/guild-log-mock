@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>木漏れ日の層・試作</title>
+<style>
+/* VOICE: 作業の試作。静かに、絵を主役に
+   IDEA: 絵描きの作業台に置いた、層を重ねた一枚
+   PICTURE: ギルドの部屋。木漏れ日と季節の粒が動き、時刻で光が移る
+   COLOUR and TYPE: 蜂蜜色の木と深い焦げ茶。Zen Kaku Gothic New
+   LAYOUT: 絵を一番上いっぱいに。下に季節・表示・時刻の切り替えと説明 */
+:root{color-scheme:light dark;--bg:light-dark(#f4ecdf,#1b140e);--ink:light-dark(#2a1d12,#f1e6d6);--sub:light-dark(#6b5643,#bfae98);--acc:#c8821e;--chip:light-dark(#e6d8c3,#2c2118)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Zen Kaku Gothic New",system-ui,sans-serif;overflow-x:clip}
+main{max-width:1240px;margin:0 auto;padding:clamp(12px,3vw,40px) max(4vw,12px)}
+h1{font-size:clamp(22px,4vw,34px);line-height:1.15;margin:0 0 14px;text-wrap:balance}
+.stage{position:relative;width:100%;aspect-ratio:1368/677;border:8px solid #fff;border-radius:6px;overflow:hidden;box-shadow:0 10px 30px rgba(40,20,5,.35);background:#000;container-type:inline-size}
+.stage img{position:absolute;inset:0;width:100%;height:100%;display:block}
+.stage [hidden]{display:none!important}
+.tg{position:absolute;inset:0;isolation:isolate;transition:opacity .4s linear}
+.sun{position:absolute;inset:0;mix-blend-mode:plus-lighter}
+@supports not (mix-blend-mode:plus-lighter){.sun{mix-blend-mode:screen}}
+.dp{filter:brightness(var(--gain,1.45))}
+.moving .dp{animation:sway var(--dur,7s) ease-in-out infinite}
+@keyframes sway{0%,100%{transform:translate(0,0);opacity:1}25%{transform:translate(var(--dx,.45%),.2%);opacity:.9}50%{transform:translate(calc(var(--dx,.45%) * -.5),.4%);opacity:1}75%{transform:translate(calc(var(--dx,.45%) * .7),-.25%);opacity:.85}}
+#uk{inset:auto;left:54.82%;top:28.66%;width:12.06%;height:auto;opacity:0;filter:var(--ukf,none)}
+#uk.in{animation:fadein 1.2s ease-in-out forwards}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.fx{position:absolute;inset:0;pointer-events:none;overflow:hidden;display:none}
+.moving .fx{display:block}
+.win{position:absolute;left:95.03%;top:21.7%;width:4.97%;height:19.6%;overflow:hidden}
+.flake{position:absolute;top:-6%;width:6%;aspect-ratio:1;border-radius:50%;background:#fff;opacity:.9;animation:snow linear infinite}
+@keyframes snow{to{top:106%;transform:translateX(var(--sx,10%))}}
+.leaf{position:absolute;width:1.5%;aspect-ratio:1.6;border-radius:70% 0;background:var(--lc,#c8501e);opacity:0;animation:fall linear infinite}
+@keyframes fall{0%{opacity:0;transform:translate(0,0) rotate(0)}8%{opacity:.95}50%{transform:translate(var(--lx,3cqw),18cqw) rotate(260deg)}92%{opacity:.9}100%{opacity:0;transform:translate(calc(var(--lx,3cqw) * -.4),34cqw) rotate(520deg)}}
+@media (prefers-reduced-motion:reduce){.moving .dp{animation:none}.moving .fx{display:none}#uk.in{animation:none;opacity:1}}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.time{display:flex;align-items:center;gap:10px;margin:14px 0 4px;flex-wrap:wrap}
+.time input{flex:1;min-width:180px;accent-color:var(--acc);height:44px}
+.time output{font-variant-numeric:tabular-nums;min-width:3.5em}
+button{font:inherit;font-size:15px;min-height:44px;padding:8px 14px;border-radius:22px;border:1px solid transparent;background:var(--chip);color:var(--ink);cursor:pointer}
+button[aria-pressed=true]{background:var(--acc);color:#fff}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+p{max-width:68ch;margin:10px 0;color:var(--sub)}
+p b{color:var(--ink)}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+</head>
+<body>
+<main>
+<h1>拠点の木漏れ日を別の層にした試作（四季・時刻）</h1>
+<div class="stage moving" id="stage">
+  <img id="orig" src="summer-orig.jpg" alt="元の絵" hidden>
+  <div class="tg" data-t="morning"><img class="st" alt=""><div class="sun"><img class="dp" alt=""></div></div>
+  <div class="tg" data-t="noon"><img class="st" alt="部屋"><div class="sun"><img class="dp" alt=""></div></div>
+  <div class="tg" data-t="evening"><img class="st" alt=""><div class="sun"><img class="dp" alt=""></div></div>
+  <img id="uk" src="summer-uketsuke.png" alt="受付嬢">
+  <div class="fx" id="fx"><div class="win" id="win"></div></div>
+</div>
+<div class="bar" role="group" aria-label="季節">
+  <button class="se" data-s="spring" aria-pressed="false">春</button>
+  <button class="se" data-s="summer" aria-pressed="true">夏</button>
+  <button class="se" data-s="autumn" aria-pressed="false">秋</button>
+  <button class="se" data-s="winter" aria-pressed="false">冬</button>
+</div>
+<div class="time"><label for="hr">時刻</label><input id="hr" type="range" min="6" max="18" step="0.25" value="12"><output id="hro">12:00</output><button id="now">いまの時刻</button><button id="play" aria-pressed="false">一日を流す</button></div>
+<div class="bar" role="group" aria-label="表示">
+  <button class="md" data-m="full" aria-pressed="true">重ねた絵</button>
+  <button class="md" data-m="orig" aria-pressed="false">元の絵</button>
+  <button class="md" data-m="base" aria-pressed="false">土台だけ</button>
+  <button class="md" data-m="dap" aria-pressed="false">光の層だけ</button>
+  <button id="mv" aria-pressed="true">動き：あり</button>
+  <button id="ukb">受付嬢をフェードイン</button>
+</div>
+<p id="note"></p>
+<p><b>時刻</b>：夏だけ、朝（7時）・昼（12時）・夕方（17時）の3枚を描き分け、そのあいだを時刻に合わせて移り変わらせています。光の形そのものが変わります。ほかの季節はまだ昼の1枚だけです。</p>
+<p><b>土台</b>は、元の絵から Krea 3 の部分編集で床と壁の木漏れ日を消したもの。<b>光の層</b>は、元の絵と土台の差から取り出した明るい斑点だけで、足し算で重ねてゆっくりずらしています。落ち葉と雪は絵ではなくコードで描いた粒です。受付嬢は切り抜いた層で、透明度だけを変えて現れます。</p>
+</main>
+<script>
+{
+const st=document.getElementById('stage'),o=document.getElementById('orig'),fx=document.getElementById('fx'),win=document.getElementById('win'),note=document.getElementById('note'),uk=document.getElementById('uk'),ukb=document.getElementById('ukb');
+const G={};for(const g of document.querySelectorAll('.tg'))G[g.dataset.t]={el:g,st:g.querySelector('.st'),sun:g.querySelector('.sun'),dp:g.querySelector('.dp')};
+const S={spring:{dur:'10s',dx:'.3%',gain:1.6,txt:'春：斑点は淡く、ゆっくり揺らしています。'},summer:{dur:'7s',dx:'.45%',gain:1.45,txt:'夏：時刻のつまみで朝・昼・夕方が移り変わります。受付嬢は夏だけ置いています。'},autumn:{dur:'8s',dx:'.8%',gain:1.4,txt:'秋：斑点を大きめに横へ揺らし、室内の木から葉を落としています。'},winter:{txt:'冬：扉を閉め、右の壁に窓を足しました。窓の外にだけ雪を降らせています。'}};
+let season='summer',mode='full',hour=12;
+function weights(){if(season!=='summer')return{morning:0,noon:1,evening:0};const h=hour;let m=0,n=0,e=0;if(h<=7)m=1;else if(h<12){n=(h-7)/5;m=1-n}else if(h<17){e=(h-12)/5;n=1-e}else e=1;return{morning:m,noon:n,evening:e}}
+function srcs(){const k=season;const w=k==='winter';
+for(const t in G){const g=G[t];const tk=(k==='summer'&&t!=='noon')?`summer-${t}`:k;g.st.src=w?'winter-orig.jpg':tk+'-static.jpg';if(!w)g.dp.src=tk+'-dapple.jpg';}
+o.src=k+'-orig.jpg'}
+function apply(){const w=season==='winter',W=weights();
+for(const t in G){const g=G[t];g.el.style.opacity=W[t];g.el.hidden=mode==='orig'||W[t]===0;g.st.hidden=!(mode==='full'||mode==='base');g.sun.hidden=w||!(mode==='full'||mode==='dap');g.sun.style.mixBlendMode=mode==='dap'?'normal':''}
+o.hidden=mode!=='orig';fx.hidden=mode!=='full';
+const e=W.evening,m=W.morning;st.style.setProperty('--ukf',`brightness(${(1-0.22*e+0.04*m).toFixed(2)}) sepia(${(0.45*e).toFixed(2)}) saturate(${(1+0.3*e-0.15*m).toFixed(2)})`);
+const H=Math.floor(hour),M=Math.round((hour-H)*60);document.getElementById('hro').textContent=H+':'+String(M).padStart(2,'0')}
+function leaves(){fx.querySelectorAll('.leaf').forEach(e=>e.remove());if(season!=='autumn')return;const cs=['#c8501e','#e0862a','#a8381a','#d9a02c'];for(let i=0;i<9;i++){const e=document.createElement('i');e.className='leaf';e.style.left=(18+Math.random()*48)+'%';e.style.top=(4+Math.random()*20)+'%';e.style.setProperty('--lc',cs[i%4]);e.style.setProperty('--lx',(Math.random()*6-3).toFixed(1)+'cqw');e.style.animationDuration=(7+Math.random()*6).toFixed(1)+'s';e.style.animationDelay=(-Math.random()*12).toFixed(1)+'s';fx.appendChild(e)}}
+function snow(){win.innerHTML='';if(season!=='winter')return;for(let i=0;i<26;i++){const e=document.createElement('i');e.className='flake';e.style.left=(Math.random()*95)+'%';e.style.width=(4+Math.random()*7)+'%';e.style.setProperty('--sx',(Math.random()*60-30)+'%');e.style.animationDuration=(4+Math.random()*5).toFixed(1)+'s';e.style.animationDelay=(-Math.random()*9).toFixed(1)+'s';win.appendChild(e)}}
+function fade(){uk.classList.remove('in');void uk.offsetWidth;setTimeout(()=>uk.classList.add('in'),400)}
+function render(){const w=season==='winter',p=S[season];
+if(p.dur){st.style.setProperty('--dur',p.dur);st.style.setProperty('--dx',p.dx);st.style.setProperty('--gain',p.gain)}
+srcs();apply();
+uk.hidden=!(season==='summer'&&mode==='full');ukb.disabled=uk.hidden;if(!uk.hidden)fade();
+for(const b of document.querySelectorAll('.md')){b.setAttribute('aria-pressed',b.dataset.m===mode);b.disabled=w&&(b.dataset.m==='base'||b.dataset.m==='dap')}
+for(const b of document.querySelectorAll('.se'))b.setAttribute('aria-pressed',b.dataset.s===season);
+note.textContent=p.txt;leaves();snow()}
+for(const b of document.querySelectorAll('.se'))b.addEventListener('click',()=>{season=b.dataset.s;if(season==='winter'&&(mode==='base'||mode==='dap'))mode='full';render()});
+for(const b of document.querySelectorAll('.md'))b.addEventListener('click',()=>{mode=b.dataset.m;render()});
+const mv=document.getElementById('mv');mv.addEventListener('click',()=>{const on=st.classList.toggle('moving');mv.setAttribute('aria-pressed',on);mv.textContent='動き：'+(on?'あり':'なし')});
+ukb.addEventListener('click',fade);
+const hr=document.getElementById('hr');hr.addEventListener('input',()=>{hour=+hr.value;apply()});
+function nowH(){const d=new Date();return Math.min(18,Math.max(6,d.getHours()+d.getMinutes()/60))}
+document.getElementById('now').addEventListener('click',()=>{hour=nowH();hr.value=hour;apply()});
+let tm=null;const pb=document.getElementById('play');pb.addEventListener('click',()=>{if(tm){clearInterval(tm);tm=null;pb.setAttribute('aria-pressed','false');return}pb.setAttribute('aria-pressed','true');tm=setInterval(()=>{hour+=0.05;if(hour>18)hour=6;hr.value=hour;apply()},60)});
+hour=nowH();hr.value=hour;
+render();
+}
+</script>
+</body>
+</html>
