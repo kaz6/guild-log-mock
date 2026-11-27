@@ -1759,6 +1759,11 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 .room-uk.fade { animation: room-fadein 1.2s ease-in-out .4s forwards; }
 .room-uk.shown { opacity: 1; }
 @keyframes room-fadein { from { opacity: 0; } to { opacity: 1; } }
+/* パーツ（P-018）：背景の層の上・押せる枠の下。影はコードで描く（時刻で --sh-* が変わる）。絵は季節にかかわらず同じ・夕方の色寄せは受付嬢と同じ */
+.room-parts { position: absolute; inset: 0; pointer-events: none; }
+.room-part { position: absolute; transform: translate(-50%, -100%); }
+.room-stage .room-part img { position: relative; inset: auto; width: 100%; height: auto; filter: var(--ukf, none); }
+.room-shadow { position: absolute; left: calc(var(--scx, .5) * 100% + var(--sh-dx, 0) * 100%); bottom: 0; width: calc(var(--sw, 1) * var(--sh-len, 1) * 100%); aspect-ratio: var(--sar, 6); transform: translate(-50%, 50%); border-radius: 50%; background: radial-gradient(ellipse at center, rgba(28, 16, 6, var(--sh-a, .4)) 0%, rgba(28, 16, 6, var(--sh-a, .4)) 45%, rgba(28, 16, 6, 0) 100%); filter: blur(.25cqw); pointer-events: none; }
 .room-fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .room-snowwin { position: absolute; left: 95.03%; top: 21.7%; width: 4.97%; height: 19.6%; overflow: hidden; }
 .room-flake { position: absolute; top: -6%; width: 6%; aspect-ratio: 1; border-radius: 50%; background: #fff; opacity: .9; animation: room-snow linear infinite; }

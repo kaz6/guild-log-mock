@@ -163,19 +163,23 @@ test.describe("吹き出しの目次と帳簿（EX-161 段階2）", () => {
   });
 });
 
-// 2026-11-24 作者・M1 に合わせる（P-012）→ 2026-11-27・P-015 で横長1枚に換算 → 同日・P-017 で、絵に物がある枠だけ絵の物の上に合わせ直した。
+// 2026-11-24 作者・M1 に合わせる（P-012）→ 2026-11-27・P-015 で横長1枚に換算 → 同日・P-017 で、絵に物がある枠だけ絵の物の上に合わせ直した
+//   → 2026-11-28・P-018 で、エルシーの場所・ペンをパーツの絵の位置に合わせた。
 //   ★ 絵に物が無い（または対象外の）枠は、P-012 の3枚の値（枚の番号・枚の中の ％）を固定の表として持ち、
 //     x＝(枚の番号×100＋x)÷3・w＝w÷3（y・h は同じ）に換算した値と、いまの ROOM_OBJECTS が一致することを確かめる（動かしていない証拠）。
 const PANEL_TABLE = {
   badge: [0, 8, 80, 20, 10],
   papers: [1, 3, 84, 55, 12], pile: [1, 66, 84, 26, 12],
-  grave: [2, 46, 40, 14, 20], elsie: [2, 3, 62, 23, 8], pen: [2, 3, 80, 32, 16]
+  grave: [2, 46, 40, 14, 20]
 };
 // ★ 絵に物がある枠（P-017）。位置は絵全体に対する％。assets/home の土台の絵（季節が違っても物の位置は同じ）の物の上に合わせた値。
 //   受付嬢は透明な余白を除いた人の形（絵の人は x59.3〜64.1・y30.9〜43.1）を含む。カウンターは受付嬢の下から、本棚は受付嬢の左まで（受付嬢が手前）。
 const PICTURE_TABLE = {
   backyard: [17, 20, 7, 32], book: [14.3, 73.4, 12, 9], board: [38.7, 27, 8.9, 13.5], shelf: [47.7, 25, 10.3, 18.3],
-  receptionist: [58, 29.5, 7.5, 13.8], counter: [51.4, 43.3, 21.9, 12.1]
+  receptionist: [58, 29.5, 7.5, 13.8], counter: [51.4, 43.3, 21.9, 12.1],
+  // ★ P-018：エルシーの場所・ペンはパーツ（ROOM_PARTS）の絵の位置。x＝絵の真ん中−幅/2・y＝絵の下端−高さ・高さ＝幅×縦横比×(1368/677)
+  //   寝床（600×437・x73.8・下端70.1・幅9.9）／ペン（300×452・x73.1・下端94.5・幅7）
+  elsie: [68.85, 55.53, 9.9, 14.57], pen: [69.6, 73.19, 7, 21.31]
 };
 // 絵の受付嬢の人の形（絵の上の％。受付嬢の絵の透明度が半分より濃い所の外枠）。真ん中を押すと受付嬢の一言が出る
 const RECEPTIONIST_FIGURE = { x: 59.3, y: 30.9, w: 4.8, h: 12.2 };
@@ -586,6 +590,178 @@ test.describe("ホームの背景（絵の層・P-015）", () => {
     });
     expect(r.length).toBeGreaterThan(5);
     for (const d of r) for (const k of ["x", "y", "w", "h"]) expect(Math.abs(d[k]), `${d.id} の ${k}`).toBeLessThan(0.6);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ── ホームのパーツ（絵に無い物の透明な絵・影はコード）・2026-11-28・P-018 ──────────────────
+//   寝床（エルシー）とペン。置き場所は ROOM_PARTS の表の数だけ。背景の層の上・押せる枠の下。季節にかかわらず同じ絵。
+//   ★ 影の向き・長さ・濃さ・押せる枠の合わせ方は仮・作者未確認。
+test.describe("ホームのパーツ（P-018）", () => {
+  const partInfo = (page) => page.evaluate(() => {
+    const st = document.querySelector(".room-stage").getBoundingClientRect();
+    return ROOM_PARTS.map((p) => {
+      const el = document.querySelector(`.room-part[data-part="${p.id}"]`);
+      const img = el.querySelector("img");
+      const r = img.getBoundingClientRect();
+      return { id: p.id, table: { x: p.x, y: p.y, w: p.w }, loaded: [img.complete, img.naturalWidth, img.naturalHeight], src: img.getAttribute("src"),
+        cx: ((r.left + r.right) / 2 - st.left) / st.width * 100, bottom: (r.bottom - st.top) / st.height * 100, w: r.width / st.width * 100 };
+    });
+  });
+
+  test("パーツの層が出る：寝床とペン。絵は読み込めている。表の位置（真ん中・下端・幅）に置かれ、季節が替わっても同じ絵", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await devSeason(page, "summer");
+    let parts = await partInfo(page);
+    expect(parts.map((p) => p.id)).toEqual(["elsie", "pen"]);
+    expect(parts.find((p) => p.id === "elsie").loaded).toEqual([true, 600, 437]);
+    expect(parts.find((p) => p.id === "pen").loaded).toEqual([true, 300, 452]);
+    for (const p of parts) {
+      expect(Math.abs(p.cx - p.table.x), `${p.id} の真ん中`).toBeLessThan(0.3);
+      expect(Math.abs(p.bottom - p.table.y), `${p.id} の下端`).toBeLessThan(0.3);
+      expect(Math.abs(p.w - p.table.w), `${p.id} の幅`).toBeLessThan(0.3);
+    }
+    const srcs = parts.map((p) => p.src);
+    for (const season of ["spring", "autumn", "winter"]) {
+      await devSeason(page, season);
+      parts = await partInfo(page);
+      expect(parts.map((p) => p.src), season).toEqual(srcs);
+      for (const p of parts) expect(p.loaded[0], `${season} ${p.id}`).toBe(true);
+    }
+    // 重なりの順：背景の層（.room-tg）と受付嬢の上・押せる枠（.room-objects）の下
+    const order = await page.evaluate(() => {
+      const kids = [...document.querySelector(".room-stage").children].map((c) => c.className.split(" ")[0]);
+      return { parts: kids.indexOf("room-parts"), uk: kids.indexOf("room-uk"), tg: kids.lastIndexOf("room-tg"), objects: kids.indexOf("room-objects") };
+    });
+    expect(order.parts).toBeGreaterThan(order.tg);
+    expect(order.parts).toBeGreaterThan(order.uk);
+    expect(order.parts).toBeLessThan(order.objects);
+    // ?dev なしでも出る（開発用の道具ではない）
+    await page.evaluate(() => { localStorage.clear(); });
+    await page.goto(PLAIN_URL);
+    await page.waitForTimeout(300);
+    await interview(page);
+    await expect(page.locator(".room-dev")).toHaveCount(0);
+    await expect(page.locator(".room-part")).toHaveCount(2);
+    expect(errors.filter((e) => !/favicon/.test(e))).toEqual([]);
+  });
+
+  test("夕方の色寄せは受付嬢と同じ（パーツの絵にも同じ色寄せがかかる）。昼はかからない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await devSeason(page, "summer");
+    const at = async (hour) => {
+      await page.evaluate((h) => { roomState.devHour = h; syncRoomView(); }, hour);
+      return page.evaluate(() => ({
+        uk: getComputedStyle(document.querySelector(".room-uk")).filter,
+        parts: [...document.querySelectorAll(".room-part img")].map((i) => getComputedStyle(i).filter)
+      }));
+    };
+    const evening = await at(17);
+    expect(evening.uk).not.toBe("none");
+    for (const f of evening.parts) expect(f).toBe(evening.uk);
+    const noon = await at(12);
+    for (const f of noon.parts) expect(f).toBe(noon.uk);
+    expect(noon.parts[0]).not.toBe(evening.parts[0]);
+    expect(errors).toEqual([]);
+  });
+
+  test("押せる枠：寝床・ペンの枠はパーツの絵の位置の上。絵の真ん中を押すとそれぞれの働き（エルシーの一言・ペンの吹き出し）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const d = await page.evaluate(() => {
+      const st = document.querySelector(".room-stage").getBoundingClientRect();
+      return ["elsie", "pen"].map((id) => {
+        const img = document.querySelector(`.room-part[data-part="${id}"] img`).getBoundingClientRect();
+        const fr = document.querySelector(`[data-room-object="${id}"] .room-frame`).getBoundingClientRect();
+        const pct = (a, b, k) => (a - b) / (k === "x" ? st.width : st.height) * 100;
+        return { id, x: pct(fr.left, img.left, "x"), y: pct(fr.top, img.top, "y"), w: pct(fr.width, 0, "x"), h: pct(fr.height, 0, "y"), iw: pct(img.width, 0, "x"), ih: pct(img.height, 0, "y") };
+      });
+    });
+    for (const r of d) {
+      expect(Math.abs(r.x), `${r.id} 枠の左`).toBeLessThan(0.6);
+      expect(Math.abs(r.y), `${r.id} 枠の上`).toBeLessThan(0.6);
+      expect(Math.abs(r.w - r.iw), `${r.id} 枠の幅`).toBeLessThan(0.6);
+      expect(Math.abs(r.h - r.ih), `${r.id} 枠の高さ`).toBeLessThan(0.6);
+    }
+    // 表の値だけで決まる（roomPartBox は ROOM_PARTS から出る）
+    const same = await page.evaluate(() => ["elsie", "pen"].every((id) => {
+      const o = ROOM_OBJECTS.find((x) => x.id === id); const b = roomPartBox(id);
+      return o.x === b.x && o.y === b.y && o.w === b.w && o.h === b.h;
+    }));
+    expect(same).toBe(true);
+    // 絵の真ん中を押す
+    const at = (id) => page.evaluate((i) => { const r = document.querySelector(`.room-part[data-part="${i}"] img`).getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, inView: r.bottom < window.innerHeight }; }, id);
+    const e = await at("elsie");
+    expect(e.inView).toBe(true);
+    await page.mouse.click(e.x, e.y);
+    await expect(page.locator(".room-notice")).toHaveText("エルシーは尻尾を振った。");
+    const pn = await at("pen");
+    if (pn.inView) {
+      await page.mouse.click(pn.x, pn.y);
+      await expect(page.locator(".room-bubble")).toHaveCount(1);
+      expect(await page.evaluate(() => roomMenu)).toBe("pen");
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test("影はコードで描く：?dev=1 の時刻で向き・長さ・濃さが変わる（朝は左へ長く薄く・昼は真下に短く濃く・夕は右へ長く薄く）。冬は弱い", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await devSeason(page, "summer");
+    const shadow = async (hour, season) => {
+      if (season) await devSeason(page, season);
+      await page.evaluate((h) => { roomState.devHour = h; syncRoomView(); }, hour);
+      await page.waitForTimeout(50);
+      return page.evaluate(() => {
+        const stage = document.querySelector(".room-stage");
+        const cs = getComputedStyle(stage);
+        const part = document.querySelector('.room-part[data-part="elsie"]').getBoundingClientRect();
+        const sh = document.querySelector('.room-part[data-part="elsie"] .room-shadow').getBoundingClientRect();
+        return { dx: Number(cs.getPropertyValue("--sh-dx")), len: Number(cs.getPropertyValue("--sh-len")), a: Number(cs.getPropertyValue("--sh-a")),
+          off: ((sh.left + sh.right) / 2 - (part.left + part.right) / 2) / part.width, wRatio: sh.width / part.width, bg: getComputedStyle(document.querySelector('.room-part[data-part="elsie"] .room-shadow')).backgroundImage };
+      });
+    };
+    const morning = await shadow(7);
+    const noon = await shadow(12);
+    const evening = await shadow(17);
+    expect(noon.dx).toBe(0);
+    expect(morning.dx).toBeLessThan(0);
+    expect(evening.dx).toBeGreaterThan(0);
+    expect(morning.off).toBeLessThan(noon.off - 0.2);
+    expect(evening.off).toBeGreaterThan(noon.off + 0.2);
+    expect(morning.len).toBeGreaterThan(noon.len);
+    expect(evening.len).toBeGreaterThan(noon.len);
+    expect(morning.wRatio).toBeGreaterThan(noon.wRatio * 1.5);
+    expect(noon.a).toBeGreaterThan(morning.a);
+    expect(noon.a).toBeGreaterThan(evening.a);
+    expect(noon.bg).toContain("radial-gradient");
+    // 冬は弱める
+    const winterNoon = await shadow(12, "winter");
+    expect(winterNoon.a).toBeLessThan(noon.a);
+    expect(winterNoon.a).toBeGreaterThan(0);
+    // 影は絵に焼き込まない：パーツの絵そのものは時刻で変わらない
+    expect(errors).toEqual([]);
+  });
+
+  test("パーツの表の数だけで置き場所が決まる：表の x・y・w を書き換えて窓を作り直すと、絵がその位置へ動く（絵や描画の側に位置を持たない）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => {
+      const p = ROOM_PARTS.find((q) => q.id === "elsie");
+      p.x = 40; p.y = 60; p.w = 12;
+      roomView = null; roomState.objectsHtml = null; // 窓を作り直す
+      render();
+    });
+    await page.waitForTimeout(200);
+    const e = (await partInfo(page)).find((p) => p.id === "elsie");
+    expect(Math.abs(e.cx - 40)).toBeLessThan(0.3);
+    expect(Math.abs(e.bottom - 60)).toBeLessThan(0.3);
+    expect(Math.abs(e.w - 12)).toBeLessThan(0.3);
+    // 表の列は全部のパーツで同じ（id・絵・絵の大きさ・位置 x／y・幅 w・影）
+    const keys = await page.evaluate(() => [...new Set(ROOM_PARTS.map((p) => Object.keys(p).sort().join()))]);
+    expect(keys).toEqual(["ih,img,id,iw,shadow,w,x,y".split(",").sort().join()]);
     expect(errors).toEqual([]);
   });
 });
