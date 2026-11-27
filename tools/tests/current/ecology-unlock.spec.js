@@ -10,7 +10,7 @@ const navShown = (page) => page.evaluate(() => {
   return Boolean(b && b.offsetParent !== null);
 });
 const bookTouchable = async (page) => {
-  await page.evaluate(() => { if (route === "home") { roomPanel = 0; render(); } });
+  await page.evaluate(() => { if (route === "home") render(); }); // 2026-11-27・P-015：3枚をやめたので、枚を動かさず描き直すだけ
   return (await page.locator('button[data-room-object="book"]').count()) > 0;
 };
 
