@@ -1793,6 +1793,15 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 .room-dev-btn { min-height: 36px; padding: 4px 12px; font: inherit; color: var(--paper-ink, #2b2620); background: none; border: 1px solid var(--paper-ink, #2b2620); cursor: pointer; }
 .room-dev-btn[aria-pressed="true"] { color: var(--paper-sheet, #f3ecdc); background: var(--paper-ink, #2b2620); }
 .room-dev-hour { width: 160px; }
+/* ?dev=1 のパーツ置き直し（P-019）。「置き直す」の間だけ（.room-edit）、パーツを指・マウスで引きずれる。
+   ★ touch-action: none はパーツの上だけ：パーツの上で始めた指はパーツを動かし、それ以外の所で始めた指は今までどおり部屋を見渡す。
+   押せる枠（.room-hit）と吹き出しは働かない。 */
+.room-edit .room-part { pointer-events: auto; touch-action: none; cursor: grab; outline: 1px dashed rgba(255, 255, 255, .9); outline-offset: 2px; }
+.room-edit .room-part:active { cursor: grabbing; }
+.room-edit .room-part.sel { outline: 2px solid #ffd35a; }
+.room-edit .room-hit, .room-edit .room-bubble { pointer-events: none; }
+.room-dev-sel, .room-dev-copystate { font-size: 12px; }
+.room-dev-out { width: 100%; box-sizing: border-box; font: 12px/1.5 ui-monospace, monospace; color: var(--paper-ink, #2b2620); background: #fff; border: 1px solid var(--paper-ink, #2b2620); }
 
 /* ホームの付箋（2026-10-23・EX-163）。★ 急かさない：動き・点滅・件数は付けない。押すと剝がせる */
 .sticky-note { display: block; width: fit-content; max-width: calc(100% - 24px); margin: 8px auto 0; padding: 8px 12px; font: inherit; font-size: 14px; line-height: 1.6; text-align: left; color: var(--paper-ink, #2b2620); background: #f1e3a8; border: 1px solid rgba(43, 38, 32, .35); box-shadow: 1px 2px 0 rgba(43, 38, 32, .18); transform: rotate(-1deg); cursor: pointer; }
