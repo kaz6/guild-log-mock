@@ -765,3 +765,211 @@ test.describe("ホームのパーツ（P-018）", () => {
     expect(errors).toEqual([]);
   });
 });
+
+// ── ?dev=1 のパーツ置き直しと、共通の出口「今の値を写す」・2026-11-28・P-019 ──────────────────
+//   ?dev=1 のときだけ、ホームに「置き直す」と「今の値を写す」が出る。動かした値は localStorage の DEV_MODE 専用の鍵（ゲームのセーブとは別）。
+//   ROOM_PARTS（コードの中の値）は書き換えない。★ 切り替えやボタンの置き場所・刻み（0.5）・書き出す文の形は仮。
+test.describe("?dev=1 のパーツ置き直し（P-019）", () => {
+  const DEV_KEY = "expeditionGuildLogMockDevParts";
+  const partRect = (page, id) => page.evaluate((i) => {
+    const r = document.querySelector(`.room-part[data-part="${i}"] img`).getBoundingClientRect();
+    const st = document.querySelector(".room-stage").getBoundingClientRect();
+    return { cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, stW: st.width, stH: st.height,
+      px: ((r.left + r.right) / 2 - st.left) / st.width * 100, pb: (r.bottom - st.top) / st.height * 100, pw: r.width / st.width * 100 };
+  }, id);
+  const now = (page, id) => page.evaluate((i) => { const p = roomPartNow(ROOM_PARTS.find((q) => q.id === i)); return { x: p.x, y: p.y, w: p.w }; }, id);
+  const table = (page, id) => page.evaluate((i) => { const p = ROOM_PARTS.find((q) => q.id === i); return { x: p.x, y: p.y, w: p.w }; }, id);
+  const dragMouse = async (page, from, dx, dy) => {
+    await page.mouse.move(from.cx, from.cy);
+    await page.mouse.down();
+    await page.mouse.move(from.cx + dx / 2, from.cy + dy / 2, { steps: 4 });
+    await page.mouse.move(from.cx + dx, from.cy + dy, { steps: 4 });
+    await page.mouse.up();
+  };
+
+  test("?dev なしでは「置き直す」も「今の値を写す」も出ない。localStorage に置いた値も効かない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const t = await table(page, "elsie");
+    await page.evaluate(([k]) => { localStorage.setItem(k, JSON.stringify({ elsie: { x: 20, y: 30, w: 15 } })); }, [DEV_KEY]);
+    await page.goto(PLAIN_URL);
+    await page.waitForTimeout(400);
+    for (const sel of ["[data-room-dev-edit]", "[data-room-dev-copy]", ".room-dev", ".room-dev-out"]) await expect(page.locator(sel), sel).toHaveCount(0);
+    const e = await partRect(page, "elsie");
+    expect(Math.abs(e.px - t.x), "置いた値は効かない（x）").toBeLessThan(0.3);
+    expect(Math.abs(e.pb - t.y), "置いた値は効かない（y）").toBeLessThan(0.3);
+    expect(Math.abs(e.pw - t.w), "置いた値は効かない（w）").toBeLessThan(0.3);
+    expect(await page.evaluate(() => roomPartNow(ROOM_PARTS[0]) === ROOM_PARTS[0])).toBe(true);
+    // ?dev=1 を付けると、置いた値が効く
+    await page.goto(PLAIN_URL + "?dev=1");
+    await page.waitForTimeout(400);
+    const d = await partRect(page, "elsie");
+    expect(Math.abs(d.px - 20)).toBeLessThan(0.3);
+    expect(Math.abs(d.pw - 15)).toBeLessThan(0.3);
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("?dev=1：「置き直す」で寝床をマウスで引きずると位置が変わり、出口の文に新しい値が出る。コードの表は変わらず、ゲームのセーブには混ざらない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await expect(page.locator("[data-room-dev-edit]")).toHaveCount(1);
+    await expect(page.locator("[data-room-dev-copy]")).toHaveCount(1);
+    const t0 = await table(page, "elsie");
+    await page.locator("[data-room-dev-edit]").click();
+    await expect(page.locator("[data-room-dev-edit]")).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate(() => document.querySelector(".room-scroll").scrollIntoView({ block: "center" })); // ボタンを押して動いた画面を、窓が見える位置に戻す
+    await page.waitForTimeout(200);
+    const before = await partRect(page, "elsie");
+    await dragMouse(page, before, before.stW * 0.05, -before.stH * 0.03);
+    const after = await partRect(page, "elsie");
+    expect(after.px - before.px, "右へ 5%").toBeGreaterThan(4.7);
+    expect(after.px - before.px).toBeLessThan(5.3);
+    expect(after.pb - before.pb, "上へ 3%").toBeLessThan(-2.7);
+    expect(after.pb - before.pb).toBeGreaterThan(-3.3);
+    const n = await now(page, "elsie");
+    expect(n.x * 10 % 1, "0.1 刻み").toBeCloseTo(0, 5);
+    // 出口：小数第1位まで・動かしたものに印
+    await page.locator("[data-room-dev-copy]").click();
+    const text = await page.locator(".room-dev-out").inputValue();
+    expect(text).toContain(`{ id: "elsie", x: ${n.x.toFixed(1)}, y: ${n.y.toFixed(1)}, w: ${n.w.toFixed(1)} },  // 動かした`);
+    expect(text).toMatch(/\{ id: "pen", x: 73\.1, y: 94\.5, w: 7\.0 \},\n?/);
+    expect(text).not.toMatch(/id: "pen".*動かした/);
+    await expect(page.locator(".room-dev-copystate")).not.toHaveText("");
+    // コードの中の表は変わらない／保存は DEV_MODE 専用の鍵だけ（ゲームのセーブには混ざらない）
+    expect(await table(page, "elsie")).toEqual(t0);
+    const stored = await page.evaluate((k) => ({ dev: JSON.parse(localStorage.getItem(k)), game: localStorage.getItem(STORAGE_KEY) }), DEV_KEY);
+    expect(stored.dev.elsie).toEqual(n);
+    expect(stored.game).not.toContain("devParts");
+    expect(stored.game).not.toContain(`"${DEV_KEY}"`);
+    // リロードしても動かした位置が残る。置き直しの切り替えは入らない
+    await page.reload();
+    await page.waitForTimeout(400);
+    const r = await partRect(page, "elsie");
+    expect(Math.abs(r.px - after.px)).toBeLessThan(0.3);
+    await expect(page.locator("[data-room-dev-edit]")).toHaveAttribute("aria-pressed", "false");
+    // 押せる枠も付いてくる（寝床の枠はパーツの絵の位置の上）
+    const fr = await page.evaluate(() => {
+      const img = document.querySelector('.room-part[data-part="elsie"] img').getBoundingClientRect();
+      const f = document.querySelector('[data-room-object="elsie"] .room-frame').getBoundingClientRect();
+      return { dx: f.left - img.left, dy: f.top - img.top, dw: f.width - img.width };
+    });
+    expect(Math.abs(fr.dx)).toBeLessThan(6);
+    expect(Math.abs(fr.dy)).toBeLessThan(6);
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("「大きく」「小さく」は選んだパーツの幅を変える（足元の真ん中は動かさない）。「元に戻す」でコードの値に戻る", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    const t0 = await table(page, "elsie");
+    await page.locator("[data-room-dev-edit]").click();
+    // 選ぶ前は押せない
+    await expect(page.locator('[data-room-dev-size="1"]')).toBeDisabled();
+    await page.evaluate(() => document.querySelector(".room-scroll").scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(200);
+    const c = await partRect(page, "elsie");
+    await page.mouse.click(c.cx, c.cy); // 動かさずに押す＝選ぶだけ
+    await expect(page.locator('[data-room-dev-size="1"]')).toBeEnabled();
+    const base = await now(page, "elsie");
+    expect(base).toEqual(t0);
+    await page.locator('[data-room-dev-size="1"]').click();
+    await page.locator('[data-room-dev-size="1"]').click();
+    expect((await now(page, "elsie")).w).toBeCloseTo(t0.w + 1, 5);
+    await page.locator('[data-room-dev-size="-1"]').click();
+    const w = await now(page, "elsie");
+    expect(w.w).toBeCloseTo(t0.w + 0.5, 5);
+    expect([w.x, w.y]).toEqual([t0.x, t0.y]);
+    const r = await partRect(page, "elsie");
+    expect(Math.abs(r.px - t0.x)).toBeLessThan(0.3);
+    expect(Math.abs(r.pb - t0.y)).toBeLessThan(0.3);
+    expect(Math.abs(r.pw - (t0.w + 0.5))).toBeLessThan(0.3);
+    // 元に戻す
+    await page.locator("[data-room-dev-reset]").click();
+    expect(await now(page, "elsie")).toEqual(t0);
+    expect(await page.evaluate((k) => localStorage.getItem(k), DEV_KEY)).toBeNull();
+    await page.locator("[data-room-dev-copy]").click();
+    expect(await page.locator(".room-dev-out").inputValue()).not.toContain("動かした");
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("置き直しの間は、押せる枠の働き（吹き出し・画面の移動）が止まる。切り替えを戻すと働く", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.locator("[data-room-dev-edit]").click();
+    // 画面の移動：本棚・掲示板を押しても動かない（直接呼んでも）
+    for (const id of ["board", "shelf"]) {
+      const b = await page.evaluate((i) => { const r = document.querySelector(`[data-room-object="${i}"] .room-frame`).getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; }, id);
+      await page.mouse.click(b.x, b.y);
+      expect(await page.evaluate(() => route), `${id} を押しても動かない`).toBe("home");
+      await page.evaluate((i) => tapRoomObject(i), id);
+      expect(await page.evaluate(() => route), `${id} を直接呼んでも動かない`).toBe("home");
+    }
+    // 吹き出し：受付嬢の一言・書類の吹き出しも出ない
+    const u = await page.evaluate(() => { const r = document.querySelector('[data-room-object="receptionist"] .room-frame').getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; });
+    await page.mouse.click(u.x, u.y);
+    await page.evaluate(() => tapRoomObject("papers"));
+    await page.evaluate(() => tapRoomObject("pen"));
+    await expect(page.locator(".room-notice")).toBeHidden();
+    await expect(page.locator(".room-bubble")).toHaveCount(0);
+    // 開いていた吹き出しは、置き直しに入ると閉じる
+    await page.locator("[data-room-dev-edit]").click();
+    await page.evaluate(() => tapRoomObject("papers"));
+    await expect(page.locator(".room-bubble")).toHaveCount(1);
+    await page.locator("[data-room-dev-edit]").click();
+    await expect(page.locator(".room-bubble")).toHaveCount(0);
+    // 切り替えを戻すと、枠は今までどおり働く
+    await page.locator("[data-room-dev-edit]").click();
+    await page.locator('[data-room-object="board"]').click({ force: true });
+    expect(await page.evaluate(() => route)).toBe("quests");
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("スマホ：パーツの上で始めた指の動きはパーツを動かし、それ以外の所で始めた動きは部屋を見渡す", async ({ page }) => {
+    const errors = await freshPage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await page.waitForTimeout(300);
+    await interview(page);
+    await page.locator("[data-room-dev-edit]").click();
+    await page.evaluate(() => document.querySelector(".room-scroll").scrollIntoView({ block: "center" })); // 窓を画面の真ん中へ（上の固定の目次に隠れない位置）
+    await page.waitForTimeout(200);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    const touchDrag = async (x0, y0, dx) => {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y: y0 }] });
+      for (let i = 1; i <= 10; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x0 + dx * i / 10, y: y0 }] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await page.waitForTimeout(500);
+    };
+    const left = () => page.evaluate(() => document.querySelector(".room-scroll").scrollLeft);
+    // ① パーツの上で始める：パーツが動き、部屋は動かない
+    const c = await partRect(page, "elsie");
+    expect(c.cx, "寝床が画面の中に見える").toBeGreaterThan(20);
+    expect(c.cx).toBeLessThan(370);
+    const s0 = await left();
+    const x0 = (await now(page, "elsie")).x;
+    await touchDrag(c.cx, c.cy, -60);
+    expect(Math.abs((await left()) - s0), "部屋は動かない").toBeLessThan(2);
+    const x1 = (await now(page, "elsie")).x;
+    expect(x0 - x1, "パーツは指と同じ向きに動く（左へ）").toBeGreaterThan(3);
+    // ② パーツ以外の所で始める：部屋を見渡す（パーツは動かない）。パーツの無い高さ（窓の上のほう）から始める
+    const box = await page.locator(".room-scroll").boundingBox();
+    const s1 = await left();
+    await touchDrag(300, box.y + 150, -150);
+    expect(Math.abs((await left()) - s1), "部屋を見渡す").toBeGreaterThan(60);
+    expect((await now(page, "elsie")).x).toBe(x1);
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("出口は1つ：DEV_EXPORTS に1件足すと、同じ「今の値を写す」の文に載る（道具を増やしても出口は増えない）", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.evaluate(() => { DEV_EXPORTS.push({ id: "t", title: "試験の道具", text: () => "{ id: \"t\", v: 1.0 }," }); });
+    await expect(page.locator("[data-room-dev-copy]")).toHaveCount(1);
+    await page.locator("[data-room-dev-copy]").click();
+    const text = await page.locator(".room-dev-out").inputValue();
+    expect(text).toContain("// パーツの表（ROOM_PARTS）の x・y・w");
+    expect(text).toContain("// 試験の道具\n{ id: \"t\", v: 1.0 },");
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+});

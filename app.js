@@ -3257,9 +3257,65 @@ const ROOM_PARTS = [
 ];
 // パーツの絵の枠（押せる枠・絵の上の％）。絵の真ん中・下端を基準に、絵の縦横比から高さを出す
 function roomPartBox(id) {
-  const p = ROOM_PARTS.find((q) => q.id === id);
+  const p = roomPartNow(ROOM_PARTS.find((q) => q.id === id));
   const h = p.w * (p.ih / p.iw) * (ROOM_IMG_W / ROOM_IMG_H);
   return { x: +(p.x - p.w / 2).toFixed(2), y: +(p.y - h).toFixed(2), w: p.w, h: +h.toFixed(2) };
+}
+// ── ?dev=1 のパーツ置き直し（2026-11-28・P-019）──────────────────────────────────
+//   ★ 動かした値は**その端末の localStorage の DEV_MODE 専用の鍵**に残す（ゲームのセーブ＝STORAGE_KEY には混ぜない）。
+//   ★ **?dev=1 なしでは読まない・効かせない**（roomPartNow が表の値をそのまま返す）。
+//   ★ **ROOM_PARTS（コードの中の値）は書き換えない**。書き出すだけ（「今の値を写す」＝DEV_EXPORTS）。コードに入れるのは次のカード。
+//   値は 0.1 刻みで持つ（画面で見た位置と、書き出す文の位置がずれない）。
+const ROOM_DEV_SIZE_STEP = 0.5; // 「大きく」「小さく」の刻み（幅の％。仮）
+const ROOM_DEV_PARTS_KEY = "expeditionGuildLogMockDevParts" + STORAGE_SUFFIX;
+function loadRoomDevParts() {
+  if (!DEV_MODE) return {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(ROOM_DEV_PARTS_KEY) || "{}");
+    const out = {};
+    for (const p of ROOM_PARTS) {
+      const v = raw?.[p.id];
+      if (v && [v.x, v.y, v.w].every(Number.isFinite)) out[p.id] = { x: v.x, y: v.y, w: v.w };
+    }
+    return out;
+  } catch (_) { return {}; }
+}
+let roomDevParts = loadRoomDevParts(); // id → { x, y, w }（動かしたパーツだけ）
+function saveRoomDevParts() {
+  try {
+    if (Object.keys(roomDevParts).length === 0) localStorage.removeItem(ROOM_DEV_PARTS_KEY);
+    else localStorage.setItem(ROOM_DEV_PARTS_KEY, JSON.stringify(roomDevParts));
+  } catch (_) { /* 私用モード等：画面の中だけで動かす */ }
+}
+// 今のパーツの値（表の値。?dev=1 で動かしていれば、その値）
+function roomPartNow(p) {
+  const o = DEV_MODE ? roomDevParts[p.id] : null;
+  return o ? { ...p, x: o.x, y: o.y, w: o.w } : p;
+}
+function setRoomDevPart(id, patch) {
+  const p = roomPartNow(ROOM_PARTS.find((q) => q.id === id));
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  roomDevParts[id] = {
+    x: r1(clamp(patch.x ?? p.x, 0, 100)),
+    y: r1(clamp(patch.y ?? p.y, 0, 100)),
+    w: r1(clamp(patch.w ?? p.w, 2, 40))
+  };
+  saveRoomDevParts();
+}
+// 共通の出口「今の値を写す」。★ DEV_MODE の道具は、触った値をここに1つ足すだけで出口に載る（text が書き出す文）。出口のボタンは1つ。
+const DEV_EXPORTS = [
+  {
+    id: "parts", title: "パーツの表（ROOM_PARTS）の x・y・w",
+    text: () => ROOM_PARTS.map((p) => {
+      const n = roomPartNow(p);
+      const moved = n.x !== p.x || n.y !== p.y || n.w !== p.w;
+      return `{ id: "${p.id}", x: ${n.x.toFixed(1)}, y: ${n.y.toFixed(1)}, w: ${n.w.toFixed(1)} },${moved ? "  // 動かした" : ""}`;
+    }).join("\n")
+  }
+];
+function devExportText() {
+  return `// ?dev=1 の今の値（コードにはまだ入っていない）\n` + DEV_EXPORTS.map((e) => `// ${e.title}\n${e.text()}`).join("\n\n");
 }
 // 影の値（時刻と季節から。値は仮）。光は朝は右から・昼は真上・夕は左から（影は反対側へ伸びる）。朝夕は長く薄く、昼は短く濃く。冬は弱める。
 //   dx＝影の真ん中のずれ（パーツの幅に対する倍。＋は右）／len＝影の長さの倍率／alpha＝濃さ（0〜1）
@@ -3346,7 +3402,10 @@ const roomState = {
   restoring: false,
   objectsHtml: null,
   devSeason: null,              // ?dev=1 の操作（null＝端末の日付・時刻のまま）
-  devHour: null
+  devHour: null,
+  devEdit: false,               // ?dev=1：パーツを置き直している間（P-019）
+  devSel: null,                 // 選んでいるパーツの id
+  devDrag: null                 // 引きずっている最中の指の記録
 };
 
 function roomSeasonNow() {
@@ -3385,7 +3444,7 @@ function buildRoomView() {
         <div class="room-stage moving">
           ${groups}
           <img class="room-uk" src="${ROOM_ASSET_DIR}summer-uketsuke.png" alt="" draggable="false">
-          <div class="room-parts">${ROOM_PARTS.map((p) => `<div class="room-part" data-part="${p.id}" style="left:${p.x}%;top:${p.y}%;width:${p.w}%"><i class="room-shadow" style="--scx:${p.shadow.cx};--sw:${p.shadow.sw};--sar:${p.shadow.ar}"></i><img src="${ROOM_ASSET_DIR}${p.img}" alt="" draggable="false"></div>`).join("")}</div>
+          <div class="room-parts">${ROOM_PARTS.map((p0) => { const p = roomPartNow(p0); return `<div class="room-part" data-part="${p.id}" style="left:${p.x}%;top:${p.y}%;width:${p.w}%"><i class="room-shadow" style="--scx:${p.shadow.cx};--sw:${p.shadow.sw};--sar:${p.shadow.ar}"></i><img src="${ROOM_ASSET_DIR}${p.img}" alt="" draggable="false"></div>`; }).join("")}</div>
           <div class="room-fx"><div class="room-snowwin"></div></div>
           <div class="room-objects"></div>
         </div>
@@ -3402,6 +3461,20 @@ function buildRoomView() {
         <output class="room-dev-hourout"></output>
         <button type="button" class="room-dev-btn" data-room-dev-now>いまの時刻</button>
       </div>
+      <div class="room-dev-row" data-room-dev-parts>
+        <button type="button" class="room-dev-btn" data-room-dev-edit aria-pressed="false">置き直す</button>
+        <span data-room-dev-editonly hidden>
+          <button type="button" class="room-dev-btn" data-room-dev-size="1" disabled>大きく</button>
+          <button type="button" class="room-dev-btn" data-room-dev-size="-1" disabled>小さく</button>
+          <button type="button" class="room-dev-btn" data-room-dev-reset>元に戻す</button>
+        </span>
+        <span class="room-dev-sel" role="status"></span>
+      </div>
+      <div class="room-dev-row">
+        <button type="button" class="room-dev-btn" data-room-dev-copy>今の値を写す</button>
+        <span class="room-dev-copystate" role="status"></span>
+      </div>
+      <textarea class="room-dev-out" readonly rows="6" hidden aria-label="今の値（選んでコピーできる）"></textarea>
     </div>` : ""}`;
   el.querySelector(".room-scroll").addEventListener("scroll", (e) => {
     if (!roomState.restoring) roomState.scrollLeft = e.currentTarget.scrollLeft;
@@ -3413,8 +3486,80 @@ function buildRoomView() {
     }));
     el.querySelector(".room-dev-hour").addEventListener("input", (e) => { roomState.devHour = Number(e.currentTarget.value); syncRoomView(); });
     el.querySelector("[data-room-dev-now]").addEventListener("click", () => { roomState.devHour = null; syncRoomView(); });
+    bindRoomDevParts(el);
   }
   return el;
+}
+
+// ?dev=1 のパーツ置き直し（P-019）。「置き直す」が入っているあいだ：パーツは指（とマウス）で引きずれ、押せる枠は働かない。
+//   ★ スマホ：パーツの上で始めた指の動きはパーツを動かし（.room-edit .room-part は touch-action: none）、それ以外の所で始めた動きは今までどおり部屋を見渡す。
+function bindRoomDevParts(el) {
+  const stage = el.querySelector(".room-stage");
+  const endDrag = (e) => {
+    const d = roomState.devDrag;
+    if (!d || (e && d.pid !== e.pointerId)) return;
+    roomState.devDrag = null;
+    roomState.objectsHtml = null; // 押せる枠（寝床・ペン）をパーツの新しい位置で作り直す
+    updateRoomObjects();
+    syncRoomView();
+  };
+  el.querySelectorAll(".room-part").forEach((n) => {
+    n.addEventListener("pointerdown", (e) => {
+      if (!roomState.devEdit) return;
+      const p = roomPartNow(ROOM_PARTS.find((q) => q.id === n.dataset.part));
+      roomState.devSel = p.id;
+      roomState.devDrag = { id: p.id, pid: e.pointerId, sx: e.clientX, sy: e.clientY, x0: p.x, y0: p.y };
+      try { n.setPointerCapture(e.pointerId); } catch (_) { /* 取れなくても動かせる */ }
+      e.preventDefault();
+      syncRoomView();
+    });
+    n.addEventListener("pointermove", (e) => {
+      const d = roomState.devDrag;
+      if (!d || d.pid !== e.pointerId) return;
+      const r = stage.getBoundingClientRect();
+      setRoomDevPart(d.id, { x: d.x0 + (e.clientX - d.sx) / r.width * 100, y: d.y0 + (e.clientY - d.sy) / r.height * 100 });
+      syncRoomView();
+    });
+    n.addEventListener("pointerup", endDrag);
+    n.addEventListener("pointercancel", endDrag);
+  });
+  el.querySelector("[data-room-dev-edit]").addEventListener("click", () => {
+    roomState.devEdit = !roomState.devEdit;
+    roomState.devSel = null;
+    roomState.devDrag = null;
+    roomMenu = null; // 開いている吹き出しは閉じる
+    roomState.objectsHtml = null;
+    render();
+  });
+  el.querySelectorAll("[data-room-dev-size]").forEach((b) => b.addEventListener("click", () => {
+    if (!roomState.devSel) return;
+    const p = roomPartNow(ROOM_PARTS.find((q) => q.id === roomState.devSel));
+    setRoomDevPart(p.id, { w: p.w + Number(b.dataset.roomDevSize) * ROOM_DEV_SIZE_STEP });
+    roomState.objectsHtml = null;
+    updateRoomObjects();
+    syncRoomView();
+  }));
+  el.querySelector("[data-room-dev-reset]").addEventListener("click", () => {
+    roomDevParts = {};
+    saveRoomDevParts();
+    roomState.objectsHtml = null;
+    updateRoomObjects();
+    syncRoomView();
+  });
+  el.querySelector("[data-room-dev-copy]").addEventListener("click", async () => {
+    const text = devExportText();
+    const out = el.querySelector(".room-dev-out");
+    const st = el.querySelector(".room-dev-copystate");
+    out.hidden = false; // 写せない端末のために、同じ文を選べる欄にも出す
+    out.value = text;
+    out.focus();
+    out.select();
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (_) {
+      try { ok = document.execCommand("copy"); } catch (__) { ok = false; }
+    }
+    st.textContent = ok ? "写しました" : "写せませんでした（下の欄から選んでコピーしてください）";
+  });
 }
 
 function roomSetSrc(img, name) {
@@ -3459,6 +3604,16 @@ function syncRoomView() {
   stage.style.setProperty("--sh-a", String(sh.alpha));
   stage.dataset.season = season;
   stage.dataset.hour = String(hour);
+  // パーツの位置（表の値。?dev=1 で動かしていれば、その値）
+  const editing = DEV_MODE && roomState.devEdit;
+  stage.classList.toggle("room-edit", editing);
+  el.querySelectorAll(".room-part").forEach((n) => {
+    const p = roomPartNow(ROOM_PARTS.find((q) => q.id === n.dataset.part));
+    n.style.left = `${p.x}%`;
+    n.style.top = `${p.y}%`;
+    n.style.width = `${p.w}%`;
+    n.classList.toggle("sel", editing && roomState.devSel === p.id);
+  });
   if (roomState.particleSeason !== season) {
     roomState.particleSeason = season;
     roomState.particleT0 = performance.now();
@@ -3468,6 +3623,11 @@ function syncRoomView() {
   if (DEV_MODE) {
     el.querySelectorAll("[data-room-dev-season]").forEach((b) => b.setAttribute("aria-pressed", String((roomState.devSeason ?? "auto") === b.dataset.roomDevSeason)));
     const H = Math.floor(hour);
+    el.querySelector("[data-room-dev-edit]").setAttribute("aria-pressed", String(editing));
+    el.querySelector("[data-room-dev-editonly]").hidden = !editing;
+    el.querySelectorAll("[data-room-dev-size]").forEach((b) => { b.disabled = !roomState.devSel; });
+    const selObj = ROOM_OBJECTS.find((o) => o.id === roomState.devSel);
+    el.querySelector(".room-dev-sel").textContent = !editing ? "" : selObj ? `選んでいる：${selObj.label}` : "パーツを引きずって動かす（それ以外の所をなぞると見渡す）";
     el.querySelector(".room-dev-hour").value = String(hour);
     el.querySelector(".room-dev-hourout").textContent = `${H}:${String(Math.round((hour - H) * 60)).padStart(2, "0")}`;
   }
@@ -3540,16 +3700,23 @@ function updateRoomObjects() {
   note.hidden = !roomNotice;
 }
 
+// 押せる枠の位置。★ パーツ（ROOM_PARTS）と同じ id の物は、パーツの今の絵の位置から決める（P-018。?dev=1 で置き直したときも枠が付いてくる）
+function roomObjectBox(o) {
+  return ROOM_PARTS.some((p) => p.id === o.id) ? { ...o, ...roomPartBox(o.id) } : o;
+}
+
 function roomObjectsHtml() {
   const mx = ROOM_HIT_MARGIN_X;
   const my = ROOM_HIT_MARGIN_Y;
-  return ROOM_OBJECTS.filter((o) => !o.show || o.show()).map((o) => o.act && (!o.enabled || o.enabled())
+  return ROOM_OBJECTS.filter((o) => !o.show || o.show()).map(roomObjectBox).map((o) => o.act && (!o.enabled || o.enabled())
     ? `<button class="room-hit" type="button" data-room-object="${o.id}" style="left:${+(o.x - mx).toFixed(2)}%;top:${o.y - my}%;width:${+(o.w + mx * 2).toFixed(2)}%;height:${o.h + my * 2}%" onclick="tapRoomObject('${o.id}')"><span class="room-frame" style="inset:${+(my / (o.h + my * 2) * 100).toFixed(2)}% ${+(mx / (o.w + mx * 2) * 100).toFixed(2)}%">${o.label}</span></button>`
     : `<span class="room-thing" data-room-object="${o.id}" style="left:${o.x}%;top:${o.y}%;width:${o.w}%;height:${o.h}%">${o.label}</span>`).join("") + roomMenuHtml();
 }
 
 function roomMenuHtml() {
-  const o = ROOM_OBJECTS.find((x) => x.id === roomMenu);
+  if (DEV_MODE && roomState.devEdit) return ""; // 置き直している間は吹き出しも出さない（P-019）
+  const found = ROOM_OBJECTS.find((x) => x.id === roomMenu);
+  const o = found && roomObjectBox(found);
   const items = (ROOM_MENUS[roomMenu] ?? []).filter((m) => !m.show || m.show());
   if (!o || items.length === 0) return "";
   // 吹き出しは窓の中（絵の上）に出す＝物と一緒になぞって動く。右寄りの物は右端をそろえる
@@ -3573,6 +3740,7 @@ function tapRoomMenuItem(id) {
 }
 
 function tapRoomObject(id) {
+  if (DEV_MODE && roomState.devEdit) return; // 置き直している間は、押せる枠の働き（吹き出し・画面の移動）を止める（P-019）
   const o = ROOM_OBJECTS.find((x) => x.id === id);
   if (o?.act && (!o.enabled || o.enabled())) o.act();
 }
