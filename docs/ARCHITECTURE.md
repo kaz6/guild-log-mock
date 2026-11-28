@@ -31,7 +31,7 @@
 
 ## DEV_MODE（?dev=1）
 
-`?dev=1` のときだけ効く（`const DEV_MODE`）。公開用は `/`、デバッグ用は `/?dev=1`。時間加速（`getDemoSpeed`）・時間帯／天候の切り替え・「Mock用」ボタン・Mock初期化・ホームの季節と時刻のつまみ・パーツの置き直し（`bindRoomDevParts`・値は localStorage の DEV 専用の鍵・`ROOM_PARTS` は書き換えない）・共通の出口「今の値を写す」（`DEV_EXPORTS` に1件足すと載る）は、`?dev=1` なしでは出さず、効かせない。`data-dev-only` 属性の要素が `?dev=1` で表示される。
+`?dev=1` のときだけ効く（`const DEV_MODE`）。公開用は `/`、デバッグ用は `/?dev=1`。時間加速（`getDemoSpeed`）・時間帯／天候の切り替え・「Mock用」ボタン・Mock初期化・ホームの季節と時刻のつまみ・パーツの置き直し（`bindRoomDevParts`・値は localStorage の DEV 専用の鍵・`ROOM_PARTS` は書き換えない）・共通の出口「今の値を写す」（`DEV_EXPORTS` に1件足すと載る）・季節×時刻の「12通りを見る」（`openRoomSheet`・`paintRoomLayers`。撮る道具は `tools/room-sheet.js`）は、`?dev=1` なしでは出さず、効かせない。`data-dev-only` 属性の要素が `?dev=1` で表示される。
 
 ## data-*.js（マスターデータ。`window.master*`）
 

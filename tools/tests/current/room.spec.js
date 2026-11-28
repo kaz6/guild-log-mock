@@ -973,3 +973,124 @@ test.describe("?dev=1 のパーツ置き直し（P-019）", () => {
     expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
   });
 });
+
+// ── ?dev=1「12通りを見る」・2026-11-28・P-022 ──────────────────────────────────
+//   季節4つ × 朝・昼・夕の12枚を一度に並べる。?dev=1 のときだけ。重ね窓は body に付く（#app の外）。
+//   ★ 常設の窓の季節・時刻（roomState.devSeason／devHour）には触れない。値・文字・並べ方は仮。
+test.describe("?dev=1「12通りを見る」（P-022）", () => {
+  const SEASONS = ["spring", "summer", "autumn", "winter"];
+  const HOURS = ["7", "12", "17"];
+  const minis = (page) => page.evaluate(() => [...document.querySelectorAll(".room-sheet .room-mini")].map((m) => {
+    const st = m.querySelector(".room-stage");
+    const cs = getComputedStyle(st);
+    const vis = (sel) => [...m.querySelectorAll(sel)].filter((n) => !n.closest("[hidden]") && getComputedStyle(n).display !== "none");
+    const tgs = vis(".room-tg").map((g) => ({ t: g.dataset.t, op: Number(g.style.opacity), st: g.querySelector(".room-st").getAttribute("src"), dapple: !g.querySelector(".room-sun").hidden }));
+    return { season: st.dataset.season, hour: st.dataset.hour, caption: m.querySelector("figcaption").textContent, tgs,
+      uk: getComputedStyle(m.querySelector(".room-uk")).opacity, parts: m.querySelectorAll(".room-part").length, objects: m.querySelectorAll(".room-objects, .room-hit").length,
+      shDx: cs.getPropertyValue("--sh-dx"), shA: cs.getPropertyValue("--sh-a"), ukf: cs.getPropertyValue("--ukf"),
+      leaves: m.querySelectorAll(".room-leaf").length, flakes: m.querySelectorAll(".room-flake").length,
+      w: m.getBoundingClientRect().width, h: st.getBoundingClientRect().height, sw: st.getBoundingClientRect().width };
+  }));
+
+  test("?dev=1 なしでは「12通りを見る」が出ない。関数を呼んでも開かない", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.goto(PLAIN_URL);
+    await page.waitForTimeout(400);
+    await expect(page.locator("[data-room-dev-sheet]")).toHaveCount(0);
+    await page.evaluate(() => openRoomSheet());
+    await expect(page.locator(".room-sheet")).toHaveCount(0);
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("?dev=1：押すと12枚の窓が出る。季節4つ×朝・昼・夕がすべて違う組で、文字が付く。1秒ごとの再描画でも残る", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await expect(page.locator(".room-sheet")).toHaveCount(0);
+    await page.locator("[data-room-dev-sheet]").click();
+    await expect(page.locator(".room-sheet .room-mini")).toHaveCount(12);
+    await page.waitForTimeout(1500); // ホームは1秒ごとに描き直される（重ね窓は #app の外にあるので残る）
+    await expect(page.locator(".room-sheet .room-mini")).toHaveCount(12);
+    expect(await page.evaluate(() => document.querySelector(".room-sheet").parentNode === document.body)).toBe(true);
+    const m = await minis(page);
+    const pairs = m.map((x) => `${x.season}/${x.hour}`);
+    expect(new Set(pairs).size, "12枚の（季節, 時刻）がすべて違う").toBe(12);
+    expect(pairs).toEqual(SEASONS.flatMap((s) => HOURS.map((h) => `${s}/${h}`)));
+    expect(m.map((x) => x.caption)).toEqual(["春・朝", "春・昼", "春・夕", "夏・朝", "夏・昼", "夏・夕", "秋・朝", "秋・昼", "秋・夕", "冬・朝", "冬・昼", "冬・夕"]);
+    // 12枚とも：絵が出る・受付嬢が出る・パーツが2つ・押せる枠は無い・窓の中に絵の全体が入る（切れない・伸びない）
+    for (const x of m) {
+      const id = `${x.season}/${x.hour}`;
+      expect(x.tgs.length, id).toBeGreaterThan(0);
+      expect(x.tgs.every((g) => g.st), id + " 絵が付く").toBe(true);
+      expect(Number(x.uk), id + " 受付嬢").toBe(1);
+      expect(x.parts, id + " パーツ").toBe(2);
+      expect(x.objects, id + " 押せる枠は無い").toBe(0);
+      expect(Math.abs(x.sw / x.h - 1368 / 677), id + " 縦横比").toBeLessThan(0.01);
+    }
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("12枚は季節と時刻のとおりに出る：冬は木漏れ日が無い／夏だけ朝昼夕で絵が変わる／影と受付嬢の色寄せが時刻で変わる／雪は冬・落ち葉は秋", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await page.locator("[data-room-dev-sheet]").click();
+    const m = await minis(page);
+    const at = (s, h) => m.find((x) => x.season === s && x.hour === String(h));
+    for (const h of HOURS) {
+      expect(at("winter", h).tgs.every((g) => g.st.endsWith("winter-orig.jpg") && !g.dapple), "冬は木漏れ日の層が無い").toBe(true);
+      for (const s of ["spring", "autumn"]) expect(at(s, h).tgs.every((g) => g.st.endsWith(`${s}-static.jpg`) && g.dapple), s).toBe(true);
+    }
+    expect(at("summer", 7).tgs.map((g) => g.st.split("/").pop())).toEqual(["summer-morning-static.jpg"]);
+    expect(at("summer", 12).tgs.map((g) => g.st.split("/").pop())).toEqual(["summer-static.jpg"]);
+    expect(at("summer", 17).tgs.map((g) => g.st.split("/").pop())).toEqual(["summer-evening-static.jpg"]);
+    // 影：朝は負・昼は0・夕は正。冬は薄い
+    expect(Number(at("spring", 7).shDx)).toBeLessThan(0);
+    expect(Number(at("spring", 12).shDx)).toBe(0);
+    expect(Number(at("spring", 17).shDx)).toBeGreaterThan(0);
+    expect(Number(at("winter", 12).shA)).toBeLessThan(Number(at("spring", 12).shA));
+    // 受付嬢の色寄せは夏の朝・夕だけ動く（ほかの季節は昼の1枚のまま）
+    expect(at("summer", 7).ukf).not.toBe(at("summer", 12).ukf);
+    expect(at("summer", 17).ukf).not.toBe(at("summer", 12).ukf);
+    expect(at("autumn", 17).ukf).toBe(at("autumn", 12).ukf);
+    // 粒
+    expect(at("winter", 12).flakes).toBeGreaterThan(0);
+    expect(at("autumn", 12).leaves).toBeGreaterThan(0);
+    expect(at("spring", 12).flakes + at("spring", 12).leaves + at("summer", 12).flakes + at("summer", 12).leaves).toBe(0);
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+
+  test("開いても閉じても、常設の窓の季節・時刻・絵は変わらない。押せる枠は開いている間は押せない。閉じると元に戻る", async ({ page }) => {
+    const errors = await freshPage(page);
+    await interview(page);
+    await devSeason(page, "winter");
+    await page.evaluate(() => { roomState.devHour = 8; syncRoomView(); });
+    const snap = () => page.evaluate(() => {
+      const st = document.querySelector(".room-window .room-stage"); // 常設の窓の段（12枚は body の重ね窓の中）
+      return { devSeason: roomState.devSeason, devHour: roomState.devHour, season: st.dataset.season, hour: st.dataset.hour, stages: document.querySelectorAll(".room-stage").length,
+        srcs: [...st.querySelectorAll("img[src]")].map((i) => i.getAttribute("src")).join("|"), pressed: document.querySelector('[data-room-dev-season="winter"]').getAttribute("aria-pressed") };
+    });
+    const before = await snap();
+    expect(before.stages).toBe(1);
+    await page.locator("[data-room-dev-sheet]").click();
+    const open = await snap();
+    expect(open.stages, "常設の1つと12枚").toBe(13);
+    expect({ ...open, stages: 0 }).toEqual({ ...before, stages: 0 });
+    // 開いている間は、下の押せる枠（掲示板）を押しても画面は動かない
+    const box = await page.locator('[data-room-object="board"]').boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    expect(await page.evaluate(() => route)).toBe("home");
+    // 閉じる
+    await page.locator("[data-room-sheet-close]").click();
+    await expect(page.locator(".room-sheet")).toHaveCount(0);
+    expect(await snap()).toEqual(before);
+    // もう一度開いても12枚（開いたまま重ねて呼んでも増えない）
+    await page.locator("[data-room-dev-sheet]").click();
+    await page.evaluate(() => openRoomSheet());
+    await expect(page.locator(".room-sheet")).toHaveCount(1);
+    await expect(page.locator(".room-sheet .room-mini")).toHaveCount(12);
+    await page.locator("[data-room-sheet-close]").click();
+    await page.locator('[data-room-object="board"]').click({ force: true });
+    expect(await page.evaluate(() => route), "閉じたあとは枠が働く").toBe("quests");
+    expect(errors.filter((x) => !/favicon/.test(x))).toEqual([]);
+  });
+});

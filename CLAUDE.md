@@ -206,6 +206,7 @@ grep -rnE "test\.(fixme|skip)\(" tools/tests/               # 走らないテス
   （負傷と回復待ちが溜まったため）。**1テスト＝1つまっさらな状態**にして、その形を構造的に避けている。
 
 - ★ Chromium が取れない環境（クラウド）で試験を走らせるときは、docs/CLAUDE_NOTES.md「Chromium が取れない環境（クラウド）での走らせ方」の手順に従う（先に読む。リポジトリの設定ファイルは書き換えず、作業場の外に置く）。
+- ★ **ホームの絵・パーツ・影を変えた PR は、`node tools/room-sheet.js <出力先.png>` で撮った「季節×時刻の12通り」の1枚を PR に付ける**（出力はリポジトリに残さず、scratchpad に置く。Chromium が `playwright` の期待と違う環境では `PLAYWRIGHT_CHROMIUM` に実行ファイルを渡す）。
 
 #### ★★ 対比較（不一致0）— 自走の安全網
 

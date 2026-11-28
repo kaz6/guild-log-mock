@@ -1807,3 +1807,14 @@ body[data-look="paper"] .memo-text { color: var(--paper-ink); }
 .sticky-note { display: block; width: fit-content; max-width: calc(100% - 24px); margin: 8px auto 0; padding: 8px 12px; font: inherit; font-size: 14px; line-height: 1.6; text-align: left; color: var(--paper-ink, #2b2620); background: #f1e3a8; border: 1px solid rgba(43, 38, 32, .35); box-shadow: 1px 2px 0 rgba(43, 38, 32, .18); transform: rotate(-1deg); cursor: pointer; }
 /* 生態目録は最初の生き物に出会うまでナビに出さない（EX-163）。.nav-button の display より強く */
 .nav-button[hidden] { display: none !important; }
+
+/* ?dev=1「12通りを見る」（P-022）。季節4つ（行）× 朝・昼・夕（列）の12枚。重ね窓は body に付く（#app の外）。
+   12枚は常設の窓と同じ層（.room-stage の中身）を使う。揺れは無く、粒は止めた1コマ。押せる枠は無い。 */
+.room-sheet { position: fixed; inset: 0; z-index: 50; overflow: auto; padding: 12px 16px 24px; background: #1c1710; color: #f3ecdc; }
+.room-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 14px; letter-spacing: .1em; }
+.room-sheet-head .room-dev-btn { color: #f3ecdc; border-color: #f3ecdc; }
+.room-sheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
+.room-mini { margin: 0; min-width: 0; }
+.room-mini .room-stage { width: 100%; height: auto; aspect-ratio: 1368 / 677; margin: 0; }
+.room-mini figcaption { margin-top: 4px; text-align: center; font-size: 14px; letter-spacing: .2em; }
+.room-mini .room-leaf, .room-mini .room-flake { animation-play-state: paused; }
