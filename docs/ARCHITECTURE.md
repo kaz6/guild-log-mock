@@ -16,7 +16,7 @@
 | 編成の判定・負傷 | `isSoloParty` `isCompanionParty` `isMultiHumanParty` `partySubject` `applyInjuriesFromReport` `settleMissingDeaths` | 人数に応じた主語。負傷・行方不明 |
 | 遠征の進行 | `startExpedition` `completeExpeditionIfDue` `checkExpeditionCompletion` | 出発→帰還。帰還時に `generateReport` が呼ばれる |
 | 画面（描画） | `render` `renderInterview` `renderHome` `renderQuests` `renderAdventurers` `renderResult` `renderReportDetail` `renderEcologyRecord` `renderLedger` | `render()` が `route` で振り分ける。HTML は文字列で組む（`*Html` 関数） |
-| ホームの部屋 | `ROOM_OBJECTS` `ROOM_PARTS` `ROOM_MENUS` `buildRoomView` `syncRoomView` `roomObjectsHtml` `roomShadow` | 押せる枠（絵の上の％）・パーツ・季節と時刻の層・影。絵は `assets/home/` |
+| ホームの部屋 | `ROOM_OBJECTS` `ROOM_PARTS` `ROOM_MENUS` `buildRoomView` `syncRoomView` `roomObjectsHtml` `roomObjectBox` `roomPartNow` `roomShadow` | 押せる枠（絵の上の％）・パーツ・季節と時刻の層・影。絵は `assets/home/` |
 | 掲示板・名簿・生態目録 | `buildBoardQuests` `questBoardVisibility` `isQuestUnlocked` `suppliesPanelHtml` `adventurerListCardHtml` `ecologyRecord*` | 依頼の出し方・解放条件・支給品の選択・名簿・記入型の生態目録 |
 | 乱数・文の選び方・緊張度 | `makeRng` `pickOne` `pickTensionOne` `pickTensionLines` `computeTensionValue` `tensionToLevel` | ログの文を選ぶ共通部品。★ 新しい選び方を勝手に増やさない |
 | 汎用の出来事文 | `generateWeatherLog` `roadEventText` `workEventText` `personalEventText` `supplyEventText` `canUseItemInQuest` | 道中・作業・人物・支給品の行。`canUseItemInQuest` の `allowedByQuest`（依頼ごとの許可。既定は全禁止） |
@@ -31,7 +31,7 @@
 
 ## DEV_MODE（?dev=1）
 
-`?dev=1` のときだけ効く（`const DEV_MODE`）。公開用は `/`、デバッグ用は `/?dev=1`。時間加速（`getDemoSpeed`）・時間帯／天候の切り替え・「Mock用」ボタン・Mock初期化・ホームの季節と時刻のつまみは、`?dev=1` なしでは出さず、効かせない。`data-dev-only` 属性の要素が `?dev=1` で表示される。
+`?dev=1` のときだけ効く（`const DEV_MODE`）。公開用は `/`、デバッグ用は `/?dev=1`。時間加速（`getDemoSpeed`）・時間帯／天候の切り替え・「Mock用」ボタン・Mock初期化・ホームの季節と時刻のつまみ・パーツの置き直し（`bindRoomDevParts`・値は localStorage の DEV 専用の鍵・`ROOM_PARTS` は書き換えない）・共通の出口「今の値を写す」（`DEV_EXPORTS` に1件足すと載る）は、`?dev=1` なしでは出さず、効かせない。`data-dev-only` 属性の要素が `?dev=1` で表示される。
 
 ## data-*.js（マスターデータ。`window.master*`）
 
