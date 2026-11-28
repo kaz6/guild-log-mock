@@ -3240,10 +3240,38 @@ const ROOM_HIT_MARGIN_Y = 3;
 //   enabled: 触れる条件（偽のあいだは枠なし・反応なし。無ければ常に）。
 //   位置は絵全体に対する％（x・w は横、y・h は縦）。★ 2026-11-27・P-017：**絵に物がある枠**（受付嬢・カウンター・本・掲示板・バックヤード・本棚）を、
 //   絵（assets/home の土台の絵。季節が違っても物の位置は同じ）の物の上に合わせ直した（値は仮・目測。作者未確認）。
-//   証・エルシーの場所・ペン・墓標は絵に物が無い（作者の判断待ち）。書類・書類の山は絵の手前の開いた本の上にある。どちらもこの回の対象外なので、
+//   証・墓標は絵に物が無い（作者の判断待ち）。エルシーの場所・ペンは 2026-11-28・P-018 でパーツ（ROOM_PARTS）の絵の位置に合わせた。書類・書類の山は絵の手前の開いた本の上にある。どちらもこの回の対象外なので、
 //   P-012 の3枚の値（M1 に合わせたもの）を横長1枚に換算したまま動かしていない（P-015）。
 //   ★ 枠が重なるときは手前に見える物（受付嬢）を優先：本棚は受付嬢の左まで、カウンターは受付嬢の下から。
 //   ★ 触れる範囲（.room-hit）は枠より大きく、重なるときは**あとに書いた物が手前**。本棚は掲示板より前に、受付嬢は本棚より後に書く。
+// ── ホームのパーツ（2026-11-28・P-018）──────────────────────────────────────────
+//   ★ 絵に描かれていない物は、部屋の絵に描き込まず、透明の絵を重ねる「パーツ」にする。**置き場所はこの表の数だけ**（あとで置き直せる）。
+//   x・y＝絵の上の％（x は絵の真ん中・y は絵の下端）／w＝絵の幅の％（高さは絵の縦横比から決まる）／iw・ih＝パーツの絵の大きさ（px）。
+//   季節にかかわらず同じ絵。夕方の色寄せは受付嬢と同じ（--ukf）。影は絵に焼き込まず、コードで描く（roomShadow）。
+//   shadow：cx＝絵の中の「足元の真ん中」の横の位置（絵の幅に対する割合。ペンはインク壺が左寄り）・sw＝影の幅（パーツの幅に対する倍）・ar＝影の横縦比（大きいほど細長い）。
+//   ★ 押せる枠のうち elsie と pen は、この表の絵の位置から決める（roomPartBox）。id を ROOM_OBJECTS と揃えてある。
+//   値は仮（作者未確認）。初めの値は相談チャットが夏の昼の絵で目測した仮置き。寝床の y は 69.4→70.1：カウンターの枠（y43.3〜55.4）と枠が 0.6% 重なったため少し下げた。
+const ROOM_PARTS = [
+  { id: "elsie", img: "parts/elsie-bed.png", iw: 600, ih: 437, x: 73.8, y: 70.1, w: 9.9, shadow: { cx: 0.5, sw: 1.05, ar: 3 } },  // エルシーの寝床（丸いもふもふ）。扉の前の陽だまり
+  { id: "pen", img: "parts/pen.png", iw: 300, ih: 452, x: 73.1, y: 94.5, w: 7, shadow: { cx: 0.3, sw: 0.65, ar: 4 } }          // ガラスのインク壺に長い羽根ペン。手前の机の右
+];
+// パーツの絵の枠（押せる枠・絵の上の％）。絵の真ん中・下端を基準に、絵の縦横比から高さを出す
+function roomPartBox(id) {
+  const p = ROOM_PARTS.find((q) => q.id === id);
+  const h = p.w * (p.ih / p.iw) * (ROOM_IMG_W / ROOM_IMG_H);
+  return { x: +(p.x - p.w / 2).toFixed(2), y: +(p.y - h).toFixed(2), w: p.w, h: +h.toFixed(2) };
+}
+// 影の値（時刻と季節から。値は仮）。光は朝は右から・昼は真上・夕は左から（影は反対側へ伸びる）。朝夕は長く薄く、昼は短く濃く。冬は弱める。
+//   dx＝影の真ん中のずれ（パーツの幅に対する倍。＋は右）／len＝影の長さの倍率／alpha＝濃さ（0〜1）
+function roomShadow(hour, season) {
+  const s = Math.max(-1, Math.min(1, (hour - 12) / 5)); // 7時＝-1（朝）・12時＝0（昼）・17時＝+1（夕）
+  const a = Math.abs(s);
+  return {
+    dx: +(s * 0.45).toFixed(3),
+    len: +(1 + 0.9 * a).toFixed(3),
+    alpha: +((0.6 - 0.2 * a) * (season === "winter" ? 0.5 : 1)).toFixed(3)
+  };
+}
 const ROOM_OBJECTS = [
   // ── 左 ──
   { id: "backyard", label: "バックヤード", x: 17, y: 20, w: 7, h: 32 }, // 絵の奥の暗いアーチ
@@ -3261,8 +3289,8 @@ const ROOM_OBJECTS = [
   { id: "counter", label: "カウンター", x: 51.4, y: 43.3, w: 21.9, h: 12.1 }, // 絵の長いカウンター（天板から下。受付嬢の下から）
   { id: "receptionist", label: "受付嬢", x: 58, y: 29.5, w: 7.5, h: 13.8, act: () => tapRoomReaction("receptionist") }, // 絵の受付嬢（透明な余白を除いた人の形）
   { id: "grave", label: "墓標", x: 82, y: 40, w: 4.67, h: 20, show: () => state.adventurers.some((a) => a.status === "死亡"), act: () => showRoomNotice("墓碑は準備中です。") },
-  { id: "elsie", label: "エルシーの場所", x: 67.67, y: 62, w: 7.67, h: 8, act: () => tapRoomReaction("elsie") },
-  { id: "pen", label: "ペン", x: 67.67, y: 80, w: 10.67, h: 16, act: () => toggleRoomMenu("pen") }
+  { id: "elsie", label: "エルシーの場所", ...roomPartBox("elsie"), act: () => tapRoomReaction("elsie") }, // 寝床のパーツの絵の位置（P-018。ROOM_PARTS から）
+  { id: "pen", label: "ペン", ...roomPartBox("pen"), act: () => toggleRoomMenu("pen") }                       // ペンのパーツの絵の位置（P-018。ROOM_PARTS から）
 ];
 // 吹き出しの目次（段階2）。★ 中身は増減する前提で表にする。act は物と同じ「今ある画面を開く」だけ。
 //   ★ 入口が複数でも開く先は同じ画面（名簿はナビからも書類からも同じ名簿の画面）。show：出す条件（無ければ常に）。
@@ -3357,6 +3385,7 @@ function buildRoomView() {
         <div class="room-stage moving">
           ${groups}
           <img class="room-uk" src="${ROOM_ASSET_DIR}summer-uketsuke.png" alt="" draggable="false">
+          <div class="room-parts">${ROOM_PARTS.map((p) => `<div class="room-part" data-part="${p.id}" style="left:${p.x}%;top:${p.y}%;width:${p.w}%"><i class="room-shadow" style="--scx:${p.shadow.cx};--sw:${p.shadow.sw};--sar:${p.shadow.ar}"></i><img src="${ROOM_ASSET_DIR}${p.img}" alt="" draggable="false"></div>`).join("")}</div>
           <div class="room-fx"><div class="room-snowwin"></div></div>
           <div class="room-objects"></div>
         </div>
@@ -3423,6 +3452,11 @@ function syncRoomView() {
   const e = W.evening;
   const m = W.morning;
   stage.style.setProperty("--ukf", `brightness(${(1 - 0.22 * e + 0.04 * m).toFixed(2)}) sepia(${(0.45 * e).toFixed(2)}) saturate(${(1 + 0.3 * e - 0.15 * m).toFixed(2)})`);
+  // パーツの影（時刻と季節で変わる）
+  const sh = roomShadow(hour, season);
+  stage.style.setProperty("--sh-dx", String(sh.dx));
+  stage.style.setProperty("--sh-len", String(sh.len));
+  stage.style.setProperty("--sh-a", String(sh.alpha));
   stage.dataset.season = season;
   stage.dataset.hour = String(hour);
   if (roomState.particleSeason !== season) {
