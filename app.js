@@ -3432,20 +3432,25 @@ function roomPseudo(i, k) {
   return x - Math.floor(x);
 }
 
+// 部屋の絵の層（背景・受付嬢・パーツ・粒）。常設の窓と、?dev=1 の「12通りを見る」の12枚が同じものを使う（P-022。描き方を2通り持たない）
+function roomLayersHtml() {
+  const groups = ["morning", "noon", "evening"].map((t) =>
+    `<div class="room-tg" data-t="${t}" hidden><img class="room-st" alt="" draggable="false"><div class="room-sun"><img class="room-dp" alt="" draggable="false"></div></div>`).join("");
+  return `
+          ${groups}
+          <img class="room-uk" src="${ROOM_ASSET_DIR}summer-uketsuke.png" alt="" draggable="false">
+          <div class="room-parts">${ROOM_PARTS.map((p0) => { const p = roomPartNow(p0); return `<div class="room-part" data-part="${p.id}" style="left:${p.x}%;top:${p.y}%;width:${p.w}%"><i class="room-shadow" style="--scx:${p.shadow.cx};--sw:${p.shadow.sw};--sar:${p.shadow.ar}"></i><img src="${ROOM_ASSET_DIR}${p.img}" alt="" draggable="false"></div>`; }).join("")}</div>
+          <div class="room-fx"><div class="room-snowwin"></div></div>`;
+}
+
 function buildRoomView() {
   const el = document.createElement("section");
   el.className = "room-window";
   el.setAttribute("aria-label", "ギルドの中");
-  const groups = ["morning", "noon", "evening"].map((t) =>
-    `<div class="room-tg" data-t="${t}" hidden><img class="room-st" alt="" draggable="false"><div class="room-sun"><img class="room-dp" alt="" draggable="false"></div></div>`).join("");
   el.innerHTML = `
     <div class="room-viewport">
       <div class="room-scroll" tabindex="0">
-        <div class="room-stage moving">
-          ${groups}
-          <img class="room-uk" src="${ROOM_ASSET_DIR}summer-uketsuke.png" alt="" draggable="false">
-          <div class="room-parts">${ROOM_PARTS.map((p0) => { const p = roomPartNow(p0); return `<div class="room-part" data-part="${p.id}" style="left:${p.x}%;top:${p.y}%;width:${p.w}%"><i class="room-shadow" style="--scx:${p.shadow.cx};--sw:${p.shadow.sw};--sar:${p.shadow.ar}"></i><img src="${ROOM_ASSET_DIR}${p.img}" alt="" draggable="false"></div>`; }).join("")}</div>
-          <div class="room-fx"><div class="room-snowwin"></div></div>
+        <div class="room-stage moving">${roomLayersHtml()}
           <div class="room-objects"></div>
         </div>
       </div>
@@ -3471,6 +3476,9 @@ function buildRoomView() {
         <span class="room-dev-sel" role="status"></span>
       </div>
       <div class="room-dev-row">
+        <button type="button" class="room-dev-btn" data-room-dev-sheet>12通りを見る</button>
+      </div>
+      <div class="room-dev-row">
         <button type="button" class="room-dev-btn" data-room-dev-copy>今の値を写す</button>
         <span class="room-dev-copystate" role="status"></span>
       </div>
@@ -3487,6 +3495,7 @@ function buildRoomView() {
     el.querySelector(".room-dev-hour").addEventListener("input", (e) => { roomState.devHour = Number(e.currentTarget.value); syncRoomView(); });
     el.querySelector("[data-room-dev-now]").addEventListener("click", () => { roomState.devHour = null; syncRoomView(); });
     bindRoomDevParts(el);
+    el.querySelector("[data-room-dev-sheet]").addEventListener("click", openRoomSheet);
   }
   return el;
 }
@@ -3573,6 +3582,36 @@ function syncRoomView() {
   if (!el) return;
   const season = roomSeasonNow();
   const hour = roomHourNow();
+  paintRoomLayers(el, season, hour);
+  const stage = el.querySelector(".room-stage");
+  // パーツの置き直し中の印（?dev=1）
+  const editing = DEV_MODE && roomState.devEdit;
+  stage.classList.toggle("room-edit", editing);
+  el.querySelectorAll(".room-part").forEach((n) => {
+    n.classList.toggle("sel", editing && roomState.devSel === n.dataset.part);
+  });
+  if (roomState.particleSeason !== season) {
+    roomState.particleSeason = season;
+    roomState.particleT0 = performance.now();
+    buildRoomParticles(el, season);
+    setRoomParticleDelays(el);
+  }
+  if (DEV_MODE) {
+    el.querySelectorAll("[data-room-dev-season]").forEach((b) => b.setAttribute("aria-pressed", String((roomState.devSeason ?? "auto") === b.dataset.roomDevSeason)));
+    const H = Math.floor(hour);
+    el.querySelector("[data-room-dev-edit]").setAttribute("aria-pressed", String(editing));
+    el.querySelector("[data-room-dev-editonly]").hidden = !editing;
+    el.querySelectorAll("[data-room-dev-size]").forEach((b) => { b.disabled = !roomState.devSel; });
+    const selObj = ROOM_OBJECTS.find((o) => o.id === roomState.devSel);
+    el.querySelector(".room-dev-sel").textContent = !editing ? "" : selObj ? `選んでいる：${selObj.label}` : "パーツを引きずって動かす（それ以外の所をなぞると見渡す）";
+    el.querySelector(".room-dev-hour").value = String(hour);
+    el.querySelector(".room-dev-hourout").textContent = `${H}:${String(Math.round((hour - H) * 60)).padStart(2, "0")}`;
+  }
+}
+
+// 季節・時刻に合わせた絵の層（背景・木漏れ日・受付嬢の色寄せ・パーツの位置と影）を、窓 el の中に塗る。
+//   ★ 常設の窓（syncRoomView）と、?dev=1 の「12通りを見る」の1枚1枚（P-022）が同じこの関数を通る。**el の外の状態（roomState など）は読まない・書かない。**
+function paintRoomLayers(el, season, hour) {
   const winter = season === "winter";
   const W = roomWeights(season, hour);
   const stage = el.querySelector(".room-stage");
@@ -3605,32 +3644,12 @@ function syncRoomView() {
   stage.dataset.season = season;
   stage.dataset.hour = String(hour);
   // パーツの位置（表の値。?dev=1 で動かしていれば、その値）
-  const editing = DEV_MODE && roomState.devEdit;
-  stage.classList.toggle("room-edit", editing);
   el.querySelectorAll(".room-part").forEach((n) => {
     const p = roomPartNow(ROOM_PARTS.find((q) => q.id === n.dataset.part));
     n.style.left = `${p.x}%`;
     n.style.top = `${p.y}%`;
     n.style.width = `${p.w}%`;
-    n.classList.toggle("sel", editing && roomState.devSel === p.id);
   });
-  if (roomState.particleSeason !== season) {
-    roomState.particleSeason = season;
-    roomState.particleT0 = performance.now();
-    buildRoomParticles(el, season);
-    setRoomParticleDelays(el);
-  }
-  if (DEV_MODE) {
-    el.querySelectorAll("[data-room-dev-season]").forEach((b) => b.setAttribute("aria-pressed", String((roomState.devSeason ?? "auto") === b.dataset.roomDevSeason)));
-    const H = Math.floor(hour);
-    el.querySelector("[data-room-dev-edit]").setAttribute("aria-pressed", String(editing));
-    el.querySelector("[data-room-dev-editonly]").hidden = !editing;
-    el.querySelectorAll("[data-room-dev-size]").forEach((b) => { b.disabled = !roomState.devSel; });
-    const selObj = ROOM_OBJECTS.find((o) => o.id === roomState.devSel);
-    el.querySelector(".room-dev-sel").textContent = !editing ? "" : selObj ? `選んでいる：${selObj.label}` : "パーツを引きずって動かす（それ以外の所をなぞると見渡す）";
-    el.querySelector(".room-dev-hour").value = String(hour);
-    el.querySelector(".room-dev-hourout").textContent = `${H}:${String(Math.round((hour - H) * 60)).padStart(2, "0")}`;
-  }
 }
 
 // 落ち葉（秋・木から）と雪（冬・窓の中だけ）。季節が替わったときだけ作り直す。
@@ -3684,6 +3703,45 @@ function setRoomParticleDelays(el) {
     const d = -((((now - roomState.particleT0) / 1000) + Number(n.dataset.ph)) % dur);
     n.style.animationDelay = `${d.toFixed(3)}s`;
   });
+}
+
+// ── ?dev=1「12通りを見る」（2026-11-28・P-022）──────────────────────────────────
+//   ★ 季節4つ × 朝・昼・夕（7・12・17時）の12枚の小さな窓を一度に並べる（季節が行・時刻が列）。部屋の絵は層とパーツに分けていくので、
+//     組み合わせで崩れていないかを、1つずつ切り替えずに見るための道具。**?dev=1 なしでは出ない・開かない**。
+//   ★ 常設の窓（roomView）の季節・時刻（roomState.devSeason／devHour）には触れない。12枚それぞれが paintRoomLayers に季節と時刻を直に渡す。
+//   ★ 重ね窓は **document.body** に付ける（#app の外）。ホームは1秒ごとに描き直され、#app の中の roomView 以外は外されるため。
+//   ★ 押せる枠・吹き出しは12枚には無い（働きは止まっている）。揺れ・フェードは無し、雪と落ち葉は止めた1コマを置く（撮るたびに同じ絵になる）。
+//   ★ room-sheet.js（tools/）は、この一覧を開いて撮るだけ（同じ描き方を2通り持たない）。
+const ROOM_SHEET_SEASONS = [["spring", "春"], ["summer", "夏"], ["autumn", "秋"], ["winter", "冬"]];
+const ROOM_SHEET_TIMES = [[7, "朝"], [12, "昼"], [17, "夕"]];
+let roomSheetEl = null;
+function openRoomSheet() {
+  if (!DEV_MODE || roomSheetEl) return;
+  const el = document.createElement("div");
+  el.className = "room-sheet";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "季節と時刻の12通り");
+  const cells = ROOM_SHEET_SEASONS.flatMap(([season, sl]) => ROOM_SHEET_TIMES.map(([hour, tl]) =>
+    `<figure class="room-mini" data-mini-season="${season}" data-mini-hour="${hour}"><div class="room-stage">${roomLayersHtml()}</div><figcaption>${sl}・${tl}</figcaption></figure>`)).join("");
+  el.innerHTML = `
+    <div class="room-sheet-head"><span>季節 × 時刻（12通り）</span><button type="button" class="room-dev-btn" data-room-sheet-close>閉じる</button></div>
+    <div class="room-sheet-grid">${cells}</div>`;
+  el.querySelectorAll(".room-mini").forEach((m) => {
+    const season = m.dataset.miniSeason;
+    paintRoomLayers(m, season, Number(m.dataset.miniHour));
+    m.querySelector(".room-uk").className = "room-uk shown"; // 受付嬢はフェードなしで出す
+    buildRoomParticles(m, season);
+    m.querySelectorAll(".room-leaf, .room-flake").forEach((n) => { // 止めた1コマ（番号から決まる位相）
+      n.style.animationDelay = `${(-(Number(n.dataset.ph) % Number(n.dataset.dur))).toFixed(3)}s`;
+    });
+  });
+  el.querySelector("[data-room-sheet-close]").addEventListener("click", closeRoomSheet);
+  document.body.appendChild(el);
+  roomSheetEl = el;
+}
+function closeRoomSheet() {
+  if (roomSheetEl) roomSheetEl.remove();
+  roomSheetEl = null;
 }
 
 // ホームの窓の中身（物の枠・吹き出し・一言）を今の状態に合わせる。背景の層には触らない。
